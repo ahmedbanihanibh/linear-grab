@@ -171,6 +171,7 @@ export interface LinearAttachment {
 }
 
 export interface LinearIssueDetail extends LinearIssueSummary {
+  team?: { id: string } | null;
   description?: string | null;
   branchName?: string | null;
   comments: LinearComment[];

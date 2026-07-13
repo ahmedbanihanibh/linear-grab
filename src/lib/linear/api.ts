@@ -74,6 +74,7 @@ export async function fetchIssueDetail(id: string): Promise<LinearIssueDetail> {
     `query($id: String!) {
       issue(id: $id) {
         id identifier title url updatedAt priority description branchName
+        team { id }
         state { name color type }
         delegate { id name displayName }
         assignee { displayName }

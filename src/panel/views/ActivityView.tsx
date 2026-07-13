@@ -20,6 +20,8 @@ import {
   createSteeringComment,
   createComment,
   findAgentThreadRoots,
+  fetchTeamStates,
+  updateIssueState,
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
 import { BuildLogsCard } from '../components/BuildLogs';
@@ -362,6 +364,48 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
     { id: 'sonnet', label: 'Sonnet' },
     { id: 'haiku', label: 'Haiku' },
   ];
+  /* Auto-closeout: everything I keep doing by hand via MCP, one click — the
+     panel already holds the session summary, PR url, preview, and Linear auth. */
+  const closeoutMut = createMutation(() => ({
+    mutationFn: async (session: LinearAgentSession) => {
+      const prAtt = detailQuery.data?.attachments.find((a) =>
+        /github\.com\/[^/]+\/[^/]+\/pull\/\d+/i.test(a.url),
+      );
+      const preview = prAtt ? prStatuses.data?.previews[prAtt.url] : undefined;
+      const lastResponse = [...session.activities]
+        .reverse()
+        .find((a) => a.content.__typename === 'AgentActivityResponseContent')?.content.body;
+      const summary = (session.summary ?? lastResponse ?? 'Fix complete — see the PR.').slice(0, 600);
+      const lines = [
+        '✅ **Closeout** (posted from the panel — one-click acceptance)',
+        '',
+        `**Fix:** ${summary}`,
+        '',
+        ...(prAtt ? [`**PR:** ${prAtt.url}`] : []),
+        ...(preview ? [`**Deploy preview:** ${preview}`] : []),
+        '',
+        '**DEFINITION OF DONE — acceptance checklist**',
+        `- [x] PR opened and linked${prAtt ? ` — ${prAtt.url}` : ''}`,
+        preview ? '- [x] Deploy-preview URL included (above)' : '- [ ] Deploy-preview URL — none found on the PR',
+        '- [x] Issue moved to review state (this action)',
+        '- [ ] Demo media on the issue — attach from the PR/agent artifacts if recorded',
+      ];
+      await createComment(props.issueId, lines.join('\n'), session.comment?.id ?? undefined);
+      const teamId = detailQuery.data?.team?.id;
+      if (teamId) {
+        const states = await fetchTeamStates(teamId);
+        const review =
+          states.find((st) => st.type === 'started' && /review/i.test(st.name)) ??
+          states.filter((st) => st.type === 'completed').sort((a, b) => a.position - b.position)[0];
+        if (review) await updateIssueState(props.issueId, review.id);
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue', props.issueId] });
+      void queryClient.invalidateQueries({ queryKey: ['sessions', props.issueId] });
+    },
+  }));
+
   const localModelMut = createMutation(() => ({
     mutationFn: (args: { id: string; model: string }) => setBridgeModel(args.id, args.model),
     onSuccess: (updated) => {
@@ -789,7 +833,30 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
         <Show when={sessions().length > 0}>
           <div class="flex flex-col gap-2">
             <For each={sessions()}>
-              {(session) => <AgentSessionCard session={session} />}
+              {(session) => (
+                <div class="flex flex-col gap-1.5">
+                  <AgentSessionCard session={session} />
+                  {/* Session finished but the issue never moved — the agent
+                      couldn't reach Linear. One click does its closeout. */}
+                  <Show
+                    when={
+                      /complete/i.test(session.status) &&
+                      detailQuery.data?.state.type === 'started' &&
+                      !/review/i.test(detailQuery.data?.state.name ?? '')
+                    }
+                  >
+                    <Button
+                      variant="primary"
+                      class="self-start"
+                      loading={closeoutMut.isPending}
+                      title="Post the acceptance comment (fix summary, PR, preview, checklist) in the agent thread and move the issue to review"
+                      onClick={() => closeoutMut.mutate(session)}
+                    >
+                      Post closeout to Linear
+                    </Button>
+                  </Show>
+                </div>
+              )}
             </For>
           </div>
         </Show>
