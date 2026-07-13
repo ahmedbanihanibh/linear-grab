@@ -10,16 +10,16 @@ import Script from "next/script";
 export default function RootLayout({ children }) {
   return (
     <html>
-      <head>
+      <body>
+        {children}
         {process.env.NODE_ENV === "development" && (
           <Script
             src="https://cdn.jsdelivr.net/gh/ahmedbanihanibh/linear-grab@v0.7.2/dist/index.global.js"
             crossOrigin="anonymous"
-            strategy="beforeInteractive"
+            strategy="afterInteractive"
           />
         )}
-      </head>
-      <body>{children}</body>
+      </body>
     </html>
   );
 }
