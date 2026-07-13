@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
 import DraftView from './views/DraftView';
 import CaptureView from './views/CaptureView';
 import ActivityView from './views/ActivityView';
+import LocalView from './views/LocalView';
 import PrsView from './views/PrsView';
 import SettingsView from './views/SettingsView';
 import { subscribeStorage } from '@/lib/storage';
@@ -14,6 +15,7 @@ const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'draft', label: 'Draft' },
   { id: 'capture', label: 'Capture' },
   { id: 'activity', label: 'Activity' },
+  { id: 'local', label: 'Local' },
   { id: 'prs', label: 'PRs' },
   { id: 'settings', label: 'Settings' },
 ];
@@ -144,6 +146,9 @@ export default function App(props: {
             </Match>
             <Match when={tab() === 'activity'}>
               <ActivityView />
+            </Match>
+            <Match when={tab() === 'local'}>
+              <LocalView />
             </Match>
             <Match when={tab() === 'prs'}>
               <PrsView onOpenIssue={() => setTab('activity')} />

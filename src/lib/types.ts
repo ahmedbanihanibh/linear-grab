@@ -83,6 +83,8 @@ export interface Settings {
   logUrl?: string;
   /** How many trailing log lines to attach (default 100). */
   logLines?: number;
+  /** Local Claude Code bridge URL (`npx linear-grab-bridge`, default :4577). */
+  bridgeUrl?: string;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page

@@ -19,6 +19,7 @@ import {
 } from '@/lib/recorder';
 import { fetchTeams, createIssue } from '@/lib/linear/api';
 import { uploadAsset } from '@/lib/assetUpload';
+import { createBridgeTask } from '@/lib/bridge';
 import { fetchDevLogTail } from '@/lib/logs';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
@@ -90,7 +91,8 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [priority, setPriority] = createSignal(0);
   const [teamId, setTeamId] = createSignal(settings().defaultTeamId ?? '');
   const [repo, setRepo] = createSignal(settings().defaultRepo ?? '');
-  const [delegateOn, setDelegateOn] = createSignal(!!settings().cursorAgentId);
+  /** Who executes the issue: Cursor cloud agent, local Claude Code, or nobody. */
+  const [target, setTarget] = createSignal<'cursor' | 'local' | 'none'>('none');
   const [note, setNote] = createSignal('');
   const [tier, setTier] = createSignal<AiTier>('fast');
   const [includeLogs, setIncludeLogs] = createSignal(true);
@@ -103,7 +105,7 @@ export default function DraftView(props: { onCreated: () => void }) {
     defaultsApplied = true;
     setTeamId(s.defaultTeamId ?? '');
     setRepo(s.defaultRepo ?? '');
-    setDelegateOn(!!s.cursorAgentId);
+    setTarget(s.cursorAgentId ? 'cursor' : 'none');
   });
 
   // ---- Teams query ----------------------------------------------------------
@@ -275,30 +277,50 @@ export default function DraftView(props: { onCreated: () => void }) {
             body += `\n\n### Dev server logs (last ${n} lines)\n\`\`\`\n${tail}\n\`\`\``;
           }
         } catch {
-          failed.push('server logs');
+          failed.push('server logs (fetch failed — is the Log URL serving the file?)');
         }
       }
       if (failed.length) {
+        const uploadsFailed = failed.some((f) => !f.startsWith('server logs'));
         setCreateWarning(
-          `${failed.join(' + ')} upload blocked by the browser — issue created without ${failed.length > 1 ? 'them' : 'it'}. Use "Copy GIF" in Capture and paste into a comment on the issue.`,
+          `Skipped: ${failed.join(', ')} — issue created without ${failed.length > 1 ? 'them' : 'it'}.${
+            uploadsFailed
+              ? ' Real fix for uploads: run `npx linear-grab-bridge` in the repo (uploads relay through it) or set the GitHub fallback in Settings.'
+              : ''
+          }`,
         );
       }
-      return createIssue({
+      const issue = await createIssue({
         teamId: teamId(),
         title: title(),
         description: body,
         priority: priority(),
-        delegateId:
-          delegateOn() && settings().cursorAgentId
-            ? settings().cursorAgentId
-            : undefined,
+        delegateId: target() === 'cursor' ? settings().cursorAgentId : undefined,
       });
+      // Local delegation: hand the composed issue to the running Claude Code
+      // bridge — the Linear issue stays the single registry either way.
+      let localTask = false;
+      if (target() === 'local') {
+        try {
+          await createBridgeTask(
+            `${issue.identifier} — ${title()}`,
+            `You are delegated Linear issue ${issue.identifier} (${issue.url}).\n\n${body}\n\nWork in this repository until the issue is resolved, following the Agent instructions above.`,
+          );
+          localTask = true;
+        } catch {
+          setCreateWarning(
+            'Issue created, but the local bridge is unreachable — run `npx linear-grab-bridge` in the repo and re-delegate from the Local tab.',
+          );
+        }
+      }
+      return { ...issue, localTask };
     },
     onSuccess: (issue) => {
       setCreatedIssue({ identifier: issue.identifier, url: issue.url });
       setCreateError(null);
       setFellBack(null);
       discardRecording();
+      if (issue.localTask) openPanelTo('local');
     },
     onError: (err: Error) => {
       setCreateError(err.message);
@@ -599,30 +621,32 @@ export default function DraftView(props: { onCreated: () => void }) {
           />
         </Field>
 
-        {/* Delegate toggle */}
-        <div class="flex flex-col gap-1">
-          <label class="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={delegateOn()}
-              disabled={!settings().cursorAgentId}
-              onChange={(e) => setDelegateOn(e.currentTarget.checked)}
-              class="rounded accent-accent"
-            />
-            <span class="text-[12px] text-text">
-              Delegate to{' '}
-              <span class="text-text-dim">
-                {settings().cursorAgentName ?? 'Cursor'}
-              </span>{' '}
-              on create
-            </span>
-          </label>
-          <Show when={!settings().cursorAgentId}>
-            <span class="text-text-faint text-[10.5px] leading-snug pl-5">
-              Pick the Cursor agent in Settings
-            </span>
-          </Show>
-        </div>
+        {/* Executor — cloud agent, local Claude Code, or nobody */}
+        <Field
+          label="Delegate to"
+          hint={
+            target() === 'local'
+              ? 'Requires `npx linear-grab-bridge` running in the repo — track it in the Local tab.'
+              : target() === 'cursor' && !settings().cursorAgentId
+                ? 'Pick the Cursor agent in Settings first.'
+                : undefined
+          }
+        >
+          <Select
+            value={target()}
+            onChange={(e) => setTarget(e.currentTarget.value as 'cursor' | 'local' | 'none')}
+          >
+            <option value="cursor" disabled={!settings().cursorAgentId} selected={target() === 'cursor'}>
+              {settings().cursorAgentName ?? 'Cursor'} — cloud agent
+            </option>
+            <option value="local" selected={target() === 'local'}>
+              Local Claude Code (bridge)
+            </option>
+            <option value="none" selected={target() === 'none'}>
+              No one — just create the issue
+            </option>
+          </Select>
+        </Field>
 
         {/* Dev-server logs toggle (only when a log URL is configured) */}
         <Show when={settings().logUrl}>

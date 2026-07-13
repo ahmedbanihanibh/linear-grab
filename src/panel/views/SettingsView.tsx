@@ -530,6 +530,23 @@ export default function SettingsView() {
         </Section>
       </Show>
 
+      {/* ── 2.4 LOCAL CLAUDE CODE BRIDGE ─────────────────────────────────────── */}
+      <Section title="Local Claude Code">
+        <Field
+          label="Bridge URL"
+          hint={'Run `npx linear-grab-bridge` in your repo\'s terminal (binds localhost only). Enables "Delegate to → Local Claude Code" in Draft, the Local tab, and relays blocked uploads to Linear storage.'}
+        >
+          <Input
+            placeholder="http://localhost:4577"
+            value={s().bridgeUrl ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ bridgeUrl: v || undefined });
+            }}
+          />
+        </Field>
+      </Section>
+
       {/* ── 2.5 ASSET UPLOADS FALLBACK ────────────────────────────────────────── */}
       <Section title="Asset uploads">
         <Field
