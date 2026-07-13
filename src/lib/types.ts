@@ -53,6 +53,9 @@ export interface Settings {
   /** Explicit provider choice. Absent = auto (OpenAI first, then Anthropic). */
   preferredProvider?: AiProvider;
   defaultTeamId?: string;
+  /** Auto-assigned on every created issue. */
+  defaultProjectId?: string;
+  defaultLabelIds?: string[];
   /** App-user UUID of the Cursor agent in the workspace. */
   cursorAgentId?: string;
   cursorAgentName?: string;
@@ -208,6 +211,8 @@ export interface CreateIssueInput {
   description: string;
   priority?: number;
   delegateId?: string;
+  projectId?: string;
+  labelIds?: string[];
 }
 
 export interface CreatedIssue {

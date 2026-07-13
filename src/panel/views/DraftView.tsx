@@ -381,6 +381,8 @@ export default function DraftView(props: { onCreated: () => void }) {
         description: body,
         priority: priority(),
         delegateId: target() === 'cursor' ? settings().cursorAgentId : undefined,
+        projectId: settings().defaultProjectId || undefined,
+        labelIds: settings().defaultLabelIds?.length ? settings().defaultLabelIds : undefined,
       });
       // Local delegation: hand the composed issue to the running Claude Code
       // bridge — the Linear issue stays the single registry either way. The

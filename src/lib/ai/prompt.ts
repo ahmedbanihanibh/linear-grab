@@ -26,10 +26,12 @@ export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo chec
   2. Skim \`.claude/memory/MEMORY.md\` (the index) to learn what project memory exists; load the specific \`.claude/memory/*.md\` files the map names for the surface you're touching.
   3. Load the matching \`.claude/skills/<name>/SKILL.md\` files before designing, building UI, or animating (if skills are symlinked, follow them into \`.agents/skills/\`).
   Treat all of this as authoritative — it overrides your defaults.
-- Use computer use to execute and test the change in the running app. Record a video demonstrating the fix and attach it to the PR.
 - Keep going until the code works and you're happy with the implementation.
-- Put up a PR, babysit it for the first set of review comments, and address them.
-- When the fix is verified: UPDATE THE LINEAR ISSUE — post a completion comment with a one-line fix summary + the PR link, attach the demo video to the issue itself (not only the PR), and move the issue to its review/done state.`;
+- MANDATORY COMPLETION GATE — the task is NOT complete (and you may not call it complete) until every step below is done, in order. Skipping any step silently is a FAILED task:
+  1. RUN the app and TEST your change hands-on (computer use / a real browser against the running app). Code reading alone does not count as verification.
+  2. RECORD a demo video or GIF showing the fix working (before → after where possible). If your environment genuinely cannot record media, capture before/after screenshots instead AND state explicitly in your closeout comment why video was not possible — never just omit the demo.
+  3. Open the PR, babysit it for the first set of review comments, and address them.
+  4. CLOSE OUT THE LINEAR ISSUE: post a completion comment (one-line fix summary + PR link), attach the demo media to the ISSUE itself (not only the PR), and move the issue to its review/done state.`;
 
 /**
  * Final "### Agent instructions" content: the user's template (or the default)

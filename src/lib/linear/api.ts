@@ -252,6 +252,28 @@ export async function updateIssueState(issueId: string, stateId: string): Promis
   if (!data.issueUpdate.success) throw new Error('Linear rejected the state update');
 }
 
+export async function fetchProjects(): Promise<Array<{ id: string; name: string }>> {
+  try {
+    const data = await gql<{ projects: { nodes: Array<{ id: string; name: string }> } }>(
+      `query { projects(first: 100) { nodes { id name } } }`,
+    );
+    return data.projects.nodes;
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchLabels(): Promise<Array<{ id: string; name: string; color: string }>> {
+  try {
+    const data = await gql<{
+      issueLabels: { nodes: Array<{ id: string; name: string; color: string }> };
+    }>(`query { issueLabels(first: 100) { nodes { id name color } } }`);
+    return data.issueLabels.nodes;
+  } catch {
+    return [];
+  }
+}
+
 /** Create an issue; when `delegateId` is the Cursor app user, this triggers its cloud agent. */
 export async function createIssue(input: CreateIssueInput): Promise<CreatedIssue> {
   const data = await gql<{ issueCreate: { success: boolean; issue: CreatedIssue | null } }>(

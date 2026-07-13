@@ -2,7 +2,7 @@ import { createSignal, createMemo, Show, For } from 'solid-js';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { getSettings, saveSettings } from '@/lib/storage';
 import { isExtensionContext } from '@/lib/env';
-import { fetchViewer, fetchTeams, fetchAgents } from '@/lib/linear/api';
+import { fetchViewer, fetchTeams, fetchAgents, fetchProjects, fetchLabels } from '@/lib/linear/api';
 import { oauthLogin, disconnectLinear } from '@/lib/linear/auth';
 import { MODELS, resolveProvider } from '@/lib/ai/providers';
 import { listSlackChannels } from '@/lib/notify';
@@ -56,6 +56,17 @@ export default function SettingsView() {
   const teamsQ = createQuery(() => ({
     queryKey: ['teams'],
     queryFn: fetchTeams,
+    enabled: connected(),
+  }));
+
+  const projectsQ = createQuery(() => ({
+    queryKey: ['linear-projects'],
+    queryFn: fetchProjects,
+    enabled: connected(),
+  }));
+  const labelsQ = createQuery(() => ({
+    queryKey: ['linear-labels'],
+    queryFn: fetchLabels,
     enabled: connected(),
   }));
 
@@ -338,6 +349,62 @@ export default function SettingsView() {
                 </For>
               </Show>
             </Select>
+          </Field>
+
+          {/* Default project + labels — issues land organized, not floating */}
+          <Field
+            label="Default project"
+            hint="Every issue created from the panel is filed into this project."
+          >
+            <Select
+              value={s().defaultProjectId ?? ''}
+              onChange={(e) => void update({ defaultProjectId: e.currentTarget.value || undefined })}
+              disabled={projectsQ.isLoading}
+            >
+              <option value="" selected={!s().defaultProjectId}>
+                No project
+              </option>
+              <For each={projectsQ.data ?? []}>
+                {(pr) => (
+                  <option value={pr.id} selected={pr.id === s().defaultProjectId}>
+                    {pr.name}
+                  </option>
+                )}
+              </For>
+            </Select>
+          </Field>
+          <Field label="Default labels" hint="Applied to every issue created from the panel.">
+            <div class="flex flex-wrap gap-1">
+              <For each={labelsQ.data ?? []}>
+                {(lb) => {
+                  const active = () => (s().defaultLabelIds ?? []).includes(lb.id);
+                  return (
+                    <button
+                      type="button"
+                      class={`h-6 cursor-pointer rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
+                        active()
+                          ? 'bg-accent-soft text-accent border-accent/40'
+                          : 'bg-surface-2 text-text-dim border-border hover:bg-surface-3'
+                      }`}
+                      onClick={() => {
+                        const cur = s().defaultLabelIds ?? [];
+                        void update({
+                          defaultLabelIds: active()
+                            ? cur.filter((id) => id !== lb.id)
+                            : [...cur, lb.id],
+                        });
+                      }}
+                    >
+                      <span
+                        class="mr-1 inline-block size-2 rounded-full align-middle"
+                        style={{ background: lb.color }}
+                      />
+                      {lb.name}
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
           </Field>
 
           {/* Cursor agent */}
