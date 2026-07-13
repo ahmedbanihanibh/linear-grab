@@ -293,6 +293,21 @@ export default function CaptureView() {
                 </div>
               )}
             </For>
+            <Show
+              when={
+                new Set(
+                  grabs()
+                    .filter((g) => g.source?.filePath)
+                    .map((g) => `${g.source!.filePath}:${g.source!.lineNumber ?? ''}`),
+                ).size < grabs().filter((g) => g.source?.filePath).length
+              }
+            >
+              <p class="text-warn text-[10.5px] leading-snug">
+                Several captures resolve to the same source — this page region
+                likely renders inside an iframe/canvas the picker can't see
+                into. Use <b>Capture region</b> for visual pointers there.
+              </p>
+            </Show>
             <div class="flex items-center justify-between gap-2">
               <span class="text-text-faint min-w-0 text-[10.5px] leading-snug">
                 All elements post into ONE issue. Shift+click / drag selects several at once.
