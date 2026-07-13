@@ -133,6 +133,31 @@ export function fetchBridgeDiff(id: string): Promise<BridgeDiff> {
   return call<BridgeDiff>(`/tasks/${id}/diff`);
 }
 
+/** Hand the panel's Linear auth to the bridge (media proxy). Best-effort. */
+export async function pushBridgeConfig(): Promise<void> {
+  const s = await getSettings();
+  const auth = s.linearAccessToken ? `Bearer ${s.linearAccessToken}` : s.linearApiKey;
+  if (!auth) return;
+  await call<{ ok: boolean }>('/config', {
+    method: 'POST',
+    body: JSON.stringify({ linearAuth: auth }),
+  }).catch(() => undefined);
+}
+
+/** One-click squash-merge via the bridge's gh. */
+export function mergePr(url: string): Promise<{ ok: boolean; output?: string }> {
+  return call<{ ok: boolean; output?: string }>('/pr/merge', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+/** Base URL for the media proxy (same as the bridge). */
+export async function bridgeBase(): Promise<string> {
+  const s = await getSettings();
+  return (s.bridgeUrl?.trim() || DEFAULT_BRIDGE_URL).replace(/\/$/, '');
+}
+
 /** The exact command to continue this session in a terminal. */
 export function resumeCommand(task: BridgeTask): string {
   return `claude --dangerously-skip-permissions --resume ${task.sessionId ?? '<session-id>'}`;

@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.12.1';
+const VERSION = '0.13.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -64,6 +64,9 @@ const IDLE_KILL_MS = 30 * 60_000; // free an idle interactive session after 30mi
 
 /** @type {Map<string, any>} */
 const tasks = new Map();
+
+/** Linear Authorization header supplied by the panel (for the media proxy). */
+let linearAuth = null;
 
 // ---- persistence -----------------------------------------------------------
 
@@ -545,6 +548,49 @@ createServer(async (req, res) => {
       if (!body.prompt) return json(res, 400, { error: 'prompt required' });
       const task = await startTask(body);
       return json(res, 201, summary(task));
+    }
+    // Panel hands us its Linear auth so /fetch can display Linear-hosted media.
+    if (req.method === 'POST' && url.pathname === '/config') {
+      const body = await readBody(req);
+      if (typeof body.linearAuth === 'string') linearAuth = body.linearAuth;
+      return json(res, 200, { ok: true });
+    }
+    // Media proxy: uploads.linear.app requires Linear auth on every GET — an
+    // <img>/<video> tag can't send headers, this local process can.
+    if (req.method === 'GET' && url.pathname === '/fetch') {
+      const target = url.searchParams.get('url') ?? '';
+      let host = '';
+      try {
+        host = new URL(target).hostname;
+      } catch {
+        /* invalid */
+      }
+      if (!/(^|\.)uploads\.linear\.app$/.test(host)) {
+        return json(res, 400, { error: 'host not allowed' });
+      }
+      const upstream = await fetch(target, {
+        headers: linearAuth ? { Authorization: linearAuth } : {},
+      });
+      if (!upstream.ok) return json(res, upstream.status, { error: `upstream ${upstream.status}` });
+      res.writeHead(200, {
+        'Content-Type': upstream.headers.get('content-type') ?? 'application/octet-stream',
+        'Cache-Control': 'private, max-age=300',
+        ...CORS,
+      });
+      return res.end(Buffer.from(await upstream.arrayBuffer()));
+    }
+    // Fast-merge: after reviewing the demo, one click merges the PR via gh.
+    if (req.method === 'POST' && url.pathname === '/pr/merge') {
+      const body = await readBody(req);
+      const prUrl = String(body.url ?? '');
+      if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(prUrl)) {
+        return json(res, 400, { error: 'invalid PR url' });
+      }
+      const out = await run('gh', ['pr', 'merge', prUrl, '--squash']);
+      if (out === null) {
+        return json(res, 502, { error: 'gh pr merge failed — check gh auth / merge conflicts / required checks' });
+      }
+      return json(res, 200, { ok: true, output: out.slice(0, 500) });
     }
     // Upload proxy: browsers can't PUT to Linear's storage (no CORS there) —
     // this local process can. SSRF-guarded to Linear storage hosts.

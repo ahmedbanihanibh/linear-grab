@@ -19,7 +19,7 @@ import {
   findAgentThreadRoots,
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
-import { listBridgeTasks, type BridgeTask } from '@/lib/bridge';
+import { listBridgeTasks, mergePr, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
@@ -269,6 +269,30 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
   const [body, setBody] = createSignal('');
   const [sendError, setSendError] = createSignal<string | null>(null);
 
+  // Fast-merge: reviewed the demo → one click ships the PR (bridge gh).
+  const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
+  const [mergedUrls, setMergedUrls] = createSignal<Set<string>>(new Set());
+  const [mergeError, setMergeError] = createSignal<string | null>(null);
+  const doMerge = async (url: string) => {
+    setMergeError(null);
+    setMergeBusy(url);
+    try {
+      await mergePr(url);
+      setMergedUrls((prev) => new Set(prev).add(url));
+      void queryClient.invalidateQueries({ queryKey: ['issue', props.issueId] });
+      void queryClient.invalidateQueries({ queryKey: ['my-issues'] });
+      refreshRunningAgents();
+    } catch (err) {
+      setMergeError(
+        err instanceof Error
+          ? `${err.message} (bridge must be running; gh needs merge rights)`
+          : 'Merge failed.',
+      );
+    } finally {
+      setMergeBusy(null);
+    }
+  };
+
   /**
    * Reply targets. THE critical distinction: a top-level @Cursor comment spawns
    * a NEW cloud agent; replying INSIDE an agent session's comment thread
@@ -413,20 +437,42 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
             <span class="text-[10.5px] font-semibold uppercase tracking-wide text-text-dim">
               Attachments
             </span>
-            <div class="flex flex-wrap gap-1.5">
+            <div class="flex flex-col gap-1">
               <For each={issue()!.attachments}>
-                {(att) => (
-                  <a
-                    href={att.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    class="max-w-[200px] truncate text-[11.5px] text-accent hover:underline"
-                    title={att.title}
-                  >
-                    {att.title}
-                  </a>
-                )}
+                {(att) => {
+                  const isPr = /github\.com\/[^/]+\/[^/]+\/pull\/\d+/i.test(att.url);
+                  return (
+                    <div class="flex min-w-0 items-center gap-1.5">
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        class="text-accent min-w-0 truncate text-[11.5px] hover:underline"
+                        title={att.title}
+                      >
+                        {att.title}
+                      </a>
+                      <Show when={isPr}>
+                        <Button
+                          variant="primary"
+                          class="ml-auto h-6 shrink-0 px-2 text-[11px]"
+                          loading={mergeBusy() === att.url}
+                          disabled={mergedUrls().has(att.url)}
+                          title="Squash-merge this PR via the bridge's gh — reviewed the demo? Ship it."
+                          onClick={() => void doMerge(att.url)}
+                        >
+                          <span class="inline-block min-w-[6ch] text-center">
+                            {mergedUrls().has(att.url) ? 'Merged ✓' : 'Merge'}
+                          </span>
+                        </Button>
+                      </Show>
+                    </div>
+                  );
+                }}
               </For>
+              <Show when={mergeError()}>
+                <ErrorNote message={mergeError()!} />
+              </Show>
             </div>
           </div>
         </Show>

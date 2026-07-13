@@ -15,6 +15,23 @@ function esc(s: string): string {
 }
 
 const SAFE_HREF = /^(https?:\/\/|mailto:)/i;
+const VIDEO_EXT = /\.(mp4|mov|webm|m4v)(\?|#|$)/i;
+
+/** uploads.linear.app media needs Linear auth — route through the bridge proxy. */
+let mediaProxyBase: string | null = null;
+export function setLinearMediaProxy(base: string | null): void {
+  mediaProxyBase = base ? base.replace(/\/$/, '') : null;
+}
+function resolveMedia(url: string): string {
+  try {
+    if (mediaProxyBase && new URL(url).hostname.endsWith('uploads.linear.app')) {
+      return `${mediaProxyBase}/fetch?url=${encodeURIComponent(url)}`;
+    }
+  } catch {
+    /* keep original */
+  }
+  return url;
+}
 
 function inline(md: string): string {
   let out = md;
@@ -22,11 +39,17 @@ function inline(md: string): string {
   // Inline code first — its contents must not be further transformed.
   out = out.replace(/`([^`]+)`/g, (_m, code: string) => `<code>${code}</code>`);
 
-  // Images: ![alt](url) — URL may be &lt;wrapped&gt;.
+  // Images/video: ![alt](url) — URL may be &lt;wrapped&gt;. Linear-hosted
+  // media is proxied; video extensions get a real player.
   out = out.replace(
     /!\[([^\]]*)\]\((?:&lt;)?([^()\s]+?)(?:&gt;)?\)/g,
-    (_m, alt: string, url: string) =>
-      SAFE_HREF.test(url) ? `<img src="${url}" alt="${alt}" loading="lazy" />` : alt,
+    (_m, alt: string, url: string) => {
+      if (!SAFE_HREF.test(url)) return alt;
+      const src = resolveMedia(url);
+      return VIDEO_EXT.test(url)
+        ? `<video controls preload="metadata" src="${src}"></video>`
+        : `<img src="${src}" alt="${alt}" loading="lazy" />`;
+    },
   );
 
   // Links: [text](url) — URL may be &lt;wrapped&gt;.

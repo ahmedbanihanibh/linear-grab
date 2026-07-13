@@ -1,6 +1,6 @@
 {
   "name": "linear-grab",
-  "version": "0.12.2",
+  "version": "0.13.0",
   "type": "module",
   "description": "Point at any React element in your dev app, draft a Linear issue with AI, delegate it to the Cursor agent, and track it live — in any browser.",
   "exports": {

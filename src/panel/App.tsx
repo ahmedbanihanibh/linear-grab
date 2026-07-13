@@ -9,6 +9,8 @@ import SettingsView from './views/SettingsView';
 import { subscribeStorage } from '@/lib/storage';
 import { subscribeGrabBroadcast } from '@/lib/picker';
 import { wireIdbCache } from '@/lib/idbCache';
+import { bridgeBase, pushBridgeConfig } from '@/lib/bridge';
+import { setLinearMediaProxy } from './components/markdown';
 import { requestedTab, type PanelTab } from './nav';
 
 const TABS: Array<{ id: PanelTab; label: string }> = [
@@ -68,8 +70,17 @@ export default function App(props: {
     // Instant views: hydrate the query cache from IndexedDB, persist updates.
     const cachePromise = wireIdbCache(queryClient);
     const unsubGrab = subscribeGrabBroadcast(handleGrab);
+    // Media proxy + bridge auth: lets Linear-hosted images/videos render.
+    const syncBridge = () => {
+      void bridgeBase().then(setLinearMediaProxy);
+      void pushBridgeConfig();
+    };
+    syncBridge();
     const unsubStorage = subscribeStorage((area) => {
-      if (area === 'settings') void queryClient.invalidateQueries({ queryKey: ['settings'] });
+      if (area === 'settings') {
+        void queryClient.invalidateQueries({ queryKey: ['settings'] });
+        syncBridge();
+      }
       if (area === 'grab') handleGrab();
     });
     onCleanup(() => {

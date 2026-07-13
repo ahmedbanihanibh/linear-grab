@@ -45,6 +45,7 @@ export function buildAgentInstructions(settings: {
   slackChannelName?: string;
   telegramToken?: string;
   telegramChatId?: string;
+  githubAssetsRepo?: string;
 }): string {
   const parts: string[] = [settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS];
 
@@ -61,6 +62,12 @@ export function buildAgentInstructions(settings: {
       `**Project skills & memory — MANDATORY reading before implementing.** This repo ships maintained skills/memory files. Read each of these paths in your checkout and treat their guidance as authoritative for design, style, and architectural decisions:\n${paths
         .map((p) => `- \`${p}\``)
         .join('\n')}`,
+    );
+  }
+
+  if (settings.githubAssetsRepo?.trim()) {
+    parts.push(
+      `**Demo media hosting:** commit demo GIFs/videos to the PUBLIC assets repo \`${settings.githubAssetsRepo.trim()}\` under \`linear-grab/\` (clone it or use \`gh api\`), and embed the raw.githubusercontent.com URL in BOTH the Linear comment and the PR body. Prefer GIF for short demos — it renders inline everywhere (Linear, GitHub, the panel); Linear-hosted uploads do NOT render on GitHub.`,
     );
   }
 

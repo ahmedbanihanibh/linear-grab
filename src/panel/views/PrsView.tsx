@@ -1,6 +1,7 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import { createQuery } from '@tanstack/solid-query';
 import { fetchMyIssues } from '@/lib/linear/api';
+import { mergePr } from '@/lib/bridge';
 import { openPanelTo } from '../nav';
 import { Badge, Button, EmptyState, ExtLink, StateDot, timeAgo } from '../components/ui';
 import type { LinearAttachment, LinearIssueSummary } from '@/lib/types';
@@ -32,6 +33,19 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
   );
 
   const [copiedId, setCopiedId] = createSignal<string | null>(null);
+  const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
+  const [merged, setMerged] = createSignal<Set<string>>(new Set());
+  const doMerge = async (url: string) => {
+    setMergeBusy(url);
+    try {
+      await mergePr(url);
+      setMerged((prev) => new Set(prev).add(url));
+    } catch {
+      /* surfaced via tooltip state remaining unmerged */
+    } finally {
+      setMergeBusy(null);
+    }
+  };
   const copyUrl = async (row: PrRow) => {
     try {
       await navigator.clipboard.writeText(row.attachment.url);
@@ -95,6 +109,29 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                       Linear
                     </ExtLink>
                     <div class="ml-auto flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="primary"
+                        class="size-7 px-0"
+                        loading={mergeBusy() === row.attachment.url}
+                        disabled={merged().has(row.attachment.url)}
+                        title={merged().has(row.attachment.url) ? 'Merged' : 'Squash-merge this PR (bridge gh)'}
+                        aria-label="Merge PR"
+                        onClick={() => void doMerge(row.attachment.url)}
+                      >
+                        <Show
+                          when={merged().has(row.attachment.url)}
+                          fallback={
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                              <circle cx="4" cy="3.5" r="1.5" />
+                              <circle cx="4" cy="12.5" r="1.5" />
+                              <circle cx="12" cy="8" r="1.5" />
+                              <path d="M4 5v6M4 6.5c0 2 2 3 4.5 3h2" />
+                            </svg>
+                          }
+                        >
+                          <span class="text-[12px] leading-none">✓</span>
+                        </Show>
+                      </Button>
                       <Button
                         variant="ghost"
                         class="size-7 px-0"
