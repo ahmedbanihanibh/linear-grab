@@ -1,6 +1,6 @@
 import { executeDraft } from '@/lib/ai/draft';
 import { NoProviderError } from '@/lib/ai/providers';
-import { setLastGrab } from '@/lib/storage';
+import { mergeGrabs } from '@/lib/storage';
 import type {
   DraftPortClientMessage,
   DraftPortServerMessage,
@@ -13,7 +13,7 @@ export default defineBackground(() => {
 
   chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
     if (msg?.type === 'grab/selected') {
-      void setLastGrab(msg.payload).then(() => {
+      void mergeGrabs(msg.payload).then(() => {
         // Panel (if open) invalidates its grab query on this.
         chrome.runtime.sendMessage({ type: 'grab/updated' } satisfies RuntimeMessage).catch(() => {});
       });

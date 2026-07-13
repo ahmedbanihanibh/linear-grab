@@ -85,6 +85,9 @@ export interface Settings {
   logLines?: number;
   /** Local Claude Code bridge URL (`npx linear-grab-bridge`, default :4577). */
   bridgeUrl?: string;
+  /** Capture a highlighted screenshot per picked element. OFF by default —
+      the DOM capture costs a beat on huge pages; picking stays instant without it. */
+  captureShots?: boolean;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page
@@ -209,6 +212,8 @@ export interface DraftInput {
   template?: string;
   /** Recent dev-server log tail — lets the AI ground its root-cause analysis. */
   logs?: string;
+  /** All captured elements when more than one (grabbed stays the primary). */
+  grabbedList?: GrabbedElement[];
 }
 
 export type DraftPortClientMessage = { type: 'start'; input: DraftInput };

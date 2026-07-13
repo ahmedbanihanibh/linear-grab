@@ -74,10 +74,11 @@ export default function LocalView() {
           when={health.data?.ok}
           fallback={
             <EmptyState title="Bridge not running">
-              Start it in your repo's terminal:
-              <span class="bg-surface-2 border-border font-mono mt-2 block rounded-md border px-2 py-1.5 text-[11px] select-all">
-                npx linear-grab-bridge
+              Start it in your repo's terminal (one line, no install):
+              <span class="bg-surface-2 border-border font-mono mt-2 block rounded-md border px-2 py-1.5 text-left text-[10.5px] break-all select-all">
+                curl -fsSL https://cdn.jsdelivr.net/gh/ahmedbanihanibh/linear-grab@main/bin/linear-grab-bridge.mjs -o /tmp/lg-bridge.mjs && node /tmp/lg-bridge.mjs
               </span>
+              (After the package is published to npm: <code>npx linear-grab-bridge</code>.)
               Then delegate from the Draft tab ("Local Claude Code") or watch
               tasks here. The bridge spawns headless <code>claude -p</code>{' '}
               sessions in the repo — your interactive terminal session stays

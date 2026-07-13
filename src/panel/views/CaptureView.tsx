@@ -1,6 +1,7 @@
-import { createEffect, createSignal, onCleanup, Show, type ParentProps } from 'solid-js';
+import { createEffect, createSignal, onCleanup, For, Show, type ParentProps } from 'solid-js';
+import type { GrabbedElement } from '@/lib/types';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
-import { getSettings, clearLastGrab, getLastGrab } from '@/lib/storage';
+import { getSettings, clearLastGrab, getLastGrab, removeGrab } from '@/lib/storage';
 import { activatePicker } from '@/lib/picker';
 import {
   getRecorderSnapshot,
@@ -48,7 +49,7 @@ export default function CaptureView() {
 
   const grabQuery = createQuery(() => ({ queryKey: ['grab'], queryFn: getLastGrab }));
   const settingsQuery = createQuery(() => ({ queryKey: ['settings'], queryFn: getSettings }));
-  const grab = () => grabQuery.data?.[0] ?? null;
+  const grabs = () => grabQuery.data ?? [];
   const linearConnected = () =>
     !!(settingsQuery.data?.linearApiKey || settingsQuery.data?.linearAccessToken);
 
@@ -69,19 +70,22 @@ export default function CaptureView() {
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
   };
 
-  // react-grab workflow: copy the element context for a LOCAL agent
+  // react-grab workflow: copy an element's context for a LOCAL agent
   // (Claude Code / Cursor chat) — includes the project's skills/memory paths.
-  const [ctxCopied, setCtxCopied] = createSignal(false);
-  const copyContext = async () => {
-    const el = grab();
-    if (!el) return;
+  const [copiedId, setCopiedId] = createSignal<number | null>(null);
+  const copyContext = async (el: GrabbedElement) => {
     try {
       await navigator.clipboard.writeText(buildLocalContext(el, settingsQuery.data ?? {}));
-      setCtxCopied(true);
-      setTimeout(() => setCtxCopied(false), 1800);
+      setCopiedId(el.grabbedAt);
+      setTimeout(() => setCopiedId(null), 1800);
     } catch {
       setPickError('Clipboard was blocked — click the button again.');
     }
+  };
+
+  const dropGrab = async (grabbedAt: number) => {
+    await removeGrab(grabbedAt);
+    void queryClient.invalidateQueries({ queryKey: ['grab'] });
   };
 
   // ---- recording ----
@@ -194,73 +198,89 @@ export default function CaptureView() {
     <div class="flex h-full flex-col gap-4 overflow-y-auto pt-3 pb-4 pl-3 pr-4">
       {/* ---- Captured element ------------------------------------------------ */}
       <Accordion
-        title="Captured element"
-        badge={grab()?.componentName ? `<${grab()!.componentName}>` : undefined}
+        title="Captured elements"
+        badge={grabs().length ? `${grabs().length}/8` : undefined}
       >
         <Show
-          when={grab()}
+          when={grabs().length > 0}
           fallback={
-            <EmptyState title="No element captured">
-              Click "Pick element" below, then use the Linear Grab overlay on your
-              dev app. Source info is only available in dev builds.
+            <EmptyState title="No elements captured">
+              Click "Pick element" below, then use the react-grab overlay on your
+              dev app. Every pick ADDS to this list — Shift+click or drag in the
+              overlay selects several at once. Source info needs a dev build.
             </EmptyState>
           }
         >
-          {(el) => (
-            <div class="bg-surface border-border flex flex-col gap-1.5 rounded-lg border p-2.5">
-              {/* Row 1: component name + actions. Row 2: path gets the FULL
-                  card width — never squeezed by the buttons at narrow sizes. */}
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-mono text-accent min-w-0 truncate text-[12px]">
-                  <Show when={el().componentName} fallback={el().tagName ? `<${el().tagName}>` : 'Element'}>
-                    {'<'}{el().componentName}{'>'}
-                  </Show>
-                </span>
-                <div class="flex shrink-0 items-center gap-1">
-                  <Button
-                    class="h-6 px-2 text-[11px]"
-                    variant="ghost"
-                    title="Copy context for a local agent (Claude Code / Cursor) — includes skills & memory paths"
-                    onClick={() => void copyContext()}
-                  >
-                    <span class="inline-block min-w-[8ch] text-center">
-                      {ctxCopied() ? 'Copied ✓' : 'Copy context'}
+          <div class="flex flex-col gap-1.5">
+            <For each={grabs()}>
+              {(el) => (
+                <div class="bg-surface border-border flex flex-col gap-1.5 rounded-lg border p-2.5">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-mono text-accent min-w-0 truncate text-[12px]">
+                      {el.componentName
+                        ? `<${el.componentName}>`
+                        : el.tagName
+                          ? `<${el.tagName}>`
+                          : 'Element'}
                     </span>
-                  </Button>
-                  <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={clearGrab}>
-                    Clear
-                  </Button>
+                    <div class="flex shrink-0 items-center gap-1">
+                      <Button
+                        class="size-7 px-0"
+                        variant="ghost"
+                        title="Copy context for a local agent (Claude Code / Cursor) — includes skills & memory paths"
+                        aria-label="Copy context"
+                        onClick={() => void copyContext(el)}
+                      >
+                        <Show
+                          when={copiedId() === el.grabbedAt}
+                          fallback={
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                              <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+                              <path d="M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" />
+                            </svg>
+                          }
+                        >
+                          <span class="text-success text-[12px] leading-none">✓</span>
+                        </Show>
+                      </Button>
+                      <Button
+                        class="size-7 px-0"
+                        variant="ghost"
+                        title="Remove this element"
+                        aria-label="Remove element"
+                        onClick={() => void dropGrab(el.grabbedAt)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                          <path d="M4 4l8 8M12 4l-8 8" />
+                        </svg>
+                      </Button>
+                    </div>
+                  </div>
+                  <Show when={el.source?.filePath}>
+                    <span class="font-mono text-text-dim break-all text-[11px] leading-snug">
+                      {el.source!.filePath}
+                      {el.source?.lineNumber != null ? `:${el.source!.lineNumber}` : ''}
+                    </span>
+                  </Show>
+                  <Show when={el.screenshotDataUrl}>
+                    <img
+                      src={el.screenshotDataUrl}
+                      alt="Element location screenshot"
+                      class="border-border bg-bg max-h-32 w-full rounded-md border object-contain"
+                    />
+                  </Show>
                 </div>
-              </div>
-              <Show when={el().source?.filePath}>
-                <span class="font-mono text-text-dim break-all text-[11px] leading-snug">
-                  {el().source!.filePath}
-                  {el().source?.lineNumber != null ? `:${el().source!.lineNumber}` : ''}
-                </span>
-              </Show>
-              <span class="text-text-faint truncate text-[10.5px]">{el().pageUrl}</span>
-              <Show when={el().stackContext}>
-                <details class="text-[10.5px]">
-                  <summary class="text-text-faint cursor-pointer select-none">
-                    Component stack
-                  </summary>
-                  <pre class="font-mono text-text-faint mt-1 overflow-x-auto text-[10.5px] break-all whitespace-pre-wrap">
-                    {el().stackContext}
-                  </pre>
-                </details>
-              </Show>
-              <Show when={el().screenshotDataUrl}>
-                <img
-                  src={el().screenshotDataUrl}
-                  alt="Element location screenshot"
-                  class="border-border bg-bg max-h-40 w-full rounded-md border object-contain"
-                />
-                <span class="text-text-faint text-[10.5px]">
-                  Highlighted screenshot — attached to the issue on create.
-                </span>
-              </Show>
+              )}
+            </For>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-text-faint min-w-0 text-[10.5px] leading-snug">
+                All elements post into ONE issue. Shift+click / drag selects several at once.
+              </span>
+              <Button class="h-6 shrink-0 px-2 text-[11px]" variant="ghost" onClick={clearGrab}>
+                Clear all
+              </Button>
             </div>
-          )}
+          </div>
         </Show>
 
         <div class="flex flex-col gap-1.5">

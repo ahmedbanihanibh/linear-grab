@@ -89,9 +89,12 @@ function formatGrabbed(el: GrabbedElement): string {
 export function buildDraftPrompt(input: DraftInput): string {
   const parts: string[] = [];
   parts.push(`Reporter note:\n${input.note.trim() || '(none — infer from the element context)'}`);
-  if (input.grabbed) {
-    parts.push(`Captured element (via the Linear Grab picker):\n${formatGrabbed(input.grabbed)}`);
-  }
+  const grabList = input.grabbedList?.length ? input.grabbedList : input.grabbed ? [input.grabbed] : [];
+  grabList.slice(0, 3).forEach((el, i) => {
+    parts.push(
+      `Captured element ${grabList.length > 1 ? `${i + 1}/${Math.min(grabList.length, 3)} ` : ''}(via the Linear Grab picker):\n${formatGrabbed(el)}`,
+    );
+  });
   if (input.teamName) parts.push(`Target team: ${input.teamName}`);
   if (input.template?.trim()) {
     parts.push(
@@ -148,7 +151,7 @@ export function composeIssueBody(args: {
   reproSteps: string[];
   expected: string;
   actual: string;
-  grabbed: GrabbedElement | null;
+  grabs?: GrabbedElement[];
   repo?: string;
   /** Cursor cloud agent model override → [model=…] tag. */
   model?: string;
@@ -173,16 +176,22 @@ export function composeIssueBody(args: {
     sections.push(`### Suggested Next Steps\n${args.suggestedNextSteps.trim()}`);
   }
 
-  const el = args.grabbed;
-  if (el && (el.source?.filePath || el.componentName)) {
-    const lines: string[] = [];
-    const loc = el.source?.filePath
-      ? `\`${el.source.filePath}${el.source.lineNumber != null ? `:${el.source.lineNumber}` : ''}\``
-      : null;
-    lines.push([el.componentName ? `\`<${el.componentName}>\`` : null, loc].filter(Boolean).join(' — '));
-    if (el.stackContext) lines.push(`\n\`\`\`\n${el.stackContext}\n\`\`\``);
-    lines.push(`\nCaptured on ${el.pageUrl}`);
-    sections.push(`### Source\n${lines.join('\n')}`);
+  const grabs = (args.grabs ?? []).filter((g) => g.source?.filePath || g.componentName);
+  if (grabs.length) {
+    const lines = grabs.map((el) => {
+      const loc = el.source?.filePath
+        ? `\`${el.source.filePath}${el.source.lineNumber != null ? `:${el.source.lineNumber}` : ''}\``
+        : null;
+      return `- ${[el.componentName ? `\`<${el.componentName}>\`` : null, loc]
+        .filter(Boolean)
+        .join(' — ')}`;
+    });
+    const first = grabs[0];
+    if (first.stackContext) lines.push(`\n\`\`\`\n${first.stackContext}\n\`\`\``);
+    lines.push(`\nCaptured on ${first.pageUrl}`);
+    sections.push(
+      `### Source${grabs.length > 1 ? ` (${grabs.length} elements)` : ''}\n${lines.join('\n')}`,
+    );
   }
 
   if (args.agentInstructions?.trim()) {

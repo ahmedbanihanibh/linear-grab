@@ -1,5 +1,5 @@
 import { isExtensionContext } from './env';
-import { getSettings, setLastGrab } from './storage';
+import { getSettings, mergeGrabs } from './storage';
 import { captureElementShot, prewarmCapture } from './elementShot';
 import { buildLocalContext } from './ai/prompt';
 import type { GrabbedElement, RuntimeMessage } from './types';
@@ -48,14 +48,17 @@ function maybeLocalCopy(el: GrabbedElement | undefined): void {
  * { tagName, id?, className?, textContent?, componentName?, filePath?, lineNumber?, columnNumber? }
  * (react-grab@0.1.48). Shared by the extension MAIN-world script and page mode.
  */
-export function mapSelectedElement(el: {
-  tagName?: string;
-  textContent?: string;
-  componentName?: string;
-  filePath?: string;
-  lineNumber?: number;
-  columnNumber?: number;
-}): GrabbedElement {
+export function mapSelectedElement(
+  el: {
+    tagName?: string;
+    textContent?: string;
+    componentName?: string;
+    filePath?: string;
+    lineNumber?: number;
+    columnNumber?: number;
+  },
+  grabbedAt: number = Date.now(),
+): GrabbedElement {
   return {
     tagName: el.tagName || undefined,
     componentName: el.componentName || undefined,
@@ -70,7 +73,7 @@ export function mapSelectedElement(el: {
       : null,
     stackContext: undefined,
     pageUrl: location.href,
-    grabbedAt: Date.now(),
+    grabbedAt,
   };
 }
 
@@ -99,13 +102,20 @@ export function createSelectionPipeline(
   getApi?: () => PickerApi | null | undefined,
 ) {
   let pendingShot: Promise<string | null> | null = null;
+  let lastPickAt = 0;
 
   return {
     plugin: {
       name: 'linear-grab',
       hooks: {
         onElementSelect: (element: Element) => {
-          pendingShot = captureElementShot(element);
+          lastPickAt = Date.now();
+
+          // Screenshots are OPT-IN: the DOM capture is the one costly step,
+          // so default picking stays react-grab fast.
+          pendingShot = getSettings().then((s) =>
+            s.captureShots ? captureElementShot(element) : null,
+          );
 
           // Pass 1: instant publish — no waiting on react-grab's copy flow.
           const api = getApi?.();
@@ -116,7 +126,7 @@ export function createSelectionPipeline(
             source: null,
             stackContext: undefined,
             pageUrl: location.href,
-            grabbedAt: Date.now(),
+            grabbedAt: lastPickAt,
           };
           publish([immediate]);
 
@@ -144,7 +154,10 @@ export function createSelectionPipeline(
     },
     handleSelection(payloads: Array<Parameters<typeof mapSelectedElement>[0]>) {
       // Pass 3: react-grab's own event payload (authoritative when it fires).
-      const elements = payloads.map(mapSelectedElement);
+      // The first element reuses pass 1's id so the merge updates in place;
+      // multi-select extras get unique sequential ids.
+      const base = lastPickAt && Date.now() - lastPickAt < 4_000 ? lastPickAt : Date.now();
+      const elements = payloads.map((p, i) => mapSelectedElement(p, base + i));
       if (!elements.length) return;
       publish(elements);
       const shot = pendingShot;
@@ -173,16 +186,16 @@ export async function ensurePagePicker(): Promise<void> {
   pageStarted = true;
   const rg = await import('react-grab');
   try {
-    // One dock: hide react-grab's own toolbar — our launcher pill carries the
-    // pick button, agent status, and recording controls instead.
-    rg.init({ toolbar: { show: false } } as Parameters<typeof rg.init>[0]);
+    // react-grab's own toolbar IS the picker UI — it's the fast, familiar
+    // path. Our pill carries panel/agent/recording concerns only.
+    rg.init();
   } catch {
     pageStarted = false;
     return;
   }
   const pipeline = createSelectionPipeline(
     (els) => {
-      void setLastGrab(els);
+      void mergeGrabs(els); // multi-element: picks accumulate into one issue
       maybeLocalCopy(els[0]); // react-grab workflow: pick = context on clipboard
     },
     () => rg.getGlobalApi() as PickerApi | null,

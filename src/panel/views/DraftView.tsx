@@ -177,6 +177,7 @@ export default function DraftView(props: { onCreated: () => void }) {
       {
         note: note(),
         grabbed: grab() ?? null,
+        grabbedList: grabQuery.data ?? undefined,
         teamName: selectedTeamName(),
         tier: tier(),
         template: buildAgentInstructions(settings()),
@@ -239,7 +240,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         impact: impact(),
         analysisNotes: analysisNotes(),
         suggestedNextSteps: nextSteps(),
-        grabbed: grab(),
+        grabs: grabQuery.data ?? [],
         repo: repo(),
         model: settings().cursorModel,
         agentInstructions: buildAgentInstructions(settings()),
@@ -259,13 +260,17 @@ export default function DraftView(props: { onCreated: () => void }) {
           failed.push('recording');
         }
       }
-      const shot = grab()?.screenshotDataUrl;
-      if (shot) {
+      const shots = (grabQuery.data ?? []).filter((g) => g.screenshotDataUrl).slice(0, 3);
+      for (const [i, g] of shots.entries()) {
         try {
-          const url = await uploadAsset(dataUrlToBlob(shot), `element-${Date.now()}.png`);
-          body += `\n\n### Element location\n![Highlighted element in context](${url})`;
+          const url = await uploadAsset(
+            dataUrlToBlob(g.screenshotDataUrl!),
+            `element-${Date.now()}-${i}.png`,
+          );
+          const label = g.componentName ? `<${g.componentName}>` : (g.tagName ?? 'element');
+          body += `\n\n### Element location${shots.length > 1 ? ` — ${label}` : ''}\n![Highlighted element in context](${url})`;
         } catch {
-          failed.push('screenshot');
+          failed.push(`screenshot${shots.length > 1 ? ` ${i + 1}` : ''}`);
         }
       }
       // Dev-server log tail — full debug context for the agent.
@@ -378,6 +383,9 @@ export default function DraftView(props: { onCreated: () => void }) {
                 {rec().attachOnCreate ? ' ✓' : ' (off)'}
               </Badge>
             </Show>
+            <Show when={(grabQuery.data?.length ?? 0) > 1}>
+              <Badge>+{grabQuery.data!.length - 1} more</Badge>
+            </Show>
             <Show when={rec().phase === 'recording'}>
               <Badge class="text-danger">● recording…</Badge>
             </Show>
@@ -385,10 +393,15 @@ export default function DraftView(props: { onCreated: () => void }) {
         </div>
         <Button
           variant="ghost"
-          class="h-6 shrink-0 px-2 text-[11px]"
+          class="size-7 shrink-0 px-0"
+          title="Manage in the Capture tab — elements, screenshots, recording"
+          aria-label="Open Capture tab"
           onClick={() => openPanelTo('capture')}
         >
-          Capture →
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+            <path d="M5.5 3.5 6.6 2h2.8l1.1 1.5H13A1.5 1.5 0 0 1 14.5 5v7A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V5A1.5 1.5 0 0 1 3 3.5h2.5Z" />
+            <circle cx="8" cy="8.2" r="2.4" />
+          </svg>
         </Button>
       </div>
 

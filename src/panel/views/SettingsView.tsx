@@ -178,6 +178,24 @@ export default function SettingsView() {
         </span>
       </Section>
 
+      {/* ── 0.5 CAPTURE ───────────────────────────────────────────────────────── */}
+      <Section title="Capture">
+        <label class="flex cursor-pointer items-center gap-2 select-none">
+          <input
+            type="checkbox"
+            checked={!!s().captureShots}
+            onChange={(e) => void update({ captureShots: e.currentTarget.checked || undefined })}
+            class="accent-accent rounded"
+          />
+          <span class="text-text text-[12px]">Element screenshots</span>
+        </label>
+        <span class="text-text-faint text-[10.5px] leading-snug">
+          Captures a highlighted screenshot of each picked element and attaches it
+          to the issue. Costs a beat on huge pages — with this off, picking is
+          instant (pure react-grab speed).
+        </span>
+      </Section>
+
       {/* ── 1. LINEAR ─────────────────────────────────────────────────────────── */}
       <Section title="Linear">
         <Show

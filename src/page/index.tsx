@@ -1,12 +1,7 @@
 import { render } from 'solid-js/web';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import App, { LinearLogo } from '@/panel/App';
-import {
-  activatePicker,
-  ensurePagePicker,
-  CONTEXT_COPIED_EVENT,
-  PICKER_ACTIVATED_EVENT,
-} from '@/lib/picker';
+import { ensurePagePicker, CONTEXT_COPIED_EVENT, PICKER_ACTIVATED_EVENT } from '@/lib/picker';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
 import { subscribeRunningAgents, type RunningAgentIssue } from '@/lib/agentWatch';
 import { getRecorderSnapshot, subscribeRecorder, stopRecording } from '@/lib/recorder';
@@ -344,23 +339,8 @@ function PagePanel(props: { defaultOpen: boolean }) {
                   >
                     <LinearLogo size={13} />
                   </button>
-                  {/* Single dock: react-grab's own toolbar is hidden — the pick
-                      action lives here instead. */}
-                  <button
-                    onClick={() => {
-                      if (dragMoved) return;
-                      setMinimapOpen(false);
-                      void activatePicker();
-                    }}
-                    title="Pick element"
-                    aria-label="Pick element"
-                    class="text-text-dim hover:text-text hover:bg-surface-2 grid size-7 cursor-pointer place-items-center rounded-full transition-colors"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
-                      <circle cx="8" cy="8" r="2.2" />
-                      <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
-                    </svg>
-                  </button>
+                  {/* Picking lives in react-grab's own toolbar (the fast,
+                      familiar path) — this pill is panel/agents/recording only. */}
                   <span class="bg-border h-4 w-px" aria-hidden />
                   {/* Live agent status — dot pulses while agents run; count is fixed-width. */}
                   <button

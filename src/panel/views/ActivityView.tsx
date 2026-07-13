@@ -96,7 +96,7 @@ function IssueListScreen(props: { onSelect: (id: string) => void }) {
             </span>
           </Show>
           <Button
-            class="min-w-[32px]"
+            class="size-7 px-0"
             loading={query.isFetching}
             onClick={() => void query.refetch()}
             title="Refresh"
