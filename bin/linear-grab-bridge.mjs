@@ -31,12 +31,33 @@ const CLAUDE_BIN = flag('--claude', 'claude');
 const VERSION = '0.10.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
-function run(cmd, args) {
+function run(cmd, args, cwd = DIR) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd: DIR, timeout: 8_000, maxBuffer: 2_000_000 }, (err, stdout) =>
+    execFile(cmd, args, { cwd, timeout: 15_000, maxBuffer: 2_000_000 }, (err, stdout) =>
       resolve(err ? null : stdout.toString()),
     );
   });
+}
+
+/** Opt-in isolation: give a task its own git worktree + branch so parallel
+    local agents never trample each other's working tree. */
+async function setupWorktree(task) {
+  const base = join(
+    HISTORY_DIR,
+    'worktrees',
+    createHash('sha1').update(DIR).digest('hex').slice(0, 8),
+  );
+  mkdirSync(base, { recursive: true });
+  const path = join(base, task.id);
+  const slug = task.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+  const branch = `lg/${slug || 'task'}-${task.id}`;
+  const out = await run('git', ['worktree', 'add', path, '-b', branch]);
+  if (out === null) return null;
+  return { path, branch, removed: false };
 }
 const MAX_TAIL = 300;
 const IDLE_KILL_MS = 30 * 60_000; // free an idle interactive session after 30min (resumable)
@@ -87,6 +108,8 @@ function saveHistory() {
           usage: t.usage ?? null,
           startCommit: t.startCommit ?? null,
           subagents: t.subagents ?? 0,
+          worktree: t.worktree ?? null,
+          cwd: t.cwd ?? null,
           tail: (t.tail ?? []).slice(-60),
         }));
       writeFileSync(HISTORY_FILE, JSON.stringify(items));
@@ -145,6 +168,7 @@ function summary(t) {
     usage: t.usage ?? null,
     subagents: t.subagents ?? 0,
     permissionMode: t.permissionMode ?? 'acceptEdits',
+    worktree: t.worktree ?? null,
   };
 }
 
@@ -180,7 +204,7 @@ function startProcess(task, { resume, initialText }) {
   if (resume) args.push('--resume', resume);
 
   const child = spawn(CLAUDE_BIN, args, {
-    cwd: DIR,
+    cwd: task.cwd ?? DIR,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, ...(task.env ?? {}) },
   });
@@ -299,7 +323,7 @@ function ingest(task, event) {
   }
 }
 
-function startTask({ title, prompt, model, env, permissionMode }) {
+async function startTask({ title, prompt, model, env, permissionMode, worktree }) {
   const id = randomUUID().slice(0, 8);
   const task = {
     id,
@@ -325,19 +349,28 @@ function startTask({ title, prompt, model, env, permissionMode }) {
   };
   tasks.set(id, task);
   pushTail(task, 'user', String(prompt ?? '').slice(0, 2000));
+  if (worktree) {
+    const wt = await setupWorktree(task);
+    if (wt) {
+      task.worktree = wt;
+      task.cwd = wt.path;
+      pushTail(task, 'tool', `⎇ isolated worktree: ${wt.branch} @ ${wt.path}`);
+    } else {
+      pushTail(task, 'stderr', 'Worktree setup failed — running in the main working tree.');
+    }
+  }
   // Snapshot HEAD so the Changes view can attribute work to this task.
-  void run('git', ['rev-parse', 'HEAD']).then((out) => {
-    task.startCommit = out?.trim() || null;
-  });
+  task.startCommit = ((await run('git', ['rev-parse', 'HEAD'], task.cwd ?? DIR)) ?? '').trim() || null;
   startProcess(task, { initialText: String(prompt ?? '') });
   return task;
 }
 
 /** What this task changed: files (+/−), branch, untracked, matching PRs. */
 async function computeDiff(task) {
-  const branch = (await run('git', ['branch', '--show-current']))?.trim() ?? '';
+  const cwd = task.cwd ?? DIR;
+  const branch = (await run('git', ['branch', '--show-current'], cwd))?.trim() ?? '';
   const base = task.startCommit;
-  const numstat = (await run('git', ['diff', '--numstat', ...(base ? [base] : [])])) ?? '';
+  const numstat = (await run('git', ['diff', '--numstat', ...(base ? [base] : [])], cwd)) ?? '';
   const files = numstat
     .split('\n')
     .filter(Boolean)
@@ -351,7 +384,7 @@ async function computeDiff(task) {
       };
     })
     .filter((f) => f.path);
-  const untracked = ((await run('git', ['status', '--porcelain'])) ?? '')
+  const untracked = ((await run('git', ['status', '--porcelain'], cwd)) ?? '')
     .split('\n')
     .filter((l) => l.startsWith('??'))
     .map((l) => l.slice(3).trim())
@@ -367,7 +400,7 @@ async function computeDiff(task) {
   ]) {
     if (!args) continue;
     try {
-      const out = await run('gh', args);
+      const out = await run('gh', args, cwd);
       for (const pr of JSON.parse(out ?? '[]')) prs.set(pr.url, pr);
     } catch {
       /* gh missing or not a repo with remote */
@@ -466,6 +499,17 @@ createServer(async (req, res) => {
       }
       return json(res, 200, { ok: true });
     }
+    const wtRemove = url.pathname.match(/^\/tasks\/([\w-]+)\/worktree\/remove$/);
+    if (req.method === 'POST' && wtRemove) {
+      const t = tasks.get(wtRemove[1]);
+      if (!t?.worktree || t.worktree.removed) return json(res, 404, { error: 'no worktree' });
+      if (t.status === 'running') return json(res, 409, { error: 'task still running' });
+      await run('git', ['worktree', 'remove', '--force', t.worktree.path]);
+      t.worktree.removed = true;
+      t.cwd = null;
+      saveHistory();
+      return json(res, 200, summary(t));
+    }
     const message = url.pathname.match(/^\/tasks\/([\w-]+)\/message$/);
     if (req.method === 'POST' && message) {
       const t = tasks.get(message[1]);
@@ -497,7 +541,7 @@ createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/tasks') {
       const body = await readBody(req);
       if (!body.prompt) return json(res, 400, { error: 'prompt required' });
-      const task = startTask(body);
+      const task = await startTask(body);
       return json(res, 201, summary(task));
     }
     // Upload proxy: browsers can't PUT to Linear's storage (no CORS there) —

@@ -2,6 +2,7 @@ import { render } from 'solid-js/web';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import App, { LinearLogo } from '@/panel/App';
 import { ensurePagePicker, CONTEXT_COPIED_EVENT, PICKER_ACTIVATED_EVENT } from '@/lib/picker';
+import { installConsoleCapture } from '@/lib/consoleCapture';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
 import {
   subscribeRunningAgents,
@@ -42,6 +43,7 @@ export function init(options: InitOptions = {}): void {
   window.__LINEAR_GRAB_PAGE__ = true;
 
   const mount = () => {
+    installConsoleCapture(); // start collecting client errors immediately
     void ensurePagePicker();
 
     const host = document.createElement('div');

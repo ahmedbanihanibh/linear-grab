@@ -128,6 +128,30 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
   }
 }
 
+/** Relevance search for duplicate detection while drafting. Best-effort:
+    falls back to empty on schema/permission differences. */
+export async function searchIssues(
+  term: string,
+): Promise<Array<Pick<LinearIssueSummary, 'id' | 'identifier' | 'title' | 'url' | 'state'>>> {
+  try {
+    const data = await gql<{
+      searchIssues: {
+        nodes: Array<Pick<LinearIssueSummary, 'id' | 'identifier' | 'title' | 'url' | 'state'>>;
+      };
+    }>(
+      `query($term: String!) {
+        searchIssues(term: $term, first: 5) {
+          nodes { id identifier title url state { name color type } }
+        }
+      }`,
+      { term },
+    );
+    return data.searchIssues.nodes;
+  } catch {
+    return [];
+  }
+}
+
 export interface LinearWorkflowState {
   id: string;
   name: string;

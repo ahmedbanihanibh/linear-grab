@@ -28,6 +28,8 @@ import { uploadAsset } from '@/lib/assetUpload';
 import { createBridgeTask } from '@/lib/bridge';
 import { announceIssue } from '@/lib/notify';
 import { fetchDevLogTail } from '@/lib/logs';
+import { formatConsoleTail, getConsoleTail } from '@/lib/consoleCapture';
+import { searchIssues } from '@/lib/linear/api';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
 import { composeIssueBody, buildAgentInstructions } from '@/lib/ai/prompt';
@@ -104,6 +106,29 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [localModel, setLocalModel] = createSignal('');
   /** Per-draft Cursor cloud model override → [model=…] ('' = Settings default). */
   const [cloudModel, setCloudModel] = createSignal('');
+  /** Isolated git worktree for local delegation (parallel-safe). */
+  const [useWorktree, setUseWorktree] = createSignal(false);
+  /** Attach captured console errors (auto-on when any exist). */
+  const [includeConsole, setIncludeConsole] = createSignal(true);
+  const [consoleCount, setConsoleCount] = createSignal(getConsoleTail().length);
+  createEffect(() => {
+    const iv = setInterval(() => setConsoleCount(getConsoleTail().length), 3_000);
+    onCleanup(() => clearInterval(iv));
+  });
+
+  // Duplicate detection: relevance-search Linear as the title settles.
+  const [dupTerm, setDupTerm] = createSignal('');
+  createEffect(() => {
+    const t = title().trim();
+    const timer = setTimeout(() => setDupTerm(t.length >= 8 ? t : ''), 600);
+    onCleanup(() => clearTimeout(timer));
+  });
+  const dupQuery = createQuery(() => ({
+    queryKey: ['dup-search', dupTerm()],
+    queryFn: () => searchIssues(dupTerm()),
+    enabled: !!dupTerm() && linearConnected(),
+    staleTime: 30_000,
+  }));
   const [note, setNote] = createSignal('');
   const [tier, setTier] = createSignal<AiTier>('fast');
   const [includeLogs, setIncludeLogs] = createSignal(true);
@@ -176,11 +201,19 @@ export default function DraftView(props: { onCreated: () => void }) {
     setFellBack(null);
     stopDraft();
 
-    // Ground the draft's Analysis/Notes in recent server logs when configured.
-    const logs =
+    // Ground the draft's Analysis/Notes in server logs + client console errors.
+    const serverTail =
       settings().logUrl && includeLogs()
         ? await fetchDevLogTail({ logUrl: settings().logUrl, logLines: 40 }).catch(() => undefined)
         : undefined;
+    const consoleTail = includeConsole() ? formatConsoleTail(15) : null;
+    const logs =
+      [
+        serverTail ? `--- dev server ---\n${serverTail}` : null,
+        consoleTail ? `--- browser console ---\n${consoleTail}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n\n') || undefined;
 
     // Host-agnostic: extension routes through the worker port; page mode
     // (Safari/Firefox/any browser) streams in-process.
@@ -192,7 +225,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         teamName: selectedTeamName(),
         tier: tier(),
         template: buildAgentInstructions(settings()),
-        logs: logs ?? undefined,
+        logs,
       },
       {
         onPartial: applyDraft,
@@ -284,6 +317,13 @@ export default function DraftView(props: { onCreated: () => void }) {
           failed.push(`screenshot${shots.length > 1 ? ` ${i + 1}` : ''}`);
         }
       }
+      // Client console errors — the browser-side twin of the server logs.
+      if (includeConsole()) {
+        const consoleTail = formatConsoleTail(30);
+        if (consoleTail) {
+          body += `\n\n### Console errors (client)\n\`\`\`\n${consoleTail}\n\`\`\``;
+        }
+      }
       // Dev-server log tail — full debug context for the agent.
       if (settings().logUrl && includeLogs()) {
         try {
@@ -334,13 +374,20 @@ export default function DraftView(props: { onCreated: () => void }) {
             "   - Move it to review: query the team's workflowStates, then issueUpdate with the review/'In Review' stateId.",
             '4. Announce the finished fix on every channel whose token appears in the instructions above (Slack chat.postMessage + files upload, Telegram sendMessage/sendVideo) — include: what was broken, the one-line fix, the Linear issue link, the PR link, and the demo recording if you made one. End with "👉 Review the PR".',
           ].join('\n');
-          await createBridgeTask(`${issue.identifier} — ${title()}`, closeout, {
-            model: localModel() || undefined,
-            permissionMode: 'bypassPermissions',
-            env: settings().linearApiKey
-              ? { LINEAR_API_KEY: settings().linearApiKey! }
-              : undefined,
-          });
+          await createBridgeTask(
+            `${issue.identifier} — ${title()}`,
+            useWorktree()
+              ? `${closeout}\n\nNote: you are running in an ISOLATED git worktree on a dedicated branch (already checked out) — commit and push THAT branch for the PR; do not switch back to main.`
+              : closeout,
+            {
+              model: localModel() || undefined,
+              permissionMode: 'bypassPermissions',
+              worktree: useWorktree(),
+              env: settings().linearApiKey
+                ? { LINEAR_API_KEY: settings().linearApiKey! }
+                : undefined,
+            },
+          );
           localTask = true;
           // Mirror what Cursor does on delegation: move the issue to the
           // team's started state so it's In Progress while the agent works.
@@ -553,6 +600,34 @@ export default function DraftView(props: { onCreated: () => void }) {
           />
         </Field>
 
+        {/* Duplicate detection — catch it BEFORE delegating an agent to it */}
+        <Show when={(dupQuery.data ?? []).length > 0}>
+          <div class="border-warn/40 bg-surface rounded-md border px-2.5 py-2">
+            <p class="text-warn mb-1 text-[10.5px] font-semibold tracking-wide uppercase">
+              Possibly related — check before creating
+            </p>
+            <For each={dupQuery.data!.slice(0, 3)}>
+              {(iss) => (
+                <div class="flex min-w-0 items-center gap-1.5 py-0.5">
+                  <span class="font-mono text-text-dim shrink-0 text-[10.5px]">
+                    {iss.identifier}
+                  </span>
+                  <a
+                    href={iss.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    class="text-accent min-w-0 truncate text-[11px] hover:underline"
+                    title={iss.title}
+                  >
+                    {iss.title}
+                  </a>
+                  <Badge class="ml-auto shrink-0">{iss.state.name}</Badge>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+
         <Field label="Description">
           <Textarea
             rows={6}
@@ -748,6 +823,36 @@ export default function DraftView(props: { onCreated: () => void }) {
               <option value="haiku" selected={localModel() === 'haiku'}>Haiku</option>
             </Select>
           </Field>
+
+          {/* Opt-in isolation: own git worktree + branch, parallel-safe */}
+          <label class="flex cursor-pointer items-center gap-2 select-none">
+            <input
+              type="checkbox"
+              checked={useWorktree()}
+              onChange={(e) => setUseWorktree(e.currentTarget.checked)}
+              class="accent-accent rounded"
+            />
+            <span class="text-text text-[12px]">
+              Isolated worktree{' '}
+              <span class="text-text-dim">— own branch, run agents in parallel safely</span>
+            </span>
+          </label>
+        </Show>
+
+        {/* Console errors toggle (only when the buffer caught something) */}
+        <Show when={consoleCount() > 0}>
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeConsole()}
+              onChange={(e) => setIncludeConsole(e.currentTarget.checked)}
+              class="rounded accent-accent"
+            />
+            <span class="text-[12px] text-text">
+              Attach console errors{' '}
+              <span class="text-text-dim tabular-nums">({consoleCount()} captured)</span>
+            </span>
+          </label>
         </Show>
 
         {/* Dev-server logs toggle (only when a log URL is configured) */}

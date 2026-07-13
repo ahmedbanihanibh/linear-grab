@@ -5,6 +5,7 @@ import {
   fetchBridgeTask,
   fetchBridgeDiff,
   listBridgeTasks,
+  removeBridgeWorktree,
   sendBridgeMessage,
   setBridgeModel,
   stopBridgeTask,
@@ -98,6 +99,11 @@ export default function LocalView() {
 
   const modelMut = createMutation(() => ({
     mutationFn: (args: { id: string; model: string }) => setBridgeModel(args.id, args.model),
+    onSuccess: invalidate,
+  }));
+
+  const worktreeMut = createMutation(() => ({
+    mutationFn: (id: string) => removeBridgeWorktree(id),
     onSuccess: invalidate,
   }));
 
@@ -283,6 +289,30 @@ export default function LocalView() {
                           </Button>
                         </div>
                       )}
+                    </Show>
+
+                    {/* Isolated worktree — branch, path (hover), remove when done */}
+                    <Show when={task.worktree && !task.worktree.removed}>
+                      <div class="flex min-w-0 items-center gap-1.5">
+                        <Badge class="text-warn">⎇ worktree</Badge>
+                        <span
+                          class="font-mono text-text-faint min-w-0 truncate text-[10.5px]"
+                          title={task.worktree!.path}
+                        >
+                          {task.worktree!.branch}
+                        </span>
+                        <Show when={task.status !== 'running'}>
+                          <Button
+                            variant="ghost"
+                            class="ml-auto h-6 shrink-0 px-2 text-[11px]"
+                            loading={worktreeMut.isPending}
+                            title={`Remove the worktree at ${task.worktree!.path} — the branch (and PR) survive`}
+                            onClick={() => worktreeMut.mutate(task.id)}
+                          >
+                            Remove
+                          </Button>
+                        </Show>
+                      </div>
                     </Show>
 
                     {/* Session id + resume */}

@@ -85,7 +85,8 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                       {timeAgo(row.issue.updatedAt)}
                     </span>
                   </div>
-                  <div class="flex items-center gap-1.5">
+                  {/* Wrapping row + icon actions — never clips at narrow widths. */}
+                  <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                     <Badge>{row.issue.state.name}</Badge>
                     <Show when={row.issue.delegate}>
                       <Badge class="text-accent">⟠ {row.issue.delegate!.displayName}</Badge>
@@ -94,30 +95,47 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                       href={row.issue.url}
                       target="_blank"
                       rel="noreferrer"
-                      class="text-accent ml-auto shrink-0 text-[11px] hover:underline"
+                      class="text-accent shrink-0 text-[11px] hover:underline"
                       title="Open the issue in Linear"
                     >
-                      Open in Linear ↗
+                      Linear ↗
                     </a>
-                    <Button
-                      variant="ghost"
-                      class="h-6 px-2 text-[11px]"
-                      onClick={() => {
-                        openPanelTo('activity', row.issue.id);
-                        props.onOpenIssue();
-                      }}
-                    >
-                      Issue
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      class="h-6 px-2 text-[11px]"
-                      onClick={() => void copyUrl(row)}
-                    >
-                      <span class="inline-block min-w-[5ch] text-center">
-                        {copiedId() === row.attachment.id ? 'Copied' : 'Copy'}
-                      </span>
-                    </Button>
+                    <div class="ml-auto flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        class="size-7 px-0"
+                        title="Open the issue's Activity thread"
+                        aria-label="Open issue activity"
+                        onClick={() => {
+                          openPanelTo('activity', row.issue.id);
+                          props.onOpenIssue();
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                          <circle cx="8" cy="8" r="6" />
+                          <circle cx="8" cy="8" r="1.6" fill="currentColor" stroke="none" />
+                        </svg>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        class="size-7 px-0"
+                        title="Copy PR URL"
+                        aria-label="Copy PR URL"
+                        onClick={() => void copyUrl(row)}
+                      >
+                        <Show
+                          when={copiedId() === row.attachment.id}
+                          fallback={
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                              <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+                              <path d="M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" />
+                            </svg>
+                          }
+                        >
+                          <span class="text-success text-[12px] leading-none">✓</span>
+                        </Show>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}

@@ -38,6 +38,7 @@ export interface BridgeTask {
   usage: BridgeUsage | null;
   subagents: number;
   permissionMode: string;
+  worktree: { path: string; branch: string; removed: boolean } | null;
   tail?: Array<{ at: number; kind: string; text: string }>;
 }
 
@@ -75,7 +76,13 @@ export function fetchBridgeTask(id: string): Promise<BridgeTask> {
 export function createBridgeTask(
   title: string,
   prompt: string,
-  opts?: { model?: string; env?: Record<string, string>; permissionMode?: string },
+  opts?: {
+    model?: string;
+    env?: Record<string, string>;
+    permissionMode?: string;
+    /** Run in an isolated git worktree + branch (parallel-safe). */
+    worktree?: boolean;
+  },
 ): Promise<BridgeTask> {
   return call<BridgeTask>('/tasks', {
     method: 'POST',
@@ -114,6 +121,11 @@ export interface BridgeDiff {
   totalAdded: number;
   totalDeleted: number;
   prs: Array<{ url: string; title: string; state: string }>;
+}
+
+/** Remove a finished task's worktree (the branch survives for the PR). */
+export function removeBridgeWorktree(id: string): Promise<BridgeTask> {
+  return call<BridgeTask>(`/tasks/${id}/worktree/remove`, { method: 'POST' });
 }
 
 /** What the task changed in the repo (diffed against its start commit) + PRs. */
