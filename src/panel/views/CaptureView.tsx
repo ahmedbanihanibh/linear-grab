@@ -101,6 +101,8 @@ export default function CaptureView() {
       const shot = await captureRegionInteractive();
       if (shot) {
         await mergeGrabs([shot]); // reopens the panel on Capture (cloud mode)
+      } else {
+        setPickError('Region capture failed — try a smaller area (huge scrollers exceed canvas limits), or it was cancelled.');
       }
     } finally {
       setRegionBusy(false);

@@ -165,10 +165,13 @@ export async function captureRegionSliced(
     URL.revokeObjectURL(svgUrl);
   }
 
-  const scale = Math.min(window.devicePixelRatio || 1, 1.5);
+  // Browsers cap canvas dimensions (~16k) — huge virtualized containers
+  // (20k-px scrollers) silently produced blank captures. Clamp the scale.
+  const MAX_DIM = 8192;
+  const scale = Math.min(window.devicePixelRatio || 1, 1.5, MAX_DIM / w, MAX_DIM / h);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(w * scale);
-  canvas.height = Math.round(h * scale);
+  canvas.width = Math.max(1, Math.round(w * scale));
+  canvas.height = Math.max(1, Math.round(h * scale));
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2d unavailable');
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);

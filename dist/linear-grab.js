@@ -3164,7 +3164,12 @@ async function Dr(e) {
 		}
 		t.push(n);
 	}
-	await Er(t.slice(-8));
+	let n = /* @__PURE__ */ new Set(), r = [];
+	for (let e = t.length - 1; e >= 0; e--) {
+		let i = t[e], a = i.source?.filePath ? `${i.source.filePath}:${i.source.lineNumber ?? ""}` : `id:${i.grabbedAt}`;
+		n.has(a) || (n.add(a), r.unshift(i));
+	}
+	await Er(r.slice(-8));
 }
 async function Or(e) {
 	await Er((await Tr() ?? []).filter((t) => t.grabbedAt !== e));
@@ -27385,11 +27390,11 @@ async function jA(e, t) {
 	} finally {
 		URL.revokeObjectURL(s);
 	}
-	let l = Math.min(window.devicePixelRatio || 1, 1.5), u = document.createElement("canvas");
-	u.width = Math.round(r * l), u.height = Math.round(i * l);
-	let d = u.getContext("2d");
-	if (!d) throw Error("Canvas 2d unavailable");
-	return d.drawImage(c, 0, 0, u.width, u.height), u;
+	let l = 8192, u = Math.min(window.devicePixelRatio || 1, 1.5, l / r, l / i), d = document.createElement("canvas");
+	d.width = Math.max(1, Math.round(r * u)), d.height = Math.max(1, Math.round(i * u));
+	let f = d.getContext("2d");
+	if (!f) throw Error("Canvas 2d unavailable");
+	return f.drawImage(c, 0, 0, d.width, d.height), d;
 }
 //#endregion
 //#region src/lib/elementShot.ts
@@ -41747,7 +41752,7 @@ function eQ() {
 		o(null), m(!0), window.dispatchEvent(new CustomEvent(SZ));
 		try {
 			let e = await MZ();
-			e && await Dr([e]);
+			e ? await Dr([e]) : o("Region capture failed — try a smaller area (huge scrollers exceed canvas limits), or it was cancelled.");
 		} finally {
 			m(!1);
 		}

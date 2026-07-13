@@ -132,7 +132,20 @@ export async function mergeGrabs(els: GrabbedElement[]): Promise<void> {
     }
     merged.push(el);
   }
-  await setLastGrab(merged.slice(-8));
+  // Final sweep: re-picking the same element must UPDATE, not accumulate —
+  // enrichment passes match by id before the source dedupe can see them.
+  const seen = new Set<string>();
+  const deduped: GrabbedElement[] = [];
+  for (let i = merged.length - 1; i >= 0; i--) {
+    const g = merged[i];
+    const key = g.source?.filePath
+      ? `${g.source.filePath}:${g.source.lineNumber ?? ''}`
+      : `id:${g.grabbedAt}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.unshift(g);
+  }
+  await setLastGrab(deduped.slice(-8));
 }
 
 export async function removeGrab(grabbedAt: number): Promise<void> {
