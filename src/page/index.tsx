@@ -1,7 +1,7 @@
 import { render } from 'solid-js/web';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import App, { LinearLogo } from '@/panel/App';
-import { activatePicker, ensurePagePicker } from '@/lib/picker';
+import { activatePicker, ensurePagePicker, CONTEXT_COPIED_EVENT } from '@/lib/picker';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
 import { subscribeRunningAgents, type RunningAgentIssue } from '@/lib/agentWatch';
 import { getRecorderSnapshot, subscribeRecorder, stopRecording } from '@/lib/recorder';
@@ -128,6 +128,8 @@ function PagePanel(props: { defaultOpen: boolean }) {
   });
 
   const [pinned, setPinned] = createSignal(false);
+  const [workflow, setWorkflow] = createSignal<'cloud' | 'local'>('cloud');
+  const [copiedFlash, setCopiedFlash] = createSignal(false);
   const [panelWidth, setPanelWidth] = createSignal(PANEL_W_DEFAULT);
   const clampWidth = (w: number) =>
     Math.min(PANEL_W_MAX, Math.max(PANEL_W_MIN, Math.min(w, window.innerWidth - 60)));
@@ -161,17 +163,28 @@ function PagePanel(props: { defaultOpen: boolean }) {
       if (s.panelPos) setPanelPos(clampPanel(s.panelPos));
       if (s.panelWidth) setPanelWidth(clampWidth(s.panelWidth));
       setPinned(s.panelMode === 'pinned');
+      setWorkflow(s.workflowMode ?? 'cloud');
     });
     const unsubSettings = subscribeStorage((area) => {
       if (area === 'settings') {
         void getSettings().then((s) => {
           setSide(s.panelSide ?? 'right');
           setPinned(s.panelMode === 'pinned');
+          setWorkflow(s.workflowMode ?? 'cloud');
         });
       }
-      // App unmounts while closed (so Activity polling stops) — reopen on new grabs.
-      if (area === 'grab') setOpen(true);
+      // Cloud workflow: a grab opens the panel to draft. Local workflow stays
+      // out of the way — the context is already on the clipboard.
+      if (area === 'grab' && workflow() !== 'local') setOpen(true);
     });
+
+    // Local-mode auto-copy feedback: flash "Copied ✓" in the pill.
+    const onCopied = () => {
+      setCopiedFlash(true);
+      setTimeout(() => setCopiedFlash(false), 1600);
+    };
+    window.addEventListener(CONTEXT_COPIED_EVENT, onCopied);
+    onCleanup(() => window.removeEventListener(CONTEXT_COPIED_EVENT, onCopied));
     const unsubAgents = subscribeRunningAgents(setRunning);
 
     // Recording choreography: minimize while capturing so the recording shows
@@ -343,11 +356,19 @@ function PagePanel(props: { defaultOpen: boolean }) {
                     <span
                       aria-hidden
                       class={`size-2 rounded-full ${
-                        running().length ? 'bg-success animate-pulse' : 'bg-text-faint'
+                        copiedFlash()
+                          ? 'bg-success'
+                          : running().length
+                            ? 'bg-success animate-pulse'
+                            : 'bg-text-faint'
                       }`}
                     />
-                    <span class="text-text-dim min-w-[3.5ch] text-left text-[11px] font-medium tabular-nums">
-                      {running().length} run
+                    <span
+                      class={`min-w-[3.5ch] text-left text-[11px] font-medium tabular-nums ${
+                        copiedFlash() ? 'text-success' : 'text-text-dim'
+                      }`}
+                    >
+                      {copiedFlash() ? 'Copied ✓' : `${running().length} run`}
                     </span>
                   </button>
                 </>

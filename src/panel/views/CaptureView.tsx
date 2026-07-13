@@ -12,6 +12,7 @@ import {
   setRecordingAttach,
 } from '@/lib/recorder';
 import { uploadFileToLinear } from '@/lib/linear/upload';
+import { buildLocalContext } from '@/lib/ai/prompt';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui';
 
 /** Accordion shell — native <details>, styled like our section headers. */
@@ -66,6 +67,21 @@ export default function CaptureView() {
   const clearGrab = async () => {
     await clearLastGrab();
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
+  };
+
+  // react-grab workflow: copy the element context for a LOCAL agent
+  // (Claude Code / Cursor chat) — includes the project's skills/memory paths.
+  const [ctxCopied, setCtxCopied] = createSignal(false);
+  const copyContext = async () => {
+    const el = grab();
+    if (!el) return;
+    try {
+      await navigator.clipboard.writeText(buildLocalContext(el, settingsQuery.data ?? {}));
+      setCtxCopied(true);
+      setTimeout(() => setCtxCopied(false), 1800);
+    } catch {
+      setPickError('Clipboard was blocked — click the button again.');
+    }
   };
 
   // ---- recording ----
@@ -209,9 +225,21 @@ export default function CaptureView() {
                     {el().pageUrl}
                   </span>
                 </div>
-                <Button class="h-6 shrink-0 px-2 text-[11px]" variant="ghost" onClick={clearGrab}>
-                  Clear
-                </Button>
+                <div class="flex shrink-0 items-center gap-1">
+                  <Button
+                    class="h-6 px-2 text-[11px]"
+                    variant="ghost"
+                    title="Copy context for a local agent (Claude Code / Cursor) — includes skills & memory paths"
+                    onClick={() => void copyContext()}
+                  >
+                    <span class="inline-block min-w-[8ch] text-center">
+                      {ctxCopied() ? 'Copied ✓' : 'Copy context'}
+                    </span>
+                  </Button>
+                  <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={clearGrab}>
+                    Clear
+                  </Button>
+                </div>
               </div>
               <Show when={el().stackContext}>
                 <details class="text-[10.5px]">

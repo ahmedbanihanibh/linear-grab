@@ -102,6 +102,41 @@ export function buildDraftPrompt(input: DraftInput): string {
   return parts.join('\n\n');
 }
 
+/**
+ * react-grab-style context block for LOCAL agents (Claude Code, Cursor chat):
+ * everything a local session needs to jump to the element and honor the
+ * project's skills/memory — paste-ready.
+ */
+export function buildLocalContext(
+  el: GrabbedElement,
+  settings: { skillPaths?: string },
+  note?: string,
+): string {
+  const lines: string[] = ['## UI element context (Linear Grab)'];
+  if (el.componentName) lines.push(`Component: \`<${el.componentName}>\``);
+  if (el.source?.filePath) {
+    const loc = el.source.lineNumber != null ? `:${el.source.lineNumber}` : '';
+    lines.push(`Source: \`${el.source.filePath}${loc}\``);
+  }
+  if (el.tagName) lines.push(`DOM element: \`<${el.tagName}>\``);
+  lines.push(`Page: ${el.pageUrl}`);
+  if (el.stackContext) lines.push(`\nComponent stack:\n\`\`\`\n${el.stackContext}\n\`\`\``);
+
+  const paths = (settings.skillPaths ?? '')
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paths.length) {
+    lines.push(
+      `\nRead these project skills/memory files first and treat them as authoritative:\n${paths
+        .map((p) => `- \`${p}\``)
+        .join('\n')}`,
+    );
+  }
+  if (note?.trim()) lines.push(`\nTask:\n${note.trim()}`);
+  return lines.join('\n');
+}
+
 /** Compose the final Linear markdown body from the (possibly edited) draft fields. */
 export function composeIssueBody(args: {
   description: string;

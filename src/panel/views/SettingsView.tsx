@@ -146,6 +146,38 @@ export default function SettingsView() {
 
   return (
     <div class="flex h-full flex-col gap-5 overflow-y-auto pt-3 pb-6 pl-3 pr-4">
+      {/* ── 0. WORKFLOW ───────────────────────────────────────────────────────── */}
+      <Section title="Workflow">
+        <div class="bg-surface-2 border-border flex rounded-md border p-0.5">
+          <For
+            each={[
+              { id: 'cloud', label: 'Cloud · Linear + Cursor' },
+              { id: 'local', label: 'Local · clipboard' },
+            ] as const}
+          >
+            {(mode) => (
+              <button
+                class={`flex-1 rounded-[5px] px-2 py-1 text-[11.5px] font-medium transition-colors ${
+                  (s().workflowMode ?? 'cloud') === mode.id
+                    ? 'bg-surface-3 text-text'
+                    : 'text-text-dim hover:text-text cursor-pointer'
+                }`}
+                onClick={() => void update({ workflowMode: mode.id })}
+              >
+                {mode.label}
+              </button>
+            )}
+          </For>
+        </div>
+        <span class="text-text-faint text-[10.5px] leading-snug">
+          Cloud: picking an element opens the panel to draft &amp; delegate to the Cursor agent.
+          Local (react-grab style): picking auto-copies the element's context — source,
+          stack, and your skills/memory paths — straight to the clipboard for a local
+          Claude Code or Cursor session; the panel stays out of the way. Both share the
+          same picker; switch anytime.
+        </span>
+      </Section>
+
       {/* ── 1. LINEAR ─────────────────────────────────────────────────────────── */}
       <Section title="Linear">
         <Show

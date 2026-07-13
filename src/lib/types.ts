@@ -70,6 +70,9 @@ export interface Settings {
   /** Newline-separated skill/memory paths (repo-relative for cloud agents,
       absolute also fine for local agents) injected into every issue. */
   skillPaths?: string;
+  /** 'cloud' = grab → draft → delegate to Linear/Cursor. 'local' = react-grab
+      style: picking an element auto-copies its context for a local agent. */
+  workflowMode?: 'cloud' | 'local';
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page

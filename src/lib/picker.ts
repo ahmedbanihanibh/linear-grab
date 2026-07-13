@@ -1,7 +1,43 @@
 import { isExtensionContext } from './env';
-import { setLastGrab } from './storage';
+import { getSettings, setLastGrab } from './storage';
 import { captureElementShot, prewarmCapture } from './elementShot';
+import { buildLocalContext } from './ai/prompt';
 import type { GrabbedElement, RuntimeMessage } from './types';
+
+/** Fired on window after a local-mode auto-copy so the pill can flash "Copied". */
+export const CONTEXT_COPIED_EVENT = 'linear-grab:context-copied';
+
+// Local-workflow auto-copy: at most once per grab, preferring the pass that
+// carries source info; falls back to a source-less copy shortly after (prod
+// builds have no fiber debug data).
+let lastCopiedGrabAt = 0;
+let pendingFallback: ReturnType<typeof setTimeout> | null = null;
+
+function maybeLocalCopy(el: GrabbedElement | undefined): void {
+  if (!el || el.grabbedAt === lastCopiedGrabAt) return;
+  void getSettings().then((settings) => {
+    if (settings.workflowMode !== 'local') return;
+    if (el.grabbedAt === lastCopiedGrabAt) return;
+    const doCopy = () => {
+      lastCopiedGrabAt = el.grabbedAt;
+      navigator.clipboard
+        .writeText(buildLocalContext(el, settings))
+        .then(() => window.dispatchEvent(new CustomEvent(CONTEXT_COPIED_EVENT)))
+        .catch(() => {
+          lastCopiedGrabAt = 0; // gesture expired — the Capture tab button still works
+        });
+    };
+    if (el.source?.filePath) {
+      if (pendingFallback) clearTimeout(pendingFallback);
+      pendingFallback = null;
+      doCopy();
+    } else {
+      // Wait briefly for the source-enriched pass; copy without it otherwise.
+      if (pendingFallback) clearTimeout(pendingFallback);
+      pendingFallback = setTimeout(doCopy, 900);
+    }
+  });
+}
 
 /**
  * react-grab's SelectedElementPayload is FLAT:
@@ -141,7 +177,10 @@ export async function ensurePagePicker(): Promise<void> {
     return;
   }
   const pipeline = createSelectionPipeline(
-    (els) => void setLastGrab(els),
+    (els) => {
+      void setLastGrab(els);
+      maybeLocalCopy(els[0]); // react-grab workflow: pick = context on clipboard
+    },
     () => rg.getGlobalApi() as PickerApi | null,
   );
   rg.registerPlugin(pipeline.plugin);
