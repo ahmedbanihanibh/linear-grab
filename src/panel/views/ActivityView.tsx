@@ -29,7 +29,7 @@ import {
   stopRecording,
 } from '@/lib/recorder';
 import { buildCaptureBlock } from '@/lib/captureShare';
-import { fetchPrStatuses, listBridgeTasks, mergePr, sendBridgeMessage, type BridgeTask } from '@/lib/bridge';
+import { fetchPrStatuses, listBridgeTasks, mergePr, sendBridgeMessage, setBridgeModel, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
@@ -272,6 +272,22 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     refetchInterval: 5_000,
     retry: 0,
   }));
+  const LOCAL_MODELS = [
+    { id: '', label: 'Default model' },
+    { id: 'fable', label: 'Fable 5' },
+    { id: 'opus', label: 'Opus' },
+    { id: 'sonnet', label: 'Sonnet' },
+    { id: 'haiku', label: 'Haiku' },
+  ];
+  const localModelMut = createMutation(() => ({
+    mutationFn: (args: { id: string; model: string }) => setBridgeModel(args.id, args.model),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<BridgeTask[]>(['bridge-tasks'], (prev) =>
+        prev?.map((bt) => (bt.id === updated.id ? updated : bt)),
+      );
+    },
+  }));
+
   const localTask = createMemo<BridgeTask | undefined>(() => {
     const identifier = detailQuery.data?.identifier;
     return identifier
@@ -517,7 +533,36 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
                       · {timeAgo(t().startedAt)}
                     </span>
                   </div>
-                  <Badge>{t().model ?? 'default'}</Badge>
+                  {/* Same model control as the Local tab — applies from the
+                      next message (a live turn is never killed mid-run). */}
+                  <Select
+                    class="h-6 w-auto max-w-[40%] shrink-0 text-[10.5px]"
+                    value={t().pendingModel ?? t().model ?? ''}
+                    onChange={(e) =>
+                      localModelMut.mutate({ id: t().id, model: e.currentTarget.value })
+                    }
+                    title="Model — applies from the next message"
+                  >
+                    <For each={LOCAL_MODELS}>
+                      {(m) => (
+                        <option
+                          value={m.id}
+                          selected={(t().pendingModel ?? t().model ?? '') === m.id}
+                        >
+                          {m.label}
+                        </option>
+                      )}
+                    </For>
+                    <Show
+                      when={
+                        !LOCAL_MODELS.some((m) => m.id === (t().pendingModel ?? t().model ?? ''))
+                      }
+                    >
+                      <option value={t().pendingModel ?? t().model ?? ''} selected>
+                        {t().pendingModel ?? t().model}
+                      </option>
+                    </Show>
+                  </Select>
                 </div>
                 <button
                   class="hover:bg-surface-2 flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 px-3 text-left transition-colors"

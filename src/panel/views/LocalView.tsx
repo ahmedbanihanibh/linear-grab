@@ -152,7 +152,14 @@ export default function LocalView() {
 
   const modelMut = createMutation(() => ({
     mutationFn: (args: { id: string; model: string }) => setBridgeModel(args.id, args.model),
-    onSuccess: invalidate,
+    onSuccess: (updated) => {
+      // Write-through so the select reflects the choice INSTANTLY — waiting
+      // for the next poll looked like the change "didn't take".
+      queryClient.setQueryData<BridgeTask[]>(['bridge-tasks'], (prev) =>
+        prev?.map((t) => (t.id === updated.id ? updated : t)),
+      );
+      invalidate();
+    },
   }));
 
   const worktreeMut = createMutation(() => ({
@@ -294,57 +301,61 @@ export default function LocalView() {
             }
           >
             <div class="flex flex-col gap-1.5">
-              <For each={tasks.data}>
+              {/* Index (not For): tasks.data is reference-keyed and the RUNNING task's
+                  object changes every poll (lastText/usage) — For rebuilt its whole
+                  card each tick (flicker, model select resetting). Position-keyed
+                  rows keep the DOM alive; only changed text updates. */}
+              <Index each={tasks.data}>
                 {(task) => (
                   <div class="bg-surface border-border flex flex-col gap-1.5 rounded-lg border p-2.5">
                     {/* Title row */}
                     <div class="flex min-w-0 items-center gap-1.5">
                       <Show
-                        when={task.status === 'running'}
+                        when={task().status === 'running'}
                         fallback={
                           <span
                             aria-hidden
                             class="size-2 shrink-0 rounded-full"
-                            style={{ background: statusColor(task.status) }}
+                            style={{ background: statusColor(task().status) }}
                           />
                         }
                       >
                         <Spinner />
                       </Show>
                       <span class="text-text min-w-0 truncate text-[12.5px] font-medium">
-                        {task.title}
+                        {task().title}
                       </span>
                       <span class="text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums">
-                        {timeAgo(task.startedAt)}
+                        {timeAgo(task().startedAt)}
                       </span>
                     </div>
 
                     {/* "What is it doing now" */}
                     <p class="text-text-dim text-[11.5px] leading-snug break-words">
-                      {task.lastText}
+                      {task().lastText}
                     </p>
 
                     {/* Telemetry: status · model · subagents · tokens · cost */}
                     <div class="flex flex-wrap items-center gap-1.5">
-                      <Badge color={statusColor(task.status)}>{task.status}</Badge>
-                      <Badge>{task.model ?? 'default model'}</Badge>
-                      <Show when={task.pendingModel}>
-                        <Badge class="text-warn">→ {task.pendingModel} next msg</Badge>
+                      <Badge color={statusColor(task().status)}>{task().status}</Badge>
+                      <Badge>{task().model ?? 'default model'}</Badge>
+                      <Show when={task().pendingModel}>
+                        <Badge class="text-warn">→ {task().pendingModel} next msg</Badge>
                       </Show>
-                      <Show when={task.subagents > 0}>
-                        <Badge class="text-warn">⛓ {task.subagents} subagents</Badge>
+                      <Show when={task().subagents > 0}>
+                        <Badge class="text-warn">⛓ {task().subagents} subagents</Badge>
                       </Show>
-                      <Show when={task.usage}>
+                      <Show when={task().usage}>
                         <span class="text-text-faint text-[10.5px] tabular-nums">
-                          ctx {fmtTokens(task.usage!.contextTokens)} · out{' '}
-                          {fmtTokens(task.usage!.outputTokens)}
-                          {task.usage!.costUsd ? ` · $${task.usage!.costUsd.toFixed(2)}` : ''}
+                          ctx {fmtTokens(task().usage!.contextTokens)} · out{' '}
+                          {fmtTokens(task().usage!.outputTokens)}
+                          {task().usage!.costUsd ? ` · $${task().usage!.costUsd!.toFixed(2)}` : ''}
                         </span>
                       </Show>
                     </div>
 
                     {/* Linked Linear issue */}
-                    <Show when={issueFor(task)}>
+                    <Show when={issueFor(task())}>
                       {(issue) => (
                         <div class="flex min-w-0 items-center gap-1.5">
                           <Badge>{issue().state.name}</Badge>
@@ -354,22 +365,22 @@ export default function LocalView() {
                     </Show>
 
                     {/* Isolated worktree — branch, path (hover), remove when done */}
-                    <Show when={task.worktree && !task.worktree.removed}>
+                    <Show when={task().worktree && !task().worktree!.removed}>
                       <div class="flex min-w-0 items-center gap-1.5">
                         <Badge class="text-warn">⎇ worktree</Badge>
                         <span
                           class="font-mono text-text-faint min-w-0 truncate text-[10.5px]"
-                          title={task.worktree!.path}
+                          title={task().worktree!.path}
                         >
-                          {task.worktree!.branch}
+                          {task().worktree!.branch}
                         </span>
-                        <Show when={task.status !== 'running'}>
+                        <Show when={task().status !== 'running'}>
                           <Button
                             variant="ghost"
                             class="ml-auto h-6 shrink-0 px-2 text-[11px]"
                             loading={worktreeMut.isPending}
-                            title={`Remove the worktree at ${task.worktree!.path} — the branch (and PR) survive`}
-                            onClick={() => worktreeMut.mutate(task.id)}
+                            title={`Remove the worktree at ${task().worktree!.path} — the branch (and PR) survive`}
+                            onClick={() => worktreeMut.mutate(task().id)}
                           >
                             Remove
                           </Button>
@@ -381,9 +392,9 @@ export default function LocalView() {
                     <div class="flex items-center gap-1">
                       <Select
                         class="h-7 w-auto min-w-0 flex-1 text-[11px]"
-                        value={task.pendingModel ?? task.model ?? ''}
+                        value={task().pendingModel ?? task().model ?? ''}
                         onChange={(e) =>
-                          modelMut.mutate({ id: task.id, model: e.currentTarget.value })
+                          modelMut.mutate({ id: task().id, model: e.currentTarget.value })
                         }
                         title="Model — applies from the next message"
                       >
@@ -391,14 +402,28 @@ export default function LocalView() {
                           {(m) => (
                             <option
                               value={m.id}
-                              selected={(task.pendingModel ?? task.model ?? '') === m.id}
+                              selected={(task().pendingModel ?? task().model ?? '') === m.id}
                             >
                               {m.label}
                             </option>
                           )}
                         </For>
+                        {/* Sessions report full model ids (claude-fable-5) that
+                            match no alias — without this the select snapped to
+                            'Default model'. */}
+                        <Show
+                          when={
+                            !MODEL_OPTIONS.some(
+                              (m) => m.id === (task().pendingModel ?? task().model ?? ''),
+                            )
+                          }
+                        >
+                          <option value={task().pendingModel ?? task().model ?? ''} selected>
+                            {task().pendingModel ?? task().model}
+                          </option>
+                        </Show>
                       </Select>
-                      <Show when={issueFor(task)}>
+                      <Show when={issueFor(task())}>
                         {(issue) => (
                           <Button
                             variant="ghost"
@@ -416,16 +441,16 @@ export default function LocalView() {
                       <Button
                         variant="ghost"
                         class="size-7 px-0"
-                        disabled={!task.sessionId}
+                        disabled={!task().sessionId}
                         title={
-                          task.sessionId
-                            ? `Copy resume command · session ${task.sessionId.slice(0, 8)}…`
+                          task().sessionId
+                            ? `Copy resume command · session ${task().sessionId!.slice(0, 8)}…`
                             : 'No session yet'
                         }
-                        onClick={() => void copyResume(task)}
+                        onClick={() => void copyResume(task())}
                       >
                         <Show
-                          when={copiedResume() === task.id}
+                          when={copiedResume() === task().id}
                           fallback={
                             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
                               <path d="M2.5 3.5 6 7 2.5 10.5M7.5 12.5h6" />
@@ -438,20 +463,20 @@ export default function LocalView() {
                       <Button
                         variant="ghost"
                         class="size-7 px-0"
-                        title={expandedId() === task.id ? 'Hide thread' : 'Open thread — chat & changes'}
-                        onClick={() => setExpandedId(expandedId() === task.id ? null : task.id)}
+                        title={expandedId() === task().id ? 'Hide thread' : 'Open thread — chat & changes'}
+                        onClick={() => setExpandedId(expandedId() === task().id ? null : task().id)}
                       >
                         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
                           <path d="M14 10a2 2 0 0 1-2 2H6l-3.5 2.5V4a2 2 0 0 1 2-2H12a2 2 0 0 1 2 2v6Z" />
                         </svg>
                       </Button>
-                      <Show when={task.status === 'running'}>
+                      <Show when={task().status === 'running'}>
                         <Button
                           variant="danger"
                           class="size-7 px-0"
                           loading={stopMut.isPending}
                           title="Interrupt — the session stays resumable"
-                          onClick={() => stopMut.mutate(task.id)}
+                          onClick={() => stopMut.mutate(task().id)}
                         >
                           <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                             <rect x="3" y="3" width="10" height="10" rx="1.5" />
@@ -461,7 +486,7 @@ export default function LocalView() {
                     </div>
 
                     {/* Conversation + composer */}
-                    <Show when={expandedId() === task.id}>
+                    <Show when={expandedId() === task().id}>
                       {/* Changes — what this task touched, like the cloud agent's card */}
                       <Show when={diff.data && (diff.data.files.length || diff.data.untracked.length || diff.data.prs.length)}>
                         <div class="border-border bg-bg flex flex-col gap-1 rounded-md border p-2">
@@ -546,7 +571,7 @@ export default function LocalView() {
                         <Textarea
                           rows={2}
                           placeholder={
-                            task.status === 'running'
+                            task().status === 'running'
                               ? 'Message the working agent — it queues into the live session…'
                               : 'Follow-up — resumes the session…'
                           }
@@ -555,7 +580,7 @@ export default function LocalView() {
                         />
                         <div class="flex items-center gap-1">
                           <span class="text-text-faint min-w-0 flex-1 truncate text-[10.5px]">
-                            {task.alive ? 'live session' : task.sessionId ? 'resumes on send' : 'no session'}
+                            {task().alive ? 'live session' : task().sessionId ? 'resumes on send' : 'no session'}
                           </span>
                           <Button
                             variant="ghost"
@@ -584,10 +609,10 @@ export default function LocalView() {
                           <Button
                             variant="ghost"
                             class="size-7 shrink-0 px-0"
-                            disabled={!task.alive && !task.sessionId}
+                            disabled={!task().alive && !task().sessionId}
                             title="Compact the session — frees context (sends /compact)"
                             aria-label="Compact session"
-                            onClick={() => sendMut.mutate({ id: task.id, text: '/compact' })}
+                            onClick={() => sendMut.mutate({ id: task().id, text: '/compact' })}
                           >
                             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
                               <path d="M8 2v4M8 10v4M2 8h4M10 8h4M4.5 4.5 6 6M11.5 11.5 10 10M11.5 4.5 10 6M4.5 11.5 6 10" />
@@ -597,8 +622,8 @@ export default function LocalView() {
                             variant="primary"
                             class="shrink-0"
                             loading={sendMut.isPending}
-                            disabled={!message().trim() || (!task.alive && !task.sessionId)}
-                            onClick={() => sendMut.mutate({ id: task.id, text: message().trim() })}
+                            disabled={!message().trim() || (!task().alive && !task().sessionId)}
+                            onClick={() => sendMut.mutate({ id: task().id, text: message().trim() })}
                           >
                             <span class="inline-block min-w-[4ch] text-center">Send</span>
                           </Button>
@@ -607,7 +632,7 @@ export default function LocalView() {
                     </Show>
                   </div>
                 )}
-              </For>
+              </Index>
             </div>
           </Show>
         </Show>
