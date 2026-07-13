@@ -24,7 +24,7 @@ import { fetchTeams, createIssue } from '@/lib/linear/api';
 import { uploadFileToLinear } from '@/lib/linear/upload';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
-import { composeIssueBody } from '@/lib/ai/prompt';
+import { composeIssueBody, DEFAULT_AGENT_INSTRUCTIONS } from '@/lib/ai/prompt';
 import {
   Button,
   Input,
@@ -87,6 +87,9 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [reproSteps, setReproSteps] = createSignal<string[]>([]);
   const [expected, setExpected] = createSignal('');
   const [actual, setActual] = createSignal('');
+  const [impact, setImpact] = createSignal('');
+  const [analysisNotes, setAnalysisNotes] = createSignal('');
+  const [nextSteps, setNextSteps] = createSignal('');
   const [priority, setPriority] = createSignal(0);
   const [teamId, setTeamId] = createSignal(settings().defaultTeamId ?? '');
   const [repo, setRepo] = createSignal(settings().defaultRepo ?? '');
@@ -139,6 +142,9 @@ export default function DraftView(props: { onCreated: () => void }) {
     reproSteps: string[];
     expected: string;
     actual: string;
+    impact: string;
+    analysisNotes: string;
+    suggestedNextSteps: string;
     priority: number;
   }>) => {
     if (d.title !== undefined) setTitle(d.title);
@@ -146,6 +152,9 @@ export default function DraftView(props: { onCreated: () => void }) {
     if (d.reproSteps !== undefined) setReproSteps(d.reproSteps);
     if (d.expected !== undefined) setExpected(d.expected);
     if (d.actual !== undefined) setActual(d.actual);
+    if (d.impact !== undefined) setImpact(d.impact);
+    if (d.analysisNotes !== undefined) setAnalysisNotes(d.analysisNotes);
+    if (d.suggestedNextSteps !== undefined) setNextSteps(d.suggestedNextSteps);
     if (d.priority !== undefined) setPriority(d.priority);
   };
 
@@ -164,6 +173,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         grabbed: grab() ?? null,
         teamName: selectedTeamName(),
         tier: tier(),
+        template: settings().issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS,
       },
       {
         onPartial: applyDraft,
@@ -281,8 +291,13 @@ export default function DraftView(props: { onCreated: () => void }) {
         reproSteps: reproSteps(),
         expected: expected(),
         actual: actual(),
+        impact: impact(),
+        analysisNotes: analysisNotes(),
+        suggestedNextSteps: nextSteps(),
         grabbed: grab(),
         repo: repo(),
+        model: settings().cursorModel,
+        agentInstructions: settings().issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS,
       });
       // Attach the screen recording so the coding agent can watch the interaction.
       const recording = getRecorderSnapshot().result;
@@ -593,6 +608,7 @@ export default function DraftView(props: { onCreated: () => void }) {
       <Section title="Issue">
         <Field label="Title">
           <Input
+            class="h-8 text-[13px] font-medium"
             value={title()}
             onInput={(e) => setTitle(e.currentTarget.value)}
             placeholder="Brief summary of the issue"
@@ -658,6 +674,33 @@ export default function DraftView(props: { onCreated: () => void }) {
           />
         </Field>
 
+        <Field label="Impact">
+          <Textarea
+            rows={2}
+            value={impact()}
+            onInput={(e) => setImpact(e.currentTarget.value)}
+            placeholder="Who/what is affected and how badly"
+          />
+        </Field>
+
+        <Field label="Analysis / Notes">
+          <Textarea
+            rows={3}
+            value={analysisNotes()}
+            onInput={(e) => setAnalysisNotes(e.currentTarget.value)}
+            placeholder={'- Likely root cause…'}
+          />
+        </Field>
+
+        <Field label="Suggested next steps">
+          <Textarea
+            rows={3}
+            value={nextSteps()}
+            onInput={(e) => setNextSteps(e.currentTarget.value)}
+            placeholder={'- Concrete fix suggestion…'}
+          />
+        </Field>
+
         <Field label="Priority">
           <Select
             value={priority()}
@@ -693,7 +736,11 @@ export default function DraftView(props: { onCreated: () => void }) {
                 <option value="">Select a team…</option>
                 <For each={teamsQuery.data ?? []}>
                   {(team) => (
-                    <option value={team.id}>{team.name}</option>
+                    // selected attr: options load async, so the Select's value
+                    // prop alone won't re-apply once they appear.
+                    <option value={team.id} selected={team.id === teamId()}>
+                      {team.name}
+                    </option>
                   )}
                 </For>
               </Select>
@@ -738,8 +785,9 @@ export default function DraftView(props: { onCreated: () => void }) {
         </div>
       </Section>
 
-      {/* ---- Create button + result ----------------------------------------- */}
-      <div class="flex flex-col gap-2">
+      {/* ---- Create button + result — sticky so the primary action is always
+             reachable without scrolling past the whole form (HIG: clear focus). */}
+      <div class="bg-bg border-border sticky bottom-0 z-10 -mb-4 flex flex-col gap-2 border-t pt-2.5 pb-3">
         <Show when={createError()}>
           <ErrorNote message={createError()!} />
         </Show>

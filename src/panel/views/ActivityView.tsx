@@ -1,6 +1,7 @@
 import {
   createSignal,
   createMemo,
+  createEffect,
   Show,
   For,
   type JSX,
@@ -15,10 +16,14 @@ import {
   fetchAgentSessions,
   createSteeringComment,
   createComment,
+  findAgentThreadRoots,
 } from '@/lib/linear/api';
+import { refreshRunningAgents } from '@/lib/agentWatch';
+import { requestedIssueId, consumeNavRequest } from '../nav';
 import {
   Button,
   Textarea,
+  Select,
   Badge,
   StateDot,
   EmptyState,
@@ -32,6 +37,15 @@ import {
 
 export default function ActivityView() {
   const [selectedIssueId, setSelectedIssueId] = createSignal<string | null>(null);
+
+  // Deep-link from the launcher minimap / PRs tab.
+  createEffect(() => {
+    const id = requestedIssueId();
+    if (id) {
+      setSelectedIssueId(id);
+      consumeNavRequest();
+    }
+  });
 
   return (
     <div class="flex h-full flex-col">
@@ -216,24 +230,26 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
   }));
 
   const [body, setBody] = createSignal('');
-  const [mentionAgent, setMentionAgent] = createSignal(false);
   const [sendError, setSendError] = createSignal<string | null>(null);
 
-  // Default mention checked when issue has a delegate AND settings has a cursorAgentId
-  const shouldDefaultMention = createMemo(() => {
-    const issue = detailQuery.data;
-    const settings = settingsQuery.data;
-    return !!(issue?.delegate && settings?.cursorAgentId);
-  });
+  /**
+   * Reply targets. THE critical distinction: a top-level @Cursor comment spawns
+   * a NEW cloud agent; replying INSIDE an agent session's comment thread
+   * (parentId = thread root) steers the agent already running there.
+   */
+  const agentThreads = createMemo(() =>
+    detailQuery.data ? findAgentThreadRoots(detailQuery.data.comments) : [],
+  );
 
-  // Sync default when data arrives
-  let mentionInitialised = false;
-  const effectiveMention = createMemo(() => {
-    if (!mentionInitialised && detailQuery.data && settingsQuery.data) {
-      mentionInitialised = true;
-      setMentionAgent(shouldDefaultMention());
-    }
-    return mentionAgent();
+  const [target, setTarget] = createSignal<string>('comment');
+  // Default once data is in: steer the newest agent thread when one exists.
+  let targetInitialised = false;
+  createEffect(() => {
+    if (targetInitialised || !detailQuery.data || !settingsQuery.data) return;
+    targetInitialised = true;
+    const threads = agentThreads();
+    if (threads.length) setTarget(`thread:${threads[0].id}`);
+    else if (detailQuery.data.delegate && settingsQuery.data.cursorAgentId) setTarget('new');
   });
 
   const sendMutation = createMutation(() => ({
@@ -241,7 +257,11 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
       const text = body().trim();
       if (!text) throw new Error('Message is empty');
       const settings = settingsQuery.data ?? {};
-      if (effectiveMention() && settings.cursorAgentId) {
+      const t = target();
+      if (t.startsWith('thread:')) {
+        // In-thread reply — reaches the RUNNING agent, no mention needed.
+        await createComment(props.issueId, text, t.slice('thread:'.length));
+      } else if (t === 'new' && settings.cursorAgentId) {
         await createSteeringComment(props.issueId, text, {
           name: settings.cursorAgentName,
           displayName: settings.cursorAgentName ?? 'Cursor',
@@ -255,6 +275,7 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
       setBody('');
       setSendError(null);
       void queryClient.invalidateQueries({ queryKey: ['issue', props.issueId] });
+      refreshRunningAgents();
     },
     onError: (err: Error) => {
       setSendError(err.message ?? 'Failed to send');
@@ -395,19 +416,31 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
           disabled={sendMutation.isPending}
         />
         <div class="flex items-center gap-2">
-          <Show when={settingsQuery.data?.cursorAgentId}>
-            <label class="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-dim select-none">
-              <input
-                type="checkbox"
-                checked={effectiveMention()}
-                onChange={(e) => setMentionAgent((e.target as HTMLInputElement).checked)}
-                class="cursor-pointer"
-              />
-              Mention {settingsQuery.data?.cursorAgentName ?? 'agent'}
-            </label>
-          </Show>
+          {/* Reply target — steering a running agent vs spawning a new one is a
+              real, costly difference; make it an explicit visible choice. */}
+          <Select
+            class="min-w-0 flex-1"
+            value={target()}
+            onChange={(e) => setTarget(e.currentTarget.value)}
+          >
+            <For each={agentThreads()}>
+              {(thread, i) => (
+                <option value={`thread:${thread.id}`} selected={target() === `thread:${thread.id}`}>
+                  Steer running agent{agentThreads().length > 1 ? ` #${i() + 1}` : ''} · {timeAgo(thread.createdAt)}
+                </option>
+              )}
+            </For>
+            <Show when={settingsQuery.data?.cursorAgentId}>
+              <option value="new" selected={target() === 'new'}>
+                Start NEW agent (@{settingsQuery.data?.cursorAgentName ?? 'Cursor'})
+              </option>
+            </Show>
+            <option value="comment" selected={target() === 'comment'}>
+              Comment only
+            </option>
+          </Select>
           <Button
-            class="ml-auto min-w-[52px]"
+            class="min-w-[52px] shrink-0"
             variant="primary"
             loading={sendMutation.isPending}
             disabled={body().trim().length === 0}

@@ -36,6 +36,43 @@
   color-scheme: dark;
 }
 
+/* ---- Light theme ----
+   Page mode sets data-theme on the shadow-root wrapper after sampling the host
+   app's background; the extension panel follows the OS. Same accent across
+   both — only surfaces/text flip. */
+[data-theme='light'],
+:host([data-theme='light']) {
+  --color-bg: #fbfbfc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f4f6;
+  --color-surface-3: #e9e9ee;
+  --color-border: #e2e2e8;
+  --color-border-strong: #cfcfd8;
+  --color-text: #1b1c20;
+  --color-text-dim: #5c5f6a;
+  --color-text-faint: #9a9da8;
+  --color-accent-soft: #5e6ad21f;
+  --color-danger-soft: #eb57571a;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --color-bg: #fbfbfc;
+    --color-surface: #ffffff;
+    --color-surface-2: #f4f4f6;
+    --color-surface-3: #e9e9ee;
+    --color-border: #e2e2e8;
+    --color-border-strong: #cfcfd8;
+    --color-text: #1b1c20;
+    --color-text-dim: #5c5f6a;
+    --color-text-faint: #9a9da8;
+    --color-accent-soft: #5e6ad21f;
+    --color-danger-soft: #eb57571a;
+    color-scheme: light;
+  }
+}
+
 body {
   @apply bg-bg text-text font-sans text-[13px] antialiased;
   margin: 0;

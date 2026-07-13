@@ -1,16 +1,18 @@
-import { createSignal, onCleanup, onMount, Match, Switch, For } from 'solid-js';
+import { createSignal, createEffect, onCleanup, onMount, Match, Switch, For, Show } from 'solid-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
 import DraftView from './views/DraftView';
 import ActivityView from './views/ActivityView';
+import PrsView from './views/PrsView';
 import SettingsView from './views/SettingsView';
 import { subscribeStorage } from '@/lib/storage';
 import { subscribeGrabBroadcast } from '@/lib/picker';
+import { wireIdbCache } from '@/lib/idbCache';
+import { requestedTab, type PanelTab } from './nav';
 
-type Tab = 'draft' | 'activity' | 'settings';
-
-const TABS: Array<{ id: Tab; label: string }> = [
+const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'draft', label: 'Draft' },
   { id: 'activity', label: 'Activity' },
+  { id: 'prs', label: 'PRs' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -20,8 +22,23 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function App(props: { onGrab?: () => void }) {
-  const [tab, setTab] = createSignal<Tab>('draft');
+/** Linear brand mark (official logo path). */
+export function LinearLogo(props: { size?: number }) {
+  return (
+    <svg
+      width={props.size ?? 14}
+      height={props.size ?? 14}
+      viewBox="0 0 100 100"
+      fill="currentColor"
+      aria-hidden
+    >
+      <path d="M1.22541 61.5228c-.2225-.9485.90748-1.5459 1.59638-.857L39.3342 97.1782c.6889.6889.0915 1.8189-.857 1.5964C20.0515 94.4522 5.54779 79.9485 1.22541 61.5228ZM.00189135 46.8891c-.01764375.2833.08887215.5599.28957165.7606L52.3503 99.7085c.2007.2007.4773.3075.7606.2896 2.3692-.1476 4.6938-.46 6.9624-.9259.7645-.157 1.0301-1.0963.4782-1.6481L2.57595 39.4485c-.55186-.5519-1.49117-.2863-1.648174.4782-.465915 2.2686-.77832 4.5932-.92588465 6.9624ZM4.21093 29.7054c-.16649.3738-.08169.8106.20765 1.1l64.77602 64.776c.2894.2894.7262.3742 1.1.2077 1.7861-.7956 3.5171-1.6927 5.1855-2.684.5521-.328.6373-1.0867.1832-1.5407L8.43566 24.3367c-.45409-.4541-1.21271-.3689-1.54074.1832-.99132 1.6684-1.88843 3.3994-2.68399 5.1855ZM12.6587 18.074c-.3701-.3701-.393-.9637-.0443-1.3541C21.7795 6.45931 35.1114 0 49.9519 0 77.5927 0 100 22.4073 100 50.0481c0 14.8405-6.4593 28.1724-16.7199 37.3375-.3903.3487-.984.3258-1.3541-.0443L12.6587 18.074Z" />
+    </svg>
+  );
+}
+
+export default function App(props: { onGrab?: () => void; onClose?: () => void }) {
+  const [tab, setTab] = createSignal<PanelTab>('draft');
 
   const handleGrab = () => {
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
@@ -29,32 +46,39 @@ export default function App(props: { onGrab?: () => void }) {
     props.onGrab?.();
   };
 
-  onMount(() => {
-    // A new grab lands while the panel is open → refresh + jump to Draft.
-    // (Extension: runtime broadcast. Page mode: covered by the storage sub below.)
-    const unsubGrab = subscribeGrabBroadcast(handleGrab);
+  // Deep-link requests from the launcher minimap (page mode).
+  createEffect(() => {
+    const t = requestedTab();
+    if (t) setTab(t);
+  });
 
-    // Storage changed (settings edited anywhere, or a grab written in page mode).
+  onMount(() => {
+    // Instant views: hydrate the query cache from IndexedDB, persist updates.
+    const cachePromise = wireIdbCache(queryClient);
+    const unsubGrab = subscribeGrabBroadcast(handleGrab);
     const unsubStorage = subscribeStorage((area) => {
       if (area === 'settings') void queryClient.invalidateQueries({ queryKey: ['settings'] });
       if (area === 'grab') handleGrab();
     });
-
     onCleanup(() => {
       unsubGrab();
       unsubStorage();
+      void cachePromise.then((dispose) => dispose());
     });
   });
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div class="flex h-screen flex-col">
+      <div class="bg-bg text-text flex h-full flex-col">
         <header class="border-border bg-surface flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+          <span class="text-accent mr-0.5 inline-flex shrink-0" title="Linear Grab">
+            <LinearLogo size={14} />
+          </span>
           <For each={TABS}>
             {(t) => (
               <button
                 onClick={() => setTab(t.id)}
-                class={`h-6 rounded-md px-2.5 text-[12px] font-medium transition-colors ${
+                class={`h-6 rounded-md px-2 text-[12px] font-medium transition-colors ${
                   tab() === t.id
                     ? 'bg-surface-3 text-text'
                     : 'text-text-dim hover:text-text cursor-pointer'
@@ -64,6 +88,16 @@ export default function App(props: { onGrab?: () => void }) {
               </button>
             )}
           </For>
+          <Show when={props.onClose}>
+            <button
+              onClick={() => props.onClose?.()}
+              aria-label="Close panel"
+              title="Close panel"
+              class="text-text-dim hover:text-text hover:bg-surface-3 ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[14px] leading-none transition-colors"
+            >
+              ×
+            </button>
+          </Show>
         </header>
         <main class="min-h-0 flex-1">
           <Switch>
@@ -72,6 +106,9 @@ export default function App(props: { onGrab?: () => void }) {
             </Match>
             <Match when={tab() === 'activity'}>
               <ActivityView />
+            </Match>
+            <Match when={tab() === 'prs'}>
+              <PrsView onOpenIssue={() => setTab('activity')} />
             </Match>
             <Match when={tab() === 'settings'}>
               <SettingsView />

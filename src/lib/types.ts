@@ -28,6 +28,11 @@ export interface IssueDraft {
   reproSteps: string[];
   expected: string;
   actual: string;
+  impact: string;
+  /** Markdown bullets — likely root-cause analysis. */
+  analysisNotes: string;
+  /** Markdown bullets — concrete fix suggestions. */
+  suggestedNextSteps: string;
   /** Linear priority: 0 none, 1 urgent, 2 high, 3 medium, 4 low. */
   priority: number;
   suggestedLabels: string[];
@@ -54,6 +59,15 @@ export interface Settings {
   cursorAgentUrl?: string;
   /** Default `owner/name` appended as [repo=…] to delegated issues. */
   defaultRepo?: string;
+  /** Model override for the Cursor cloud agent, appended as [model=…]. */
+  cursorModel?: string;
+  /** Standing instructions appended to every issue as "### Agent instructions"
+      (demo credentials, "record a video", etc.) and fed to the AI draft. */
+  issueTemplate?: string;
+  /** Page mode: which edge the panel docks to. */
+  panelSide?: 'left' | 'right';
+  /** Page mode: persisted launcher pill position (viewport px from left/top). */
+  launcherPos?: { x: number; y: number };
 }
 
 // ---- Linear API shapes (thin, only what the UI needs) ----
@@ -88,6 +102,7 @@ export interface LinearIssueSummary {
   state: { name: string; color: string; type: string };
   delegate?: { id: string; name?: string; displayName: string } | null;
   assignee?: { displayName: string } | null;
+  attachments?: LinearAttachment[];
 }
 
 export interface LinearComment {
@@ -95,6 +110,8 @@ export interface LinearComment {
   body: string;
   createdAt: string;
   user?: { id: string; name?: string; displayName?: string; app?: boolean } | null;
+  /** Present when the comment is a threaded reply. */
+  parent?: { id: string } | null;
 }
 
 export interface LinearAttachment {
@@ -160,6 +177,8 @@ export interface DraftInput {
   grabbed: GrabbedElement | null;
   teamName?: string;
   tier: AiTier;
+  /** Standing agent instructions (settings.issueTemplate) — context for the AI. */
+  template?: string;
 }
 
 export type DraftPortClientMessage = { type: 'start'; input: DraftInput };

@@ -16,6 +16,15 @@ export const IssueDraftSchema = z.object({
   reproSteps: z.array(z.string()).describe('Ordered reproduction steps, each a single action.'),
   expected: z.string().describe('Expected behavior, one or two sentences.'),
   actual: z.string().describe('Actual (buggy) behavior, one or two sentences.'),
+  impact: z
+    .string()
+    .describe('Who/what is affected and how badly, 1-2 sentences (e.g. "Cosmetic/UX polish issue — doesn\'t block anything but feels glitchy.").'),
+  analysisNotes: z
+    .string()
+    .describe('Markdown bullet list ("- …") of likely root-cause analysis based on the source context. Empty string when there is nothing substantive to say.'),
+  suggestedNextSteps: z
+    .string()
+    .describe('Markdown bullet list of concrete, actionable fix suggestions the coding agent should consider first.'),
   priority: z
     .number()
     .int()

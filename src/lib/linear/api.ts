@@ -3,6 +3,7 @@ import type {
   CreatedIssue,
   CreateIssueInput,
   LinearAgentSession,
+  LinearComment,
   LinearAgentUser,
   LinearIssueDetail,
   LinearIssueSummary,
@@ -35,7 +36,15 @@ export async function fetchAgents(): Promise<LinearAgentUser[]> {
 }
 
 export async function fetchMyIssues(): Promise<LinearIssueSummary[]> {
-  const data = await gql<{ issues: { nodes: LinearIssueSummary[] } }>(
+  const data = await gql<{
+    issues: {
+      nodes: Array<
+        Omit<LinearIssueSummary, 'attachments'> & {
+          attachments: { nodes: NonNullable<LinearIssueSummary['attachments']> };
+        }
+      >;
+    };
+  }>(
     `query {
       issues(
         first: 50
@@ -47,11 +56,12 @@ export async function fetchMyIssues(): Promise<LinearIssueSummary[]> {
           state { name color type }
           delegate { id name displayName }
           assignee { displayName }
+          attachments(first: 10) { nodes { id title url sourceType } }
         }
       }
     }`,
   );
-  return data.issues.nodes;
+  return data.issues.nodes.map((n) => ({ ...n, attachments: n.attachments.nodes }));
 }
 
 export async function fetchIssueDetail(id: string): Promise<LinearIssueDetail> {
@@ -68,7 +78,7 @@ export async function fetchIssueDetail(id: string): Promise<LinearIssueDetail> {
         delegate { id name displayName }
         assignee { displayName }
         comments(first: 50) {
-          nodes { id body createdAt user { id name displayName app } }
+          nodes { id body createdAt parent { id } user { id name displayName app } }
         }
         attachments(first: 20) {
           nodes { id title url sourceType }
@@ -135,19 +145,25 @@ export async function createIssue(input: CreateIssueInput): Promise<CreatedIssue
   return data.issueCreate.issue;
 }
 
-export async function createComment(issueId: string, body: string): Promise<void> {
+export async function createComment(
+  issueId: string,
+  body: string,
+  parentId?: string,
+): Promise<void> {
   const data = await gql<{ commentCreate: { success: boolean } }>(
     `mutation($input: CommentCreateInput!) {
       commentCreate(input: $input) { success }
     }`,
-    { input: { issueId, body } },
+    { input: { issueId, body, ...(parentId ? { parentId } : {}) } },
   );
   if (!data.commentCreate.success) throw new Error('Linear rejected the comment');
 }
 
 /**
- * Steering comment for a running agent. Mentions the agent via profile-URL markdown
- * (Linear resolves user-URL links to real mentions); falls back to a plain @Name.
+ * Trigger a NEW agent run: top-level comment @-mentioning the agent (profile-URL
+ * markdown resolves to a real mention; falls back to plain @Name). To steer an
+ * already-RUNNING agent, do NOT use this — reply in the session's comment thread
+ * via createComment(issueId, body, threadRootId), or a second cloud agent spawns.
  */
 export async function createSteeringComment(
   issueId: string,
@@ -157,4 +173,22 @@ export async function createSteeringComment(
   const label = `@${agent.displayName || agent.name || 'Cursor'}`;
   const mention = agent.url ? `[${label}](${agent.url})` : label;
   await createComment(issueId, `${mention} ${body}`);
+}
+
+/**
+ * Root comments of agent-session threads, newest first. Replying with
+ * parentId = one of these reaches the RUNNING agent instead of spawning a new
+ * one. Heuristic: a thread is an agent thread when its root was authored by an
+ * app user OR any reply in it was.
+ */
+export function findAgentThreadRoots(comments: LinearComment[]): LinearComment[] {
+  const roots = comments.filter((c) => !c.parent);
+  const appThreadRootIds = new Set<string>();
+  for (const c of comments) {
+    if (!c.user?.app) continue;
+    appThreadRootIds.add(c.parent?.id ?? c.id);
+  }
+  return roots
+    .filter((r) => appThreadRootIds.has(r.id))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }

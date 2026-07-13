@@ -11,8 +11,10 @@ import {
   Select,
   Field,
   Section,
+  Textarea,
   ErrorNote,
 } from '../components/ui';
+import { DEFAULT_AGENT_INSTRUCTIONS } from '@/lib/ai/prompt';
 import type { Settings, AiProvider } from '@/lib/types';
 
 export default function SettingsView() {
@@ -267,7 +269,9 @@ export default function SettingsView() {
               <Show when={teamsQ.data}>
                 <For each={teamsQ.data!}>
                   {(team) => (
-                    <option value={team.id}>
+                    // selected attr required: options arrive async, the Select's
+                    // value prop won't re-apply once they render (looked "not saved").
+                    <option value={team.id} selected={team.id === s().defaultTeamId}>
                       {team.name} ({team.key})
                     </option>
                   )}
@@ -307,7 +311,9 @@ export default function SettingsView() {
                   <Show when={agentsQ.data}>
                     <For each={agentsQ.data!}>
                       {(agent) => (
-                        <option value={agent.id}>{agent.displayName}</option>
+                        <option value={agent.id} selected={agent.id === s().cursorAgentId}>
+                          {agent.displayName}
+                        </option>
                       )}
                     </For>
                   </Show>
@@ -334,6 +340,68 @@ export default function SettingsView() {
               }}
             />
           </Field>
+
+          {/* Cursor cloud agent model */}
+          <Field
+            label="Cursor cloud model"
+            hint="Appended as [model=…] — e.g. claude-opus-4-8, gpt-5.2, composer. Empty = Cursor's default."
+          >
+            <Input
+              placeholder="Cursor's default"
+              value={s().cursorModel ?? ''}
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                void update({ cursorModel: v || undefined });
+              }}
+            />
+          </Field>
+
+          {/* Standing agent instructions */}
+          <Field
+            label="Agent instructions"
+            hint="Appended to every issue as '### Agent instructions' and given to the AI draft. Add demo credentials (username/password) so the agent can log in, test, and record its video. Careful: credentials become visible to everyone who can read the issue."
+          >
+            <Textarea
+              rows={5}
+              placeholder={DEFAULT_AGENT_INSTRUCTIONS}
+              value={s().issueTemplate ?? ''}
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                void update({ issueTemplate: v || undefined });
+              }}
+            />
+            <span class="text-text-faint text-[10.5px] leading-snug">
+              Empty = the default above (computer-use testing, video demo, PR + review babysitting).
+            </span>
+          </Field>
+        </Section>
+      </Show>
+
+      {/* ── PANEL (page mode only) ────────────────────────────────────────────── */}
+      <Show when={!isExtensionContext}>
+        <Section title="Panel">
+          <div class="flex flex-col gap-1">
+            <span class="text-text-dim text-[11px] font-medium">Dock side</span>
+            <div class="bg-surface-2 border-border flex rounded-md border p-0.5">
+              <For each={['left', 'right'] as const}>
+                {(side) => (
+                  <button
+                    class={`flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                      (s().panelSide ?? 'right') === side
+                        ? 'bg-surface-3 text-text'
+                        : 'text-text-dim hover:text-text cursor-pointer'
+                    }`}
+                    onClick={() => void update({ panelSide: side })}
+                  >
+                    {side === 'left' ? 'Left' : 'Right'}
+                  </button>
+                )}
+              </For>
+            </div>
+            <span class="text-text-faint text-[10.5px] leading-snug">
+              The launcher pill is draggable — park it anywhere it doesn't cover your app.
+            </span>
+          </div>
         </Section>
       </Show>
 

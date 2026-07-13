@@ -1,4 +1,4 @@
-import { toCanvas } from 'html-to-image';
+import { toCanvas, getFontEmbedCSS } from 'html-to-image';
 
 /**
  * Screenshot of a picked element for the issue: captures the element's nearest
@@ -6,12 +6,43 @@ import { toCanvas } from 'html-to-image';
  * agent nothing about WHERE it lives) and draws an accent highlight box around
  * the exact target. html-to-image renders via SVG foreignObject, so modern CSS
  * (oklch, container queries) that breaks html2canvas works fine.
+ *
+ * Perf: font-embed CSS is computed ONCE and cached (per-capture font inlining
+ * is html-to-image's dominant cost), pixelRatio is capped at 1.5, huge DOM
+ * subtrees fall back to element-only capture, and the whole thing is deferred
+ * past the selection frame so picking never janks.
  */
+
+let fontCssPromise: Promise<string> | null = null;
+function cachedFontCss(node: HTMLElement): Promise<string> {
+  fontCssPromise ??= getFontEmbedCSS(node).catch(() => '');
+  return fontCssPromise;
+}
+
+/** Skip container context when the subtree is huge — serialization would lag. */
+const MAX_NODES = 2_500;
+
 export async function captureElementShot(target: Element): Promise<string | null> {
   try {
-    const container = pickContainer(target);
+    // Defer past the click/selection frame: react-grab's own overlay flash and
+    // the grab publish happen first; capture starts when the page is idle.
+    await new Promise((resolve) => {
+      requestAnimationFrame(() =>
+        'requestIdleCallback' in window
+          ? requestIdleCallback(() => resolve(undefined), { timeout: 500 })
+          : setTimeout(resolve, 80),
+      );
+    });
+    if (!target.isConnected) return null;
+
+    let container = pickContainer(target);
+    if (container.querySelectorAll('*').length > MAX_NODES) {
+      container = target; // too heavy — element-only beats a laggy page
+    }
+
     const canvas = await toCanvas(container as HTMLElement, {
-      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+      fontEmbedCSS: await cachedFontCss(container as HTMLElement),
       filter: (node: HTMLElement) => {
         if (!(node instanceof Element)) return true;
         // Never capture our own panel or react-grab's overlay chrome.
@@ -21,7 +52,7 @@ export async function captureElementShot(target: Element): Promise<string | null
         return true;
       },
     });
-    drawHighlight(canvas, container, target);
+    if (container !== target) drawHighlight(canvas, container, target);
     return canvasToDataUrl(canvas);
   } catch {
     return null; // Screenshot is best-effort — never block the grab itself.
@@ -31,7 +62,8 @@ export async function captureElementShot(target: Element): Promise<string | null
 /**
  * Climb ancestors until the region is big enough to give location context
  * (≥55% viewport width, ≥35% height), but never balloon past ~1.7× the
- * viewport area (full-page captures are slow and unhelpful).
+ * viewport area, and never pick an internally-scrolled ancestor (the render
+ * starts at its content top, so on-screen coordinates would lie).
  */
 function pickContainer(target: Element): Element {
   const vw = window.innerWidth;
@@ -43,6 +75,7 @@ function pickContainer(target: Element): Element {
   while (node && node !== document.body && node !== document.documentElement) {
     const r = node.getBoundingClientRect();
     if (r.width * r.height > maxArea) break;
+    if (node !== target && (node.scrollTop > 0 || node.scrollLeft > 0)) break;
     best = node;
     if (r.width >= vw * 0.55 && r.height >= vh * 0.35) break;
     node = node.parentElement;
@@ -59,8 +92,9 @@ function drawHighlight(canvas: HTMLCanvasElement, container: Element, target: El
 
   const sx = canvas.width / cRect.width;
   const sy = canvas.height / cRect.height;
-  const x = (tRect.left - cRect.left) * sx;
-  const y = (tRect.top - cRect.top) * sy;
+  // Compensate the container's own scroll: the render starts at content top.
+  const x = (tRect.left - cRect.left + container.scrollLeft) * sx;
+  const y = (tRect.top - cRect.top + container.scrollTop) * sy;
   const w = tRect.width * sx;
   const h = tRect.height * sy;
   const r = Math.min(6 * sx, w / 2, h / 2);
