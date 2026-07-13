@@ -18,7 +18,7 @@ import {
   markRecordingUploaded,
 } from '@/lib/recorder';
 import { fetchTeams, createIssue } from '@/lib/linear/api';
-import { uploadFileToLinear } from '@/lib/linear/upload';
+import { uploadAsset } from '@/lib/assetUpload';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
 import { composeIssueBody, buildAgentInstructions } from '@/lib/ai/prompt';
@@ -204,7 +204,7 @@ export default function DraftView(props: { onCreated: () => void }) {
     const result = getRecorderSnapshot().result;
     if (!result) throw new Error('No recording available.');
     if (result.assetUrl) return result.assetUrl;
-    const assetUrl = await uploadFileToLinear(result.blob, `recording-${Date.now()}.gif`);
+    const assetUrl = await uploadAsset(result.blob, `recording-${Date.now()}.gif`);
     markRecordingUploaded(assetUrl);
     return assetUrl;
   };
@@ -251,7 +251,7 @@ export default function DraftView(props: { onCreated: () => void }) {
       const shot = grab()?.screenshotDataUrl;
       if (shot) {
         try {
-          const url = await uploadFileToLinear(dataUrlToBlob(shot), `element-${Date.now()}.png`);
+          const url = await uploadAsset(dataUrlToBlob(shot), `element-${Date.now()}.png`);
           body += `\n\n### Element location\n![Highlighted element in context](${url})`;
         } catch {
           failed.push('screenshot');
@@ -379,17 +379,18 @@ export default function DraftView(props: { onCreated: () => void }) {
           </div>
         </div>
 
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex flex-col gap-1.5">
           <Show
             when={provider()}
             fallback={
-              <Button variant="ghost" class="opacity-60 cursor-default" disabled={false}>
+              <Button variant="ghost" class="w-full opacity-60 cursor-default" disabled={false}>
                 Add an AI key in Settings
               </Button>
             }
           >
             <Button
               variant="primary"
+              class="w-full"
               loading={drafting()}
               onClick={startDraft}
               disabled={drafting()}
@@ -399,11 +400,13 @@ export default function DraftView(props: { onCreated: () => void }) {
           </Show>
 
           <Show when={resolvedModelId()}>
-            <Badge>
-              <span class="inline-block min-w-[12ch] text-center">
-                {resolvedModelId()}
-              </span>
-            </Badge>
+            <div class="flex justify-end">
+              <Badge>
+                <span class="inline-block min-w-[12ch] text-center">
+                  {resolvedModelId()}
+                </span>
+              </Badge>
+            </div>
           </Show>
         </div>
 

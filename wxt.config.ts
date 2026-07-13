@@ -13,6 +13,7 @@ export default defineConfig({
       'https://api.linear.app/*',
       'https://uploads.linear.app/*',
       'https://storage.googleapis.com/*',
+      'https://api.github.com/*',
       'https://api.openai.com/*',
       'https://api.anthropic.com/*',
     ],

@@ -502,6 +502,37 @@ export default function SettingsView() {
         </Section>
       </Show>
 
+      {/* ── 2.5 ASSET UPLOADS FALLBACK ────────────────────────────────────────── */}
+      <Section title="Asset uploads">
+        <Field
+          label="GitHub token"
+          hint="Linear's storage blocks browser uploads in some browsers (Safari). With this set, GIFs/screenshots upload to your GitHub repo instead and embed automatically. Fine-grained PAT with Contents read/write on the assets repo."
+        >
+          <Input
+            type="password"
+            placeholder="github_pat_…"
+            value={s().githubToken ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ githubToken: v || undefined });
+            }}
+          />
+        </Field>
+        <Field
+          label="Assets repository"
+          hint="owner/repo — must be PUBLIC so Linear (and agents) can render the images. Files land under linear-grab/."
+        >
+          <Input
+            placeholder="ahmedbanihanibh/linear-grab-assets"
+            value={s().githubAssetsRepo ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ githubAssetsRepo: v || undefined });
+            }}
+          />
+        </Field>
+      </Section>
+
       {/* ── 3. AI PROVIDERS ───────────────────────────────────────────────────── */}
       <Section title="AI providers">
         {/* OpenAI key */}

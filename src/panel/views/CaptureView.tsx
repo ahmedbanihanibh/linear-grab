@@ -11,7 +11,7 @@ import {
   markRecordingUploaded,
   setRecordingAttach,
 } from '@/lib/recorder';
-import { uploadFileToLinear } from '@/lib/linear/upload';
+import { uploadAsset } from '@/lib/assetUpload';
 import { buildLocalContext } from '@/lib/ai/prompt';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui';
 
@@ -109,7 +109,7 @@ export default function CaptureView() {
     const result = getRecorderSnapshot().result;
     if (!result) throw new Error('No recording available.');
     if (result.assetUrl) return result.assetUrl;
-    const assetUrl = await uploadFileToLinear(result.blob, `recording-${Date.now()}.gif`);
+    const assetUrl = await uploadAsset(result.blob, `recording-${Date.now()}.gif`);
     markRecordingUploaded(assetUrl);
     return assetUrl;
   };

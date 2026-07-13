@@ -73,6 +73,11 @@ export interface Settings {
   /** 'cloud' = grab → draft → delegate to Linear/Cursor. 'local' = react-grab
       style: picking an element auto-copies its context for a local agent. */
   workflowMode?: 'cloud' | 'local';
+  /** GitHub fallback for asset uploads (Linear storage blocks browser CORS in
+      some browsers). PAT with repo contents write; a PUBLIC repo so Linear
+      can render the images. */
+  githubToken?: string;
+  githubAssetsRepo?: string;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page
