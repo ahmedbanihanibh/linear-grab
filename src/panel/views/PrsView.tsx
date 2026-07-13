@@ -104,9 +104,18 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
     <div class="flex h-full flex-col">
       <div class="border-border flex shrink-0 items-center justify-between border-b px-3 py-2">
         <span class="text-text text-[12px] font-semibold">Pull requests</span>
-        <span class="text-text-faint text-[10.5px] tabular-nums">
-          {filtered().length}/{prs().length} from your issues
-        </span>
+        <Show
+          when={!prStatuses.isError}
+          fallback={
+            <span class="text-warn text-[10.5px]" title="Merge states come from gh via the bridge">
+              states unknown — restart the bridge
+            </span>
+          }
+        >
+          <span class="text-text-faint text-[10.5px] tabular-nums">
+            {filtered().length}/{prs().length} from your issues
+          </span>
+        </Show>
       </div>
 
       {/* Filter bar: state chips + search */}

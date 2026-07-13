@@ -28,6 +28,15 @@ const MODEL_OPTIONS = [
   { id: 'haiku', label: 'Haiku' },
 ];
 
+function versionLt(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) < (pb[i] ?? 0);
+  }
+  return false;
+}
+
 const fmtTokens = (n?: number) =>
   n == null ? '–' : n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n);
 
@@ -245,6 +254,11 @@ export default function LocalView() {
       <div class="border-border flex shrink-0 items-center justify-between border-b px-3 py-2">
         <span class="text-text text-[12px] font-semibold">Local Claude Code</span>
         <Show when={health.data?.ok} fallback={<Badge class="text-danger">bridge offline</Badge>}>
+          <Show when={versionLt(health.data!.version, '0.15.1')}>
+            <Badge class="text-warn" title="Ctrl+C the old process, then: npx linear-grab-bridge">
+              v{health.data!.version} outdated — restart
+            </Badge>
+          </Show>
           <span
             class="text-text-faint max-w-[55%] truncate text-[10.5px] tabular-nums"
             title={health.data?.cwd}

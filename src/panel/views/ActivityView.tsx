@@ -21,7 +21,7 @@ import {
 import { refreshRunningAgents } from '@/lib/agentWatch';
 import { activatePicker } from '@/lib/picker';
 import { buildCaptureBlock } from '@/lib/captureShare';
-import { listBridgeTasks, mergePr, type BridgeTask } from '@/lib/bridge';
+import { fetchPrStatuses, listBridgeTasks, mergePr, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
@@ -313,6 +313,21 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     setGrabSink('capture');
   });
 
+  // Real PR states for the attachment rows (gh via bridge).
+  const PR_RX = /github\.com\/[^/]+\/[^/]+\/pull\/\d+/i;
+  const prUrls = createMemo(() =>
+    (detailQuery.data?.attachments ?? []).map((a) => a.url).filter((u) => PR_RX.test(u)),
+  );
+  const prStatuses = createQuery(() => ({
+    queryKey: ['pr-status', prUrls().sort().join('|')],
+    queryFn: () => fetchPrStatuses(prUrls()),
+    refetchInterval: 30_000,
+    retry: 0,
+    enabled: prUrls().length > 0,
+  }));
+  const prState = (url: string) =>
+    mergedUrls().has(url) ? 'MERGED' : prStatuses.data?.[url];
+
   // Fast-merge: reviewed the demo → one click ships the PR (bridge gh).
   const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
   const [mergedUrls, setMergedUrls] = createSignal<Set<string>>(new Set());
@@ -496,18 +511,26 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
                       >
                         {att.title}
                       </a>
-                      <Show when={isPr}>
+                      <Show when={isPr && prState(att.url) && prState(att.url) !== 'OPEN'}>
+                        <Badge
+                          class={`ml-auto shrink-0 ${prState(att.url) === 'MERGED' ? 'text-success' : 'text-text-faint'}`}
+                        >
+                          {prState(att.url) === 'MERGED' ? '✓ merged' : 'closed'}
+                        </Badge>
+                      </Show>
+                      <Show when={isPr && (!prState(att.url) || prState(att.url) === 'OPEN')}>
                         <Button
                           variant="primary"
                           class="ml-auto h-6 shrink-0 px-2 text-[11px]"
                           loading={mergeBusy() === att.url}
-                          disabled={mergedUrls().has(att.url)}
-                          title="Squash-merge this PR via the bridge's gh — reviewed the demo? Ship it."
+                          title={
+                            prStatuses.isError
+                              ? 'PR state unknown — restart the bridge (npx linear-grab-bridge) for live merge status'
+                              : 'Squash-merge this PR via the bridge gh — reviewed the demo? Ship it.'
+                          }
                           onClick={() => void doMerge(att.url)}
                         >
-                          <span class="inline-block min-w-[6ch] text-center">
-                            {mergedUrls().has(att.url) ? 'Merged ✓' : 'Merge'}
-                          </span>
+                          <span class="inline-block min-w-[6ch] text-center">Merge</span>
                         </Button>
                       </Show>
                     </div>
