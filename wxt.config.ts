@@ -11,6 +11,8 @@ export default defineConfig({
     permissions: ['storage', 'identity', 'sidePanel', 'tabs'],
     host_permissions: [
       'https://api.linear.app/*',
+      'https://uploads.linear.app/*',
+      'https://storage.googleapis.com/*',
       'https://api.openai.com/*',
       'https://api.anthropic.com/*',
     ],

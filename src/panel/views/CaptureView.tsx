@@ -134,6 +134,41 @@ export default function CaptureView() {
     a.click();
   };
 
+  // Copy the GIF binary itself — paste into a Linear comment and LINEAR does
+  // the upload (works even when direct browser upload is CORS-blocked).
+  const [gifCopyState, setGifCopyState] = createSignal<'idle' | 'busy' | 'copied'>('idle');
+  const copyGif = async () => {
+    const result = rec().result;
+    if (!result) return;
+    setRecActionError(null);
+    setGifCopyState('busy');
+    try {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/gif': result.blob })]);
+      } catch {
+        // Most browsers only allow PNG on the clipboard — fall back to the
+        // first frame as a still (Download keeps the animation).
+        const bitmap = await createImageBitmap(result.blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+        const png = await new Promise<Blob>((resolve, reject) =>
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encode failed'))), 'image/png'),
+        );
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+        setRecActionError(
+          'Browser blocks GIF clipboard — copied the first frame as PNG. Use Download for the animation.',
+        );
+      }
+      setGifCopyState('copied');
+      setTimeout(() => setGifCopyState('idle'), 2000);
+    } catch (err) {
+      setGifCopyState('idle');
+      setRecActionError(err instanceof Error ? err.message : 'Copy failed.');
+    }
+  };
+
   return (
     <div class="flex h-full flex-col gap-4 overflow-y-auto pt-3 pb-4 pl-3 pr-4">
       {/* ---- Captured element ------------------------------------------------ */}
@@ -286,6 +321,17 @@ export default function CaptureView() {
                 >
                   <span class="inline-block min-w-[9ch] text-center">
                     {copyState() === 'copied' ? 'Copied!' : 'Copy markdown'}
+                  </span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  class="h-6 px-2 text-[11px]"
+                  loading={gifCopyState() === 'busy'}
+                  title="Copy the GIF itself — paste into a Linear comment and Linear uploads it"
+                  onClick={() => void copyGif()}
+                >
+                  <span class="inline-block min-w-[7ch] text-center">
+                    {gifCopyState() === 'copied' ? 'Copied!' : 'Copy GIF'}
                   </span>
                 </Button>
                 <Button variant="ghost" class="h-6 px-2 text-[11px]" onClick={downloadRecording}>

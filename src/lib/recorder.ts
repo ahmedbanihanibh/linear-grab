@@ -86,11 +86,19 @@ export async function startRecording(): Promise<void> {
   discardRecording();
 
   try {
+    // The browser's share dialog is a hard security requirement (no API can
+    // capture the screen silently). These hints shrink it to the minimum:
+    // Chrome preselects "This Tab" (one click); monitors and surface-switching
+    // are removed from the dialog entirely. Safari shows its own two-button
+    // prompt — that's the floor Apple allows.
     stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: FPS },
       audio: false,
-      // Chrome offers "this tab" first; Safari/Firefox show their own pickers.
       preferCurrentTab: true,
+      selfBrowserSurface: 'include',
+      surfaceSwitching: 'exclude',
+      monitorTypeSurfaces: 'exclude',
+      systemAudio: 'exclude',
     } as DisplayMediaStreamOptions);
   } catch {
     setSnapshot({ phase: 'error', error: 'Screen capture was denied or cancelled.' });

@@ -1,4 +1,5 @@
 import { gql } from './client';
+import { getSettings } from '../storage';
 
 interface FileUploadPayload {
   fileUpload: {
@@ -32,16 +33,17 @@ export async function uploadFileToLinear(blob: Blob, filename: string): Promise<
     throw new Error('Linear did not provide an upload URL.');
   }
 
-  // Signed-URL uploads are picky: a header not in the signature (or a missing
-  // signed one) fails the request. Try the documented set first, then narrower
-  // fallbacks — Safari surfaces all of these as an opaque "Load failed".
+  // uploads.linear.app requires the SAME Authorization header as the GraphQL
+  // API on the PUT (verified: its 401 says so explicitly). Try the full
+  // documented set first, then narrower fallbacks — Safari surfaces every
+  // flavor of rejection as an opaque "Load failed".
+  const { linearApiKey, linearAccessToken } = await getSettings();
+  const auth = linearAccessToken ? `Bearer ${linearAccessToken}` : (linearApiKey ?? '');
+  const returned = Object.fromEntries((uploadFile.headers ?? []).map((h) => [h.key, h.value]));
   const attempts: Array<Record<string, string>> = [
-    {
-      'Content-Type': blob.type,
-      ...Object.fromEntries((uploadFile.headers ?? []).map((h) => [h.key, h.value])),
-    },
+    { 'Content-Type': blob.type, ...returned, ...(auth ? { Authorization: auth } : {}) },
+    { 'Content-Type': blob.type, ...returned },
     { 'Content-Type': blob.type },
-    {},
   ];
 
   let lastError: unknown = null;
@@ -60,6 +62,6 @@ export async function uploadFileToLinear(blob: Blob, filename: string): Promise<
     }
   }
   throw new Error(
-    `Upload to Linear storage failed${lastError instanceof Error ? ` — ${lastError.message}` : ''}. If this keeps happening in this browser, use Download and drag the file into Linear.`,
+    `Upload to Linear storage failed${lastError instanceof Error ? ` — ${lastError.message}` : ''}. Use "Copy GIF" and paste it into a Linear comment (Linear uploads it itself), or Download.`,
   );
 }

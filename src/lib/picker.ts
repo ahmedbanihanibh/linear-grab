@@ -133,7 +133,9 @@ export async function ensurePagePicker(): Promise<void> {
   pageStarted = true;
   const rg = await import('react-grab');
   try {
-    rg.init();
+    // One dock: hide react-grab's own toolbar — our launcher pill carries the
+    // pick button, agent status, and recording controls instead.
+    rg.init({ toolbar: { show: false } } as Parameters<typeof rg.init>[0]);
   } catch {
     pageStarted = false;
     return;
