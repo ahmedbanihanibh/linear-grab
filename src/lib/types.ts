@@ -88,6 +88,16 @@ export interface Settings {
   /** Capture a highlighted screenshot per picked element. OFF by default —
       the DOM capture costs a beat on huge pages; picking stays instant without it. */
   captureShots?: boolean;
+  /** Slack announcements: bot token (xoxb-…, scopes chat:write + channels:read
+      + files:write) and the target channel. */
+  slackToken?: string;
+  slackChannelId?: string;
+  slackChannelName?: string;
+  /** Telegram announcements: bot token + chat id. */
+  telegramToken?: string;
+  telegramChatId?: string;
+  /** Announce new issues on create (default true when a service is configured). */
+  notifyOnCreate?: boolean;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page

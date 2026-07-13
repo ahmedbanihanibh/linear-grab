@@ -28,7 +28,8 @@ export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo chec
   Treat all of this as authoritative — it overrides your defaults.
 - Use computer use to execute and test the change in the running app. Record a video demonstrating the fix and attach it to the PR.
 - Keep going until the code works and you're happy with the implementation.
-- Put up a PR, babysit it for the first set of review comments, and address them.`;
+- Put up a PR, babysit it for the first set of review comments, and address them.
+- When the fix is verified: UPDATE THE LINEAR ISSUE — post a completion comment with a one-line fix summary + the PR link, attach the demo video to the issue itself (not only the PR), and move the issue to its review/done state.`;
 
 /**
  * Final "### Agent instructions" content: the user's template (or the default)
@@ -39,6 +40,11 @@ export function buildAgentInstructions(settings: {
   testUsername?: string;
   testPassword?: string;
   skillPaths?: string;
+  slackToken?: string;
+  slackChannelId?: string;
+  slackChannelName?: string;
+  telegramToken?: string;
+  telegramChatId?: string;
 }): string {
   const parts: string[] = [settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS];
 
@@ -67,6 +73,25 @@ export function buildAgentInstructions(settings: {
   }
   if (creds.length) {
     parts.push(`**Test account — log into the app with this while testing:**\n${creds.join('\n')}`);
+  }
+
+  // Notification directive: the agent announces its FINISHED fix (with the
+  // demo video) to the team's channels itself, using these tokens.
+  const notify: string[] = [];
+  if (settings.slackToken && settings.slackChannelId) {
+    notify.push(
+      `- Slack: bot token \`${settings.slackToken}\`, channel \`${settings.slackChannelId}\`${settings.slackChannelName ? ` (#${settings.slackChannelName})` : ''}. Use \`chat.postMessage\` for the message and \`files.uploadV2\` (or getUploadURLExternal + completeUploadExternal) to upload the demo video into the channel.`,
+    );
+  }
+  if (settings.telegramToken && settings.telegramChatId) {
+    notify.push(
+      `- Telegram: bot token \`${settings.telegramToken}\`, chat id \`${settings.telegramChatId}\`. Use \`sendMessage\` and \`sendVideo\` (multipart upload of the demo file).`,
+    );
+  }
+  if (notify.length) {
+    parts.push(
+      `**When the fix is complete and the PR is open, announce it yourself:**\n${notify.join('\n')}\n\nMessage format — keep it short: what was broken → what you changed (one-line fix summary) → links to the Linear issue, the PR, and your agent run → attach/upload the demo video → end with the CTA "👉 Review the PR". You may also use these tokens to send yourself intermediate test notifications while verifying the integration works.`,
+    );
   }
 
   return parts.join('\n\n');

@@ -20,6 +20,7 @@ import {
 import { fetchTeams, createIssue } from '@/lib/linear/api';
 import { uploadAsset } from '@/lib/assetUpload';
 import { createBridgeTask } from '@/lib/bridge';
+import { announceIssue } from '@/lib/notify';
 import { fetchDevLogTail } from '@/lib/logs';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
@@ -317,6 +318,23 @@ export default function DraftView(props: { onCreated: () => void }) {
             'Issue created, but the local bridge is unreachable — run `npx linear-grab-bridge` in the repo and re-delegate from the Local tab.',
           );
         }
+      }
+      // Announce to Slack/Telegram (best-effort, when configured): issue link,
+      // summary, executor, and the demo URL when one uploaded.
+      const notifyFailed = await announceIssue(settings(), {
+        identifier: issue.identifier,
+        title: title(),
+        url: issue.url,
+        summary: description(),
+        impact: impact(),
+        repo: repo() || settings().defaultRepo,
+        demoUrl: getRecorderSnapshot().result?.assetUrl,
+        executor: target(),
+      });
+      if (notifyFailed.length) {
+        setCreateWarning(
+          `${notifyFailed.join(' + ')} announcement failed — check the token/channel in Settings.`,
+        );
       }
       return { ...issue, localTask };
     },
