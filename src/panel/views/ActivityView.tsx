@@ -30,7 +30,7 @@ import {
   stopRecording,
 } from '@/lib/recorder';
 import { buildCaptureBlock } from '@/lib/captureShare';
-import { fetchPrStatuses, listBridgeTasks, mergePr, resumeCommand, sendBridgeMessage, setBridgeModel, stagePr, stopBridgeTask, type BridgeTask } from '@/lib/bridge';
+import { fetchBranchStatus, fetchPrStatuses, listBridgeTasks, mergePr, resumeCommand, sendBridgeMessage, setBridgeModel, stagePr, stopBridgeTask, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
@@ -835,6 +835,7 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
                           variant="ghost"
                           class="ml-auto size-6 shrink-0 px-0"
                           loading={stageBusy() === att.url}
+                          disabled={stagedUrls().has(att.url)}
                           title={
                             stagedUrls().has(att.url)
                               ? `On ${stagingBranch()} — staging preview deploying`
@@ -850,6 +851,9 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
                             <span class="text-success text-[11px]">✓</span>
                           </Show>
                         </Button>
+                        <Show when={stagedUrls().has(att.url)}>
+                          <StageStatusChip url={att.url} base={stagingBranch()} />
+                        </Show>
                         <Button
                           variant="primary"
                           class="h-6 shrink-0 px-2 text-[11px]"
@@ -1138,5 +1142,45 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
         </div>
       </Show>
     </div>
+  );
+}
+
+/** Live staging-deploy chip: Building… → staging ready (link) / failed. */
+function StageStatusChip(props: { url: string; base: string }) {
+  const status = createQuery(() => ({
+    queryKey: ['stage-status', props.url, props.base],
+    queryFn: () => fetchBranchStatus(props.url, props.base),
+    refetchInterval: (q) =>
+      q.state.data?.state === 'success' || q.state.data?.state === 'failure' ? false : 8_000,
+    retry: 0,
+  }));
+  return (
+    <Show when={status.data} fallback={<Spinner size={11} />}>
+      {(st) => (
+        <Show
+          when={st().state === 'success'}
+          fallback={
+            <Show
+              when={st().state === 'failure' || st().state === 'error'}
+              fallback={
+                <Badge title={`Staging deploy ${st().state}`}>
+                  <Spinner size={10} /> staging…
+                </Badge>
+              }
+            >
+              <Badge class="text-danger" title="Staging deploy failed — check Vercel">
+                staging failed
+              </Badge>
+            </Show>
+          }
+        >
+          <Show when={st().url} fallback={<Badge class="text-success">staging ready</Badge>}>
+            <ExtLink href={st().url!} class="shrink-0" title="Open the staging deployment">
+              staging ready
+            </ExtLink>
+          </Show>
+        </Show>
+      )}
+    </Show>
   );
 }

@@ -1,10 +1,10 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import { createQuery } from '@tanstack/solid-query';
 import { fetchMyIssues } from '@/lib/linear/api';
-import { fetchPrStatuses, listBridgeTasks, mergePr, stagePr } from '@/lib/bridge';
+import { fetchBranchStatus, fetchPrStatuses, listBridgeTasks, mergePr, stagePr } from '@/lib/bridge';
 import { getSettings } from '@/lib/storage';
 import { openPanelTo } from '../nav';
-import { Badge, Button, CloudIcon, EmptyState, ExtLink, Input, MonitorIcon, StateDot, timeAgo } from '../components/ui';
+import { Badge, Button, CloudIcon, EmptyState, ExtLink, Input, MonitorIcon, Spinner, StateDot, timeAgo } from '../components/ui';
 import type { LinearAttachment, LinearIssueSummary } from '@/lib/types';
 
 interface PrRow {
@@ -250,6 +250,7 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                         variant="ghost"
                         class="size-7 shrink-0 px-0"
                         loading={stageBusy() === row.attachment.url}
+                        disabled={staged().has(row.attachment.url)}
                         title={
                           staged().has(row.attachment.url)
                             ? `On ${stagingBranch()} — staging preview deploying`
@@ -265,6 +266,9 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                           <span class="text-success text-[11px]">✓</span>
                         </Show>
                       </Button>
+                      <Show when={staged().has(row.attachment.url)}>
+                        <StageStatusChip url={row.attachment.url} base={stagingBranch()} />
+                      </Show>
                       <Button
                         variant="primary"
                         class="size-7 px-0"
@@ -332,5 +336,45 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
         </Show>
       </div>
     </div>
+  );
+}
+
+/** Live staging-deploy chip: Building… → staging ready (link) / failed. */
+function StageStatusChip(props: { url: string; base: string }) {
+  const status = createQuery(() => ({
+    queryKey: ['stage-status', props.url, props.base],
+    queryFn: () => fetchBranchStatus(props.url, props.base),
+    refetchInterval: (q) =>
+      q.state.data?.state === 'success' || q.state.data?.state === 'failure' ? false : 8_000,
+    retry: 0,
+  }));
+  return (
+    <Show when={status.data} fallback={<Spinner size={11} />}>
+      {(st) => (
+        <Show
+          when={st().state === 'success'}
+          fallback={
+            <Show
+              when={st().state === 'failure' || st().state === 'error'}
+              fallback={
+                <Badge title={`Staging deploy ${st().state}`}>
+                  <Spinner size={10} /> staging…
+                </Badge>
+              }
+            >
+              <Badge class="text-danger" title="Staging deploy failed — check Vercel">
+                staging failed
+              </Badge>
+            </Show>
+          }
+        >
+          <Show when={st().url} fallback={<Badge class="text-success">staging ready</Badge>}>
+            <ExtLink href={st().url!} class="shrink-0" title="Open the staging deployment">
+              staging ready
+            </ExtLink>
+          </Show>
+        </Show>
+      )}
+    </Show>
   );
 }

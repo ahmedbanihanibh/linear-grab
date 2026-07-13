@@ -168,6 +168,21 @@ export function stagePr(url: string, base: string): Promise<{ ok: boolean; base?
   });
 }
 
+export interface BranchDeployStatus {
+  state: 'pending' | 'in_progress' | 'success' | 'failure' | 'error' | 'none' | 'unknown';
+  url?: string | null;
+  at?: string;
+  sha?: string;
+}
+
+/** Live status of the staging branch's deploy (GitHub Deployments via gh). */
+export function fetchBranchStatus(url: string, base: string): Promise<BranchDeployStatus> {
+  return call<BranchDeployStatus>('/branch/status', {
+    method: 'POST',
+    body: JSON.stringify({ url, base }),
+  });
+}
+
 /** One-click squash-merge via the bridge's gh. */
 export function mergePr(url: string): Promise<{ ok: boolean; output?: string }> {
   return call<{ ok: boolean; output?: string }>('/pr/merge', {

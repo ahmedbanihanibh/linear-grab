@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.19.0';
+const VERSION = '0.20.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -619,6 +619,34 @@ createServer(async (req, res) => {
         }),
       );
       return json(res, 200, { statuses, previews });
+    }
+    // Live status of the staging deploy: Vercel mirrors every branch deploy
+    // into GitHub Deployments (state + environment_url) — pollable via gh.
+    if (req.method === 'POST' && url.pathname === '/branch/status') {
+      const body = await readBody(req);
+      const prUrl = String(body.url ?? '');
+      const base = String(body.base || 'staging').replace(/[^\w./-]/g, '');
+      const m = prUrl.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/\d+$/);
+      if (!m) return json(res, 400, { error: 'invalid PR url' });
+      const repo = `${m[1]}/${m[2]}`;
+      try {
+        const deps = JSON.parse(
+          (await run('gh', ['api', `repos/${repo}/deployments?ref=${base}&per_page=1`])) ?? '[]',
+        );
+        if (!deps.length) return json(res, 200, { state: 'none' });
+        const statuses = JSON.parse(
+          (await run('gh', ['api', `repos/${repo}/deployments/${deps[0].id}/statuses?per_page=1`])) ?? '[]',
+        );
+        const st = statuses[0] ?? null;
+        return json(res, 200, {
+          state: st?.state ?? 'pending', // pending | in_progress | success | failure | error
+          url: st?.environment_url ?? null,
+          at: st?.updated_at ?? deps[0].created_at,
+          sha: (deps[0].sha ?? '').slice(0, 7),
+        });
+      } catch {
+        return json(res, 200, { state: 'unknown' });
+      }
     }
     // Merge a PR's branch into a staging branch (creating it from the default
     // branch if missing) — Vercel then deploys it to the staging domain.
