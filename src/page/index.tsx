@@ -192,9 +192,10 @@ function PagePanel(props: { defaultOpen: boolean }) {
 
     // Picker activated → minimize (like recording) so the page is clear to
     // hover/select; the grab landing reopens the panel in cloud mode.
+    // Pinned mode is beside the page — nothing overlaps, stay open.
     const onPickerActivated = () => {
       setMinimapOpen(false);
-      setOpen(false);
+      if (!pinned()) setOpen(false);
     };
     window.addEventListener(PICKER_ACTIVATED_EVENT, onPickerActivated);
 
@@ -210,7 +211,8 @@ function PagePanel(props: { defaultOpen: boolean }) {
     let prevPhase = getRecorderSnapshot().phase;
     const unsubRec = subscribeRecorder((snap) => {
       setRecPhase(snap.phase);
-      if (snap.phase === 'recording' && prevPhase !== 'recording') {
+      // Pinned mode = beside the page, nothing overlaps — stay open.
+      if (snap.phase === 'recording' && prevPhase !== 'recording' && !pinned()) {
         setOpen(false);
       }
       if (snap.phase === 'ready' && prevPhase !== 'ready') {

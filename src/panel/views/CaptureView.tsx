@@ -208,23 +208,14 @@ export default function CaptureView() {
         >
           {(el) => (
             <div class="bg-surface border-border flex flex-col gap-1.5 rounded-lg border p-2.5">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex min-w-0 flex-col gap-0.5">
-                  <Show when={el().componentName}>
-                    <span class="font-mono text-accent text-[12px]">
-                      {'<'}{el().componentName}{'>'}
-                    </span>
+              {/* Row 1: component name + actions. Row 2: path gets the FULL
+                  card width — never squeezed by the buttons at narrow sizes. */}
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-mono text-accent min-w-0 truncate text-[12px]">
+                  <Show when={el().componentName} fallback={el().tagName ? `<${el().tagName}>` : 'Element'}>
+                    {'<'}{el().componentName}{'>'}
                   </Show>
-                  <Show when={el().source?.filePath}>
-                    <span class="font-mono text-text-dim break-all text-[11px]">
-                      {el().source!.filePath}
-                      {el().source?.lineNumber != null ? `:${el().source!.lineNumber}` : ''}
-                    </span>
-                  </Show>
-                  <span class="text-text-faint truncate break-all text-[10.5px]">
-                    {el().pageUrl}
-                  </span>
-                </div>
+                </span>
                 <div class="flex shrink-0 items-center gap-1">
                   <Button
                     class="h-6 px-2 text-[11px]"
@@ -241,6 +232,13 @@ export default function CaptureView() {
                   </Button>
                 </div>
               </div>
+              <Show when={el().source?.filePath}>
+                <span class="font-mono text-text-dim break-all text-[11px] leading-snug">
+                  {el().source!.filePath}
+                  {el().source?.lineNumber != null ? `:${el().source!.lineNumber}` : ''}
+                </span>
+              </Show>
+              <span class="text-text-faint truncate text-[10.5px]">{el().pageUrl}</span>
               <Show when={el().stackContext}>
                 <details class="text-[10.5px]">
                   <summary class="text-text-faint cursor-pointer select-none">
