@@ -119,27 +119,28 @@ export async function mergeGrabs(els: GrabbedElement[]): Promise<void> {
       };
       continue;
     }
+    // "Same element" needs more than source — in many apps EVERY element
+    // resolves to the same nearest-debug-fiber file:line (e.g. the page
+    // component), and source-only dedupe collapsed distinct picks into one.
+    const identity = (g: GrabbedElement) =>
+      `${g.source?.filePath ?? ''}:${g.source?.lineNumber ?? ''}|${g.tagName ?? ''}|${(g.content ?? '').trim().slice(0, 80)}`;
     if (el.source?.filePath) {
-      const bySource = merged.findIndex(
-        (m) =>
-          m.source?.filePath === el.source!.filePath &&
-          m.source?.lineNumber === el.source!.lineNumber,
-      );
-      if (bySource >= 0) {
-        merged[bySource] = { ...merged[bySource], ...el };
+      const byIdentity = merged.findIndex((m) => identity(m) === identity(el));
+      if (byIdentity >= 0) {
+        merged[byIdentity] = { ...merged[byIdentity], ...el };
         continue;
       }
     }
     merged.push(el);
   }
   // Final sweep: re-picking the same element must UPDATE, not accumulate —
-  // enrichment passes match by id before the source dedupe can see them.
+  // enrichment passes match by id before the identity dedupe can see them.
   const seen = new Set<string>();
   const deduped: GrabbedElement[] = [];
   for (let i = merged.length - 1; i >= 0; i--) {
     const g = merged[i];
     const key = g.source?.filePath
-      ? `${g.source.filePath}:${g.source.lineNumber ?? ''}`
+      ? `${g.source.filePath}:${g.source.lineNumber ?? ''}|${g.tagName ?? ''}|${(g.content ?? '').trim().slice(0, 80)}`
       : `id:${g.grabbedAt}`;
     if (seen.has(key)) continue;
     seen.add(key);

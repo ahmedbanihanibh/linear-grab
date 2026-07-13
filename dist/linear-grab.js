@@ -3152,8 +3152,9 @@ async function Dr(e) {
 			};
 			continue;
 		}
+		let r = (e) => `${e.source?.filePath ?? ""}:${e.source?.lineNumber ?? ""}|${e.tagName ?? ""}|${(e.content ?? "").trim().slice(0, 80)}`;
 		if (n.source?.filePath) {
-			let e = t.findIndex((e) => e.source?.filePath === n.source.filePath && e.source?.lineNumber === n.source.lineNumber);
+			let e = t.findIndex((e) => r(e) === r(n));
 			if (e >= 0) {
 				t[e] = {
 					...t[e],
@@ -3166,7 +3167,7 @@ async function Dr(e) {
 	}
 	let n = /* @__PURE__ */ new Set(), r = [];
 	for (let e = t.length - 1; e >= 0; e--) {
-		let i = t[e], a = i.source?.filePath ? `${i.source.filePath}:${i.source.lineNumber ?? ""}` : `id:${i.grabbedAt}`;
+		let i = t[e], a = i.source?.filePath ? `${i.source.filePath}:${i.source.lineNumber ?? ""}|${i.tagName ?? ""}|${(i.content ?? "").trim().slice(0, 80)}` : `id:${i.grabbedAt}`;
 		n.has(a) || (n.add(a), r.unshift(i));
 	}
 	await Er(r.slice(-8));
