@@ -130,6 +130,22 @@ export default function DraftView(props: { onCreated: () => void }) {
     staleTime: 30_000,
   }));
   const [note, setNote] = createSignal('');
+
+  // Pasted images (⌘V straight into the note) — attached to the issue on create.
+  const [pasted, setPasted] = createSignal<Array<{ id: number; dataUrl: string }>>([]);
+  const onNotePaste = (e: ClipboardEvent) => {
+    for (const item of Array.from(e.clipboardData?.items ?? [])) {
+      if (!item.type.startsWith('image/')) continue;
+      const file = item.getAsFile();
+      if (!file || file.size > 8_000_000) continue;
+      const reader = new FileReader();
+      reader.onload = () =>
+        setPasted((prev) =>
+          [...prev, { id: Date.now() + Math.random(), dataUrl: reader.result as string }].slice(-6),
+        );
+      reader.readAsDataURL(file);
+    }
+  };
   const [tier, setTier] = createSignal<AiTier>('fast');
   const [includeLogs, setIncludeLogs] = createSignal(true);
 
@@ -219,7 +235,9 @@ export default function DraftView(props: { onCreated: () => void }) {
     // (Safari/Firefox/any browser) streams in-process.
     cancelDraft = startDraftStream(
       {
-        note: note(),
+        note: pasted().length
+          ? `${note()}\n\n(${pasted().length} pasted screenshot(s) will be attached to the issue.)`
+          : note(),
         grabbed: grab() ?? null,
         grabbedList: grabQuery.data ?? undefined,
         teamName: selectedTeamName(),
@@ -315,6 +333,16 @@ export default function DraftView(props: { onCreated: () => void }) {
           body += `\n\n### Element location${shots.length > 1 ? ` — ${label}` : ''}\n![Highlighted element in context](${url})`;
         } catch {
           failed.push(`screenshot${shots.length > 1 ? ` ${i + 1}` : ''}`);
+        }
+      }
+      // Pasted screenshots from the note.
+      const pastedNow = pasted();
+      for (const [i, img] of pastedNow.entries()) {
+        try {
+          const url = await uploadAsset(dataUrlToBlob(img.dataUrl), `pasted-${Date.now()}-${i}.png`);
+          body += `${i === 0 ? '\n\n### Attachments' : ''}\n![pasted screenshot ${i + 1}](${url})`;
+        } catch {
+          failed.push(`pasted image ${i + 1}`);
         }
       }
       // Client console errors — the browser-side twin of the server logs.
@@ -434,6 +462,7 @@ export default function DraftView(props: { onCreated: () => void }) {
       setCreatedIssue({ identifier: issue.identifier, url: issue.url });
       setCreateError(null);
       setFellBack(null);
+      setPasted([]);
       discardRecording();
       if (issue.localTask) openPanelTo('local');
     },
@@ -520,11 +549,36 @@ export default function DraftView(props: { onCreated: () => void }) {
         <Field label="Your note">
           <Textarea
             rows={3}
-            placeholder="Describe the problem or change in your own words…"
+            placeholder="Describe the problem or change in your own words… (paste screenshots here too)"
             value={note()}
             onInput={(e) => setNote(e.currentTarget.value)}
+            onPaste={onNotePaste}
           />
         </Field>
+
+        {/* Pasted image attachments */}
+        <Show when={pasted().length > 0}>
+          <div class="flex flex-wrap gap-1.5">
+            <For each={pasted()}>
+              {(img) => (
+                <div class="border-border relative overflow-hidden rounded-md border">
+                  <img src={img.dataUrl} alt="Pasted attachment" class="block h-16 w-16 object-cover" />
+                  <button
+                    class="bg-bg/80 text-text-dim hover:text-danger absolute top-0.5 right-0.5 grid size-4 cursor-pointer place-items-center rounded text-[10px] leading-none"
+                    title="Remove"
+                    aria-label="Remove pasted image"
+                    onClick={() => setPasted((prev) => prev.filter((x) => x.id !== img.id))}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </For>
+            <span class="text-text-faint self-end text-[10.5px]">
+              attached on create
+            </span>
+          </div>
+        </Show>
 
         {/* Tier segmented control — label left, chooser right */}
         <div class="flex items-center justify-between gap-1.5">

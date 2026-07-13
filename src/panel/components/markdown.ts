@@ -16,6 +16,56 @@ function esc(s: string): string {
 
 const SAFE_HREF = /^(https?:\/\/|mailto:)/i;
 const VIDEO_EXT = /\.(mp4|mov|webm|m4v)(\?|#|$)/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|svg)(\?|#|$)/i;
+
+/**
+ * <lg-media>: Linear upload URLs carry NO file extension — image vs video is
+ * only knowable from the response content-type. This element fetches once
+ * (through the auth'd bridge proxy), sniffs the blob type, and renders the
+ * right tag from an object URL.
+ */
+class LgMediaElement extends HTMLElement {
+  private objectUrl: string | null = null;
+
+  connectedCallback(): void {
+    const src = this.getAttribute('src') ?? '';
+    const alt = this.getAttribute('alt') ?? '';
+    void (async () => {
+      try {
+        const res = await fetch(src);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        this.objectUrl = URL.createObjectURL(blob);
+        this.textContent = '';
+        if (blob.type.startsWith('video/')) {
+          const v = document.createElement('video');
+          v.controls = true;
+          v.preload = 'metadata';
+          v.src = this.objectUrl;
+          this.appendChild(v);
+        } else {
+          const img = document.createElement('img');
+          img.src = this.objectUrl;
+          img.alt = alt;
+          this.appendChild(img);
+        }
+      } catch {
+        this.textContent = '';
+        const note = document.createElement('span');
+        note.textContent = `🖼 ${alt || 'media'} — start the bridge (npx linear-grab-bridge) to view Linear-hosted media here`;
+        note.style.cssText = 'font-size:10.5px;color:var(--color-text-faint);';
+        this.appendChild(note);
+      }
+    })();
+  }
+
+  disconnectedCallback(): void {
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
+  }
+}
+if (typeof customElements !== 'undefined' && !customElements.get('lg-media')) {
+  customElements.define('lg-media', LgMediaElement);
+}
 
 /** uploads.linear.app media needs Linear auth — route through the bridge proxy. */
 let mediaProxyBase: string | null = null;
@@ -46,9 +96,14 @@ function inline(md: string): string {
     (_m, alt: string, url: string) => {
       if (!SAFE_HREF.test(url)) return alt;
       const src = resolveMedia(url);
-      return VIDEO_EXT.test(url)
-        ? `<video controls preload="metadata" src="${src}"></video>`
-        : `<img src="${src}" alt="${alt}" loading="lazy" />`;
+      if (VIDEO_EXT.test(url)) {
+        return `<video controls preload="metadata" src="${src}"></video>`;
+      }
+      // Linear uploads have NO extension — type-sniff via <lg-media>.
+      if (src !== url && !IMAGE_EXT.test(url)) {
+        return `<lg-media src="${src}" alt="${alt}"></lg-media>`;
+      }
+      return `<img src="${src}" alt="${alt}" loading="lazy" />`;
     },
   );
 
