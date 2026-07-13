@@ -27646,7 +27646,7 @@ function Nj(e) {
 					"3. Update the Linear issue via its GraphQL API (https://api.linear.app/graphql) using the LINEAR_API_KEY env var as the Authorization header:",
 					`   - commentCreate on issue ${o.identifier}: one-line fix summary + root cause + the PR link.`,
 					"   - Move it to review: query the team's workflowStates, then issueUpdate with the review/'In Review' stateId.",
-					"4. If Slack/Telegram tokens appear in the instructions above, announce there too."
+					"4. Announce the finished fix on every channel whose token appears in the instructions above (Slack chat.postMessage + files upload, Telegram sendMessage/sendVideo) — include: what was broken, the one-line fix, the Linear issue link, the PR link, and the demo recording if you made one. End with \"👉 Review the PR\"."
 				].join("\n");
 				await kO(`${o.identifier} — ${s()}`, t, {
 					model: ae() || void 0,
