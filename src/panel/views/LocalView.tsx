@@ -423,6 +423,25 @@ export default function LocalView() {
                           </option>
                         </Show>
                       </Select>
+                      <Show when={task().status !== 'running' && task().sessionId}>
+                        <Button
+                          variant="ghost"
+                          class="size-7 px-0"
+                          loading={sendMut.isPending}
+                          title={`Resume — continues this session${task().pendingModel ? ` on ${task().pendingModel}` : ''}`}
+                          aria-label="Resume session"
+                          onClick={() =>
+                            sendMut.mutate({
+                              id: task().id,
+                              text: 'Continue where you left off. If the work is already complete, finish any remaining closeout steps (PR, Linear update, announcement).',
+                            })
+                          }
+                        >
+                          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                            <path d="M4.5 2.8a.8.8 0 0 1 1.22-.68l8 5.2a.8.8 0 0 1 0 1.36l-8 5.2a.8.8 0 0 1-1.22-.68V2.8Z" />
+                          </svg>
+                        </Button>
+                      </Show>
                       <Show when={issueFor(task())}>
                         {(issue) => (
                           <Button

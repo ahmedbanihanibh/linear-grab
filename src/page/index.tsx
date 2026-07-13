@@ -50,6 +50,14 @@ export function init(options: InitOptions = {}): void {
     host.id = 'linear-grab-root';
     document.body.appendChild(host);
 
+    // Keyboard isolation: shadow retargeting makes e.target the host div (not
+    // an input), so host-app "is the user typing?" checks fail and single-
+    // letter hotkeys (p, k, …) preventDefault mid-word — swallowing letters.
+    // Nothing typed in the panel may reach the page's listeners.
+    for (const type of ['keydown', 'keyup', 'keypress'] as const) {
+      host.addEventListener(type, (e) => e.stopPropagation());
+    }
+
     const shadow = host.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = cssText;
