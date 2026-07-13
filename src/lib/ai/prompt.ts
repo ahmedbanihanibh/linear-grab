@@ -21,7 +21,12 @@ of the other sections.`;
  * Default standing directives for the delegated cloud agent — appended to every
  * issue as "### Agent instructions" unless the user sets their own template.
  */
-export const DEFAULT_AGENT_INSTRUCTIONS = `- Use computer use to execute and test the change in the running app. Record a video demonstrating the fix and attach it to the PR.
+export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo checkout (skip any path that doesn't exist):
+  1. Read \`CLAUDE.md\` and \`AGENTS.md\` at the repo root — the master map of product rules, architecture, and memory/skill pointers.
+  2. Skim \`.claude/memory/MEMORY.md\` (the index) to learn what project memory exists; load the specific \`.claude/memory/*.md\` files the map names for the surface you're touching.
+  3. Load the matching \`.claude/skills/<name>/SKILL.md\` files before designing, building UI, or animating (if skills are symlinked, follow them into \`.agents/skills/\`).
+  Treat all of this as authoritative — it overrides your defaults.
+- Use computer use to execute and test the change in the running app. Record a video demonstrating the fix and attach it to the PR.
 - Keep going until the code works and you're happy with the implementation.
 - Put up a PR, babysit it for the first set of review comments, and address them.`;
 
