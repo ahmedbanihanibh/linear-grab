@@ -96,6 +96,16 @@ export async function fetchIssueDetail(id: string): Promise<LinearIssueDetail> {
  * surface is newer than the rest — treat failures as "no sessions" so the detail view
  * never breaks on workspaces/plans where it is unavailable.
  */
+/** Linear returns activity connections NEWEST-first — rendering them raw made
+    the live feed look frozen at the session's start. Sort oldest→newest and
+    drop ephemeral rows ('Waiting for agent…') that a later activity replaced. */
+function normalizeActivities(
+  nodes: LinearAgentSession['activities'],
+): LinearAgentSession['activities'] {
+  const sorted = [...nodes].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  return sorted.filter((a, i) => !a.ephemeral || i === sorted.length - 1);
+}
+
 export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSession[]> {
   try {
     const data = await gql<{
@@ -116,8 +126,8 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
               id status summary updatedAt
               appUser { displayName }
               comment { id }
-              activities(first: 50) {
-              nodes { id createdAt content {
+              activities(last: 50) {
+              nodes { id createdAt ephemeral content {
                     __typename
                     ... on AgentActivityThoughtContent { body }
                     ... on AgentActivityResponseContent { body }
@@ -133,7 +143,10 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
       }`,
       { id: issueId },
     );
-    return data.issue.agentSessions.nodes.map((s) => ({ ...s, activities: s.activities.nodes }));
+    return data.issue.agentSessions.nodes.map((s) => ({
+      ...s,
+      activities: normalizeActivities(s.activities.nodes),
+    }));
   } catch {
     return [];
   }
@@ -173,7 +186,7 @@ export async function fetchAllAgentSessions(): Promise<LinearAgentSession[]> {
       }`,
     );
     return data.agentSessions.nodes
-      .map((s) => ({ ...s, activities: s.activities.nodes }))
+      .map((s) => ({ ...s, activities: normalizeActivities(s.activities.nodes) }))
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   } catch {
     // last-without-before pagination may be rejected — retry without the

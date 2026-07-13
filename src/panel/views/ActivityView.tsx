@@ -1038,6 +1038,9 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
     <div class="bg-surface border-border rounded-lg border p-2.5 flex flex-col gap-1.5">
       {/* Session header */}
       <div class="flex items-center gap-1.5 flex-wrap">
+        <Show when={/active|pending/i.test(props.session.status)}>
+          <Spinner size={12} />
+        </Show>
         <Badge color={statusColor()}>{statusWord()}</Badge>
         <Show when={props.session.appUser?.displayName}>
           <span class="text-[11px] text-text-dim">

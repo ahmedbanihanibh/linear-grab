@@ -175,6 +175,8 @@ export interface LinearIssueDetail extends LinearIssueSummary {
 export interface LinearAgentActivity {
   id: string;
   createdAt: string;
+  /** Linear semantics: should disappear once the NEXT activity arrives. */
+  ephemeral?: boolean;
   /** Union: thought/response/error/prompt/elicitation carry body; action carries action+parameter(+result). */
   content: {
     __typename?: string;
