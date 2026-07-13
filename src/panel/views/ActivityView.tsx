@@ -1061,6 +1061,9 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
     props.session.activities.filter((a) => a.content?.body || a.content?.action).slice(-15),
   );
 
+  // Accordion: collapsed = scrollable window; expanded = the whole feed.
+  const [expanded, setExpanded] = createSignal(false);
+
   // Follow the live feed: stick to the BOTTOM (newest activity) as polls
   // append, but never yank the view while the user is scrolled up reading.
   let feedEl: HTMLDivElement | undefined;
@@ -1100,6 +1103,29 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
             </ExtLink>
           )}
         </Show>
+        <Button
+          variant="ghost"
+          class="size-6 shrink-0 px-0"
+          title={expanded() ? 'Collapse to a window' : 'Expand — show the whole session feed'}
+          aria-label={expanded() ? 'Collapse feed' : 'Expand feed'}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden
+            class="transition-transform"
+            style={{ transform: expanded() ? 'rotate(180deg)' : 'none' }}
+          >
+            <path d="m3.5 6.5 4.5 4 4.5-4" />
+          </svg>
+        </Button>
       </div>
 
       {/* Summary */}
@@ -1115,7 +1141,8 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
         <div
           ref={feedEl}
           onScroll={onFeedScroll}
-          class="border-border mt-0.5 flex max-h-64 flex-col gap-1 overflow-y-auto border-t pt-1.5 pl-0.5 pr-3"
+          class="border-border mt-0.5 flex flex-col gap-1 overflow-y-auto border-t pt-1.5 pl-0.5 pr-3"
+          classList={{ 'max-h-64': !expanded() }}
         >
           <Index each={recentActivities()}>
             {(activity) => (
