@@ -4,6 +4,7 @@ import DraftView from './views/DraftView';
 import CaptureView from './views/CaptureView';
 import ActivityView from './views/ActivityView';
 import CloudView from './views/CloudView';
+import RunningView from './views/RunningView';
 import LocalView from './views/LocalView';
 import PrsView from './views/PrsView';
 import SettingsView from './views/SettingsView';
@@ -18,6 +19,7 @@ const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'draft', label: 'Draft' },
   { id: 'capture', label: 'Capture' },
   { id: 'activity', label: 'Activity' },
+  { id: 'running', label: 'Running' },
   { id: 'cloud', label: 'Cloud' },
   { id: 'local', label: 'Local' },
   { id: 'prs', label: 'PRs' },
@@ -162,6 +164,9 @@ export default function App(props: {
           </div>
           <div class="h-full" classList={{ hidden: tab() !== 'activity' }}>
             <ActivityView />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'running' }}>
+            <RunningView />
           </div>
           <div class="h-full" classList={{ hidden: tab() !== 'cloud' }}>
             <CloudView />

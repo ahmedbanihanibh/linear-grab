@@ -1,9 +1,10 @@
-import { createMemo, Index, Show, For } from 'solid-js';
+import { createMemo, createSignal, Index, Show, For } from 'solid-js';
 import { createQuery } from '@tanstack/solid-query';
 import type { LinearAgentSession } from '@/lib/types';
 import { fetchAllAgentSessions } from '@/lib/linear/api';
 import { openPanelTo } from '../nav';
 import { persistentSignal } from '../persist';
+import { IssueDetailScreen } from './ActivityView';
 import { Badge, Button, CloudIcon, EmptyState, ExtLink, Spinner, StateDot, timeAgo } from '../components/ui';
 
 /**
@@ -66,7 +67,14 @@ export default function CloudView() {
     () => (sessions.data ?? []).filter((s) => /active|pending/i.test(s.status)).length,
   );
 
+  // Embedded thread — open the full detail screen INSIDE this tab.
+  const [openIssue, setOpenIssue] = createSignal<string | null>(null);
+
   return (
+    <Show
+      when={!openIssue()}
+      fallback={<IssueDetailScreen issueId={openIssue()!} onBack={() => setOpenIssue(null)} />}
+    >
     <div class="flex h-full flex-col">
       <div class="border-border flex shrink-0 items-center justify-between border-b px-3 py-2">
         <span class="text-text inline-flex items-center gap-1.5 text-[12px] font-semibold">
@@ -147,12 +155,18 @@ export default function CloudView() {
                       <Spinner />
                     </Show>
                     <Show when={s().issue} fallback={<span class="text-text-dim text-[12.5px]">Conversation session</span>}>
-                      <span class="font-mono text-text-dim shrink-0 text-[11px]">
-                        {s().issue!.identifier}
-                      </span>
-                      <span class="text-text min-w-0 truncate text-[12.5px] font-medium">
-                        {s().issue!.title}
-                      </span>
+                      <button
+                        class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left"
+                        title="View the thread here"
+                        onClick={() => setOpenIssue(s().issue!.id)}
+                      >
+                        <span class="font-mono text-text-dim shrink-0 text-[11px]">
+                          {s().issue!.identifier}
+                        </span>
+                        <span class="text-text hover:text-accent min-w-0 truncate text-[12.5px] font-medium transition-colors">
+                          {s().issue!.title}
+                        </span>
+                      </button>
                     </Show>
                     <span class="text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums">
                       {timeAgo(s().updatedAt)}
@@ -160,7 +174,10 @@ export default function CloudView() {
                   </div>
 
                   <Show when={lastLine(s())}>
-                    <p class="text-text-dim line-clamp-2 text-[11.5px] leading-snug break-words">
+                    <p
+                      class="text-text-dim line-clamp-2 cursor-pointer text-[11.5px] leading-snug break-words"
+                      onClick={() => s().issue && setOpenIssue(s().issue!.id)}
+                    >
                       {lastLine(s())}
                     </p>
                   </Show>
@@ -180,7 +197,7 @@ export default function CloudView() {
                         class="size-6 shrink-0 px-0"
                         title="Open the thread — steer this agent"
                         aria-label="Open thread"
-                        onClick={() => openPanelTo('activity', s().issue!.id)}
+                        onClick={() => setOpenIssue(s().issue!.id)}
                       >
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden>
                           <circle cx="8" cy="8" r="6" />
@@ -199,5 +216,6 @@ export default function CloudView() {
         </Show>
       </div>
     </div>
+    </Show>
   );
 }

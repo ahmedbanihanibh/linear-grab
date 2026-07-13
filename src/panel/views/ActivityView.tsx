@@ -324,7 +324,7 @@ function IssueRow(props: {
 // Screen B — Issue Detail
 // ---------------------------------------------------------------------------
 
-function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
+export function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
   const queryClient = useQueryClient();
 
   const detailQuery = createQuery(() => ({
@@ -617,10 +617,15 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
       <div class="border-border flex shrink-0 flex-col gap-1 border-b px-3 py-2">
         <div class="flex items-center gap-2">
           <Button
-            class="min-w-[68px] shrink-0 text-[11px]"
+            variant="ghost"
+            class="size-7 shrink-0 px-0"
+            title="Back to issues"
+            aria-label="Back to issues"
             onClick={props.onBack}
           >
-            <span class="inline-block min-w-[6ch] text-left">← Back</span>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+              <path d="M10.5 3.5 6 8l4.5 4.5" />
+            </svg>
           </Button>
           <Show when={issue()}>
             <span class="font-mono text-[11px] text-text-dim shrink-0">
@@ -1050,6 +1055,13 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
         <span class="ml-auto tabular-nums text-[10.5px] text-text-faint">
           {timeAgo(props.session.updatedAt)}
         </span>
+        <Show when={props.session.externalLinks?.[0]}>
+          {(link) => (
+            <ExtLink href={link().url} class="shrink-0" title="Open this run on the agent's site">
+              {link().label || 'Cursor'}
+            </ExtLink>
+          )}
+        </Show>
       </div>
 
       {/* Summary */}

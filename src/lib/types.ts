@@ -196,6 +196,8 @@ export interface LinearAgentSession {
   appUser?: { displayName: string } | null;
   /** Thread-root comment — threaded replies here steer the RUNNING agent. */
   comment?: { id: string } | null;
+  /** e.g. the session's page on cursor.com. */
+  externalLinks?: Array<{ label: string; url: string }>;
   /** Present on the workspace-wide fleet query; absent on per-issue fetches. */
   issue?: {
     id: string;

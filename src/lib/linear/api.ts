@@ -126,6 +126,7 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
               id status summary updatedAt
               appUser { displayName }
               comment { id }
+              externalLinks { label url }
               activities(last: 50) {
               nodes { id createdAt ephemeral content {
                     __typename
@@ -169,6 +170,7 @@ export async function fetchAllAgentSessions(): Promise<LinearAgentSession[]> {
           nodes {
             id status summary updatedAt createdAt
             appUser { displayName }
+            externalLinks { label url }
             issue { id identifier title url state { name color type } }
             activities(last: 3) {
               nodes { id createdAt content {
@@ -200,6 +202,7 @@ export async function fetchAllAgentSessions(): Promise<LinearAgentSession[]> {
             nodes {
               id status summary updatedAt createdAt
               appUser { displayName }
+              externalLinks { label url }
               issue { id identifier title url state { name color type } }
             }
           }
