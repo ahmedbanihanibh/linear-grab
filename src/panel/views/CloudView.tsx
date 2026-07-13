@@ -177,11 +177,15 @@ export default function CloudView() {
                     <Show when={s().issue}>
                       <Button
                         variant="ghost"
-                        class="h-6 shrink-0 px-2 text-[11px]"
+                        class="size-6 shrink-0 px-0"
                         title="Open the thread — steer this agent"
+                        aria-label="Open thread"
                         onClick={() => openPanelTo('activity', s().issue!.id)}
                       >
-                        Thread
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden>
+                          <circle cx="8" cy="8" r="6" />
+                          <circle cx="8" cy="8" r="1.6" fill="currentColor" stroke="none" />
+                        </svg>
                       </Button>
                       <ExtLink href={s().issue!.url} class="shrink-0">
                         Linear
