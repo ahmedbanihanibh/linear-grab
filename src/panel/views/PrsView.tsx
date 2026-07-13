@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import { createQuery } from '@tanstack/solid-query';
 import { fetchMyIssues } from '@/lib/linear/api';
-import { listBridgeTasks, mergePr } from '@/lib/bridge';
+import { fetchPrStatuses, listBridgeTasks, mergePr } from '@/lib/bridge';
 import { openPanelTo } from '../nav';
 import { Badge, Button, EmptyState, ExtLink, Input, StateDot, timeAgo } from '../components/ui';
 import type { LinearAttachment, LinearIssueSummary } from '@/lib/types';
@@ -39,6 +39,17 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
     refetchInterval: 10_000,
     retry: 0,
   }));
+  // Real merge state from gh (via bridge) — Linear attachments can't tell us.
+  const prStatuses = createQuery(() => ({
+    queryKey: ['pr-status', prs().map((r) => r.attachment.url).sort().join('|')],
+    queryFn: () => fetchPrStatuses(prs().map((r) => r.attachment.url)),
+    refetchInterval: 30_000,
+    retry: 0,
+    enabled: prs().length > 0,
+  }));
+  const prState = (row: PrRow) =>
+    merged().has(row.attachment.url) ? 'MERGED' : prStatuses.data?.[row.attachment.url];
+
   const isLocal = (row: PrRow) =>
     !!bridgeTasks.data?.some((t) => t.title.startsWith(row.issue.identifier));
 
@@ -180,9 +191,17 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                       Linear
                     </ExtLink>
                     <div class="ml-auto flex shrink-0 items-center gap-1">
+                      <Show when={prState(row) && prState(row) !== 'OPEN'}>
+                        <Badge
+                          class={prState(row) === 'MERGED' ? 'text-success' : 'text-text-faint'}
+                        >
+                          {prState(row) === 'MERGED' ? '✓ merged' : 'closed'}
+                        </Badge>
+                      </Show>
                       <Button
                         variant="primary"
                         class="size-7 px-0"
+                        classList={{ hidden: !!prState(row) && prState(row) !== 'OPEN' }}
                         loading={mergeBusy() === row.attachment.url}
                         disabled={merged().has(row.attachment.url)}
                         title={merged().has(row.attachment.url) ? 'Merged' : 'Squash-merge this PR (bridge gh)'}

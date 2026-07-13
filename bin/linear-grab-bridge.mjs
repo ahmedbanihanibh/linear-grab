@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.13.0';
+const VERSION = '0.15.1';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -67,6 +67,9 @@ const tasks = new Map();
 
 /** Linear Authorization header supplied by the panel (for the media proxy). */
 let linearAuth = null;
+
+/** PR state cache (gh pr view) — 60s TTL. */
+const prStatusCache = new Map();
 
 // ---- persistence -----------------------------------------------------------
 
@@ -579,6 +582,35 @@ createServer(async (req, res) => {
       });
       return res.end(Buffer.from(await upstream.arrayBuffer()));
     }
+    // Real PR states (OPEN/MERGED/CLOSED) via gh — the panel can't know
+    // merge status from Linear attachments alone.
+    if (req.method === 'POST' && url.pathname === '/pr/status') {
+      const body = await readBody(req);
+      const urls = (Array.isArray(body.urls) ? body.urls : []).slice(0, 20);
+      const statuses = {};
+      await Promise.all(
+        urls.map(async (u) => {
+          const prUrl = String(u);
+          if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(prUrl)) return;
+          const cached = prStatusCache.get(prUrl);
+          if (cached && Date.now() - cached.at < 60_000) {
+            statuses[prUrl] = cached.state;
+            return;
+          }
+          const out = await run('gh', ['pr', 'view', prUrl, '--json', 'state']);
+          try {
+            const state = JSON.parse(out ?? '').state;
+            if (state) {
+              prStatusCache.set(prUrl, { state, at: Date.now() });
+              statuses[prUrl] = state;
+            }
+          } catch {
+            /* gh missing / not accessible */
+          }
+        }),
+      );
+      return json(res, 200, { statuses });
+    }
     // Fast-merge: after reviewing the demo, one click merges the PR via gh.
     if (req.method === 'POST' && url.pathname === '/pr/merge') {
       const body = await readBody(req);
@@ -587,6 +619,7 @@ createServer(async (req, res) => {
         return json(res, 400, { error: 'invalid PR url' });
       }
       const out = await run('gh', ['pr', 'merge', prUrl, '--squash']);
+      prStatusCache.delete(prUrl);
       if (out === null) {
         return json(res, 502, { error: 'gh pr merge failed — check gh auth / merge conflicts / required checks' });
       }

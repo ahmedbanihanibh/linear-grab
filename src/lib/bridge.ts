@@ -144,6 +144,16 @@ export async function pushBridgeConfig(): Promise<void> {
   }).catch(() => undefined);
 }
 
+/** Real PR states via the bridge's gh: OPEN | MERGED | CLOSED. */
+export async function fetchPrStatuses(urls: string[]): Promise<Record<string, string>> {
+  if (!urls.length) return {};
+  const data = await call<{ statuses: Record<string, string> }>('/pr/status', {
+    method: 'POST',
+    body: JSON.stringify({ urls }),
+  });
+  return data.statuses;
+}
+
 /** One-click squash-merge via the bridge's gh. */
 export function mergePr(url: string): Promise<{ ok: boolean; output?: string }> {
   return call<{ ok: boolean; output?: string }>('/pr/merge', {

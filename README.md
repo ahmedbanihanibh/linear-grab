@@ -26,7 +26,7 @@ export default function RootLayout({ children }) {
         {children}
         {process.env.NODE_ENV === "development" && (
           <Script
-            src="https://cdn.jsdelivr.net/gh/ahmedbanihanibh/linear-grab@v0.15.0/dist/index.global.js"
+            src="https://cdn.jsdelivr.net/gh/ahmedbanihanibh/linear-grab@v0.15.1/dist/index.global.js"
             crossOrigin="anonymous"
             strategy="afterInteractive"
           />
