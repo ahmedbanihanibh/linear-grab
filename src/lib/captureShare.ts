@@ -9,6 +9,13 @@ import { dataUrlToBlob } from './elementShot';
  * any follow-up: Activity replies, Local agent messages, wherever. Uploads
  * go through the full asset chain (Linear → bridge relay → GitHub fallback).
  */
+function withTimeout<T>(promise: Promise<T>, ms = 6_000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('upload timeout')), ms)),
+  ]);
+}
+
 export async function buildCaptureBlock(): Promise<string | null> {
   const lines: string[] = [];
 
@@ -19,9 +26,8 @@ export async function buildCaptureBlock(): Promise<string | null> {
     lines.push(`- \`<${g.componentName ?? g.tagName ?? 'element'}>\`${loc}`);
     if (g.screenshotDataUrl) {
       try {
-        const url = await uploadAsset(
-          dataUrlToBlob(g.screenshotDataUrl),
-          `capture-${g.grabbedAt}.png`,
+        const url = await withTimeout(
+          uploadAsset(dataUrlToBlob(g.screenshotDataUrl), `capture-${g.grabbedAt}.png`),
         );
         lines.push(`  ![capture](${url})`);
       } catch {
@@ -35,7 +41,7 @@ export async function buildCaptureBlock(): Promise<string | null> {
     try {
       const url =
         rec.result.assetUrl ??
-        (await uploadAsset(rec.result.blob, `recording-${Date.now()}.gif`));
+        (await withTimeout(uploadAsset(rec.result.blob, `recording-${Date.now()}.gif`)));
       markRecordingUploaded(url);
       lines.push(`![recording](${url})`);
     } catch {

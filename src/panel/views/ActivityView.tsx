@@ -2,8 +2,10 @@ import {
   createSignal,
   createMemo,
   createEffect,
+  onCleanup,
   Show,
   For,
+  Index,
   type JSX,
 } from 'solid-js';
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
@@ -20,6 +22,12 @@ import {
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
 import { activatePicker } from '@/lib/picker';
+import {
+  getRecorderSnapshot,
+  subscribeRecorder,
+  startRecording,
+  stopRecording,
+} from '@/lib/recorder';
 import { buildCaptureBlock } from '@/lib/captureShare';
 import { fetchPrStatuses, listBridgeTasks, mergePr, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
@@ -38,6 +46,15 @@ import {
   Spinner,
   timeAgo,
 } from '../components/ui';
+
+/** Memoized markdown body — equal innerHTML re-assignment re-parses the DOM
+    (the comment flicker on every poll). The memo gates it entirely. */
+function CommentBody(props: { text: string }) {
+  const html = createMemo(() => renderMarkdown(props.text));
+  return (
+    <div class="lg-md text-text text-[12px] leading-relaxed break-words" innerHTML={html()} />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // ActivityView
@@ -284,22 +301,33 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
   const [attachBusy, setAttachBusy] = createSignal(false);
   const attachCaptures = async () => {
     setAttachBusy(true);
+    setSendError(null);
     try {
       const block = await buildCaptureBlock();
       if (block) setBody((prev) => `${prev ? `${prev}\n` : ''}${block}\n`);
+      else setSendError('Nothing captured yet — pick an element, capture a region, or record first.');
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Attach failed.');
     } finally {
       setAttachBusy(false);
     }
   };
 
+  // STICKY pick mode: toggles on/off — every pick (incl. react-grab's native
+  // hotkey flow) appends here until you toggle off or send. No more bouncing
+  // to Capture on pick #2.
   const pickForReply = () => {
+    if (grabSink() === 'composer') {
+      setGrabSink('capture');
+      return;
+    }
     setPickStartedAt(Date.now());
     setGrabSink('composer');
     void activatePicker().catch(() => setGrabSink('capture'));
   };
   createEffect(() => {
     if (grabSink() !== 'composer') return;
-    const fresh = (grabQuery.data ?? []).filter((g) => g.grabbedAt >= pickStartedAt());
+    const fresh = (grabQuery.data ?? []).filter((g) => g.grabbedAt > pickStartedAt());
     if (!fresh.length) return;
     const refs = fresh
       .map((g) => {
@@ -310,8 +338,27 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
       })
       .join('\n');
     setBody((prev) => `${prev ? `${prev}\n` : ''}${refs}\n`);
-    setGrabSink('capture');
+    setPickStartedAt(Math.max(...fresh.map((g) => g.grabbedAt))); // stay in pick mode
   });
+
+  // Record a GIF straight from the thread; auto-attach when it's ready.
+  const [recSnap, setRecSnap] = createSignal(getRecorderSnapshot());
+  onCleanup(subscribeRecorder(setRecSnap));
+  let recInitiatedHere = false;
+  createEffect(() => {
+    if (recSnap().phase === 'ready' && recInitiatedHere) {
+      recInitiatedHere = false;
+      void attachCaptures();
+    }
+  });
+  const toggleRecord = () => {
+    if (recSnap().phase === 'recording') {
+      void stopRecording();
+    } else {
+      recInitiatedHere = true;
+      void startRecording();
+    }
+  };
 
   // Real PR states for the attachment rows (gh via bridge).
   const PR_RX = /github\.com\/[^/]+\/[^/]+\/pull\/\d+/i;
@@ -394,6 +441,7 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     onSuccess: () => {
       setBody('');
       setSendError(null);
+      setGrabSink('capture'); // end sticky pick mode with the sent message
       void queryClient.invalidateQueries({ queryKey: ['issue', props.issueId] });
       refreshRunningAgents();
     },
@@ -550,8 +598,10 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
             <span class="text-[10.5px] font-semibold uppercase tracking-wide text-text-dim">
               Comments
             </span>
-            <For each={issue()!.comments}>
-              {(comment) => (
+            <Index each={issue()!.comments}>
+              {(commentA) => {
+                const comment = commentA();
+                return (
                 <div class="flex flex-col gap-0.5">
                   <div class="flex items-center gap-1.5">
                     <span class="text-[11px] font-medium text-text-dim">
@@ -564,13 +614,11 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
                       {timeAgo(comment.createdAt)}
                     </span>
                   </div>
-                  <div
-                    class="lg-md text-text text-[12px] leading-relaxed break-words"
-                    innerHTML={renderMarkdown(comment.body)}
-                  />
+                  <CommentBody text={comment.body} />
                 </div>
-              )}
-            </For>
+                );
+              }}
+            </Index>
           </div>
         </Show>
 
@@ -627,8 +675,12 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
           </Select>
           <Button
             variant="ghost"
-            class="size-7 shrink-0 px-0"
-            title="Pick elements on the page — their source refs drop into this reply"
+            class={`size-7 shrink-0 px-0 ${grabSink() === 'composer' ? 'text-accent' : ''}`}
+            title={
+              grabSink() === 'composer'
+                ? 'Pick mode ON — every pick appends here. Click to stop.'
+                : 'Pick elements — refs append to this reply (stays on until toggled off or sent)'
+            }
             aria-label="Pick element for reply"
             onClick={pickForReply}
           >
@@ -636,6 +688,26 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
               <circle cx="8" cy="8" r="2.2" />
               <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
             </svg>
+          </Button>
+          <Button
+            variant="ghost"
+            class={`size-7 shrink-0 px-0 ${recSnap().phase === 'recording' ? 'text-danger' : ''}`}
+            title={
+              recSnap().phase === 'recording'
+                ? 'Stop recording — the GIF auto-attaches to this reply'
+                : 'Record a GIF from this thread (auto-attaches when done)'
+            }
+            aria-label="Record GIF"
+            onClick={toggleRecord}
+          >
+            <Show
+              when={recSnap().phase === 'recording'}
+              fallback={<span class="bg-danger inline-block size-2.5 rounded-full" aria-hidden />}
+            >
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                <rect x="3" y="3" width="10" height="10" rx="1.5" />
+              </svg>
+            </Show>
           </Button>
           <Button
             variant="ghost"
