@@ -187,11 +187,12 @@ export function Section(props: ParentProps<{ title: string }>) {
   );
 }
 
-export function Badge(props: ParentProps<{ color?: string; class?: string }>) {
+export function Badge(props: ParentProps<{ color?: string; class?: string; title?: string }>) {
   return (
     <span
       class={`bg-surface-3 text-text-dim inline-flex h-[18px] items-center gap-1 rounded-full px-2 text-[10.5px] font-medium whitespace-nowrap ${props.class ?? ''}`}
       style={props.color ? { color: props.color } : undefined}
+      data-tip={props.title || undefined}
     >
       {props.children}
     </span>

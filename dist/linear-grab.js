@@ -27658,11 +27658,12 @@ function Oj(e) {
 	return (() => {
 		var t = pj();
 		return P(t, () => e.children), D((n) => {
-			var r = `bg-surface-3 text-text-dim inline-flex h-[18px] items-center gap-1 rounded-full px-2 text-[10.5px] font-medium whitespace-nowrap ${e.class ?? ""}`, i = e.color ? { color: e.color } : void 0;
-			return r !== n.e && st(t, n.e = r), n.t = ut(t, i, n.t), n;
+			var r = `bg-surface-3 text-text-dim inline-flex h-[18px] items-center gap-1 rounded-full px-2 text-[10.5px] font-medium whitespace-nowrap ${e.class ?? ""}`, i = e.color ? { color: e.color } : void 0, a = e.title || void 0;
+			return r !== n.e && st(t, n.e = r), n.t = ut(t, i, n.t), a !== n.a && it(t, "data-tip", n.a = a), n;
 		}, {
 			e: void 0,
-			t: void 0
+			t: void 0,
+			a: void 0
 		}), t;
 	})();
 }
