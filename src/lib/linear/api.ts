@@ -115,6 +115,7 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
             nodes {
               id status summary updatedAt
               appUser { displayName }
+              comment { id }
               activities(first: 50) {
               nodes { id createdAt content {
                     __typename

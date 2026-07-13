@@ -189,6 +189,8 @@ export interface LinearAgentSession {
   updatedAt: string;
   createdAt?: string;
   appUser?: { displayName: string } | null;
+  /** Thread-root comment — threaded replies here steer the RUNNING agent. */
+  comment?: { id: string } | null;
   /** Present on the workspace-wide fleet query; absent on per-issue fetches. */
   issue?: {
     id: string;

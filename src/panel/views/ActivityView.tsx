@@ -248,17 +248,21 @@ function IssueListScreen(props: { onSelect: (id: string) => void }) {
               {(vRow) => {
                 const issue = createMemo(() => issues()[vRow.index]);
                 return (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${vRow.start}px)`,
-                    }}
-                  >
-                    <IssueRow issue={issue()} local={isLocal(issue())} onSelect={props.onSelect} />
-                  </div>
+                  // Filter changes shrink the list before the virtualizer
+                  // recomputes — stale indexes yield undefined; render nothing.
+                  <Show when={issue()}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${vRow.start}px)`,
+                      }}
+                    >
+                      <IssueRow issue={issue()} local={isLocal(issue())} onSelect={props.onSelect} />
+                    </div>
+                  </Show>
                 );
               }}
             </For>
@@ -522,9 +526,24 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
    * a NEW cloud agent; replying INSIDE an agent session's comment thread
    * (parentId = thread root) steers the agent already running there.
    */
-  const agentThreads = createMemo(() =>
-    detailQuery.data ? findAgentThreadRoots(detailQuery.data.comments) : [],
-  );
+  const agentThreads = createMemo(() => {
+    const fromComments = detailQuery.data ? findAgentThreadRoots(detailQuery.data.comments) : [];
+    // AgentSession.comment is the AUTHORITATIVE thread root — the comment
+    // heuristic misses placeholder-bodied roots ('This thread is for an agent
+    // session…' by an author it can't classify), which left running agents
+    // unsteerable. Merge both, sessions first.
+    const seen = new Set(fromComments.map((c) => c.id));
+    const fromSessions = (sessionsQuery.data ?? [])
+      .filter((sn) => sn.comment?.id && !seen.has(sn.comment.id))
+      .map((sn) => ({
+        id: sn.comment!.id,
+        createdAt: sn.updatedAt,
+        body: '',
+        user: { displayName: sn.appUser?.displayName ?? 'agent', app: true },
+        parent: null,
+      }));
+    return [...fromSessions, ...fromComments];
+  });
 
   const [target, setTarget] = createSignal<string>('comment');
   let userSetTarget = false;
@@ -542,6 +561,14 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
   createEffect(() => {
     if (userSetTarget) return;
     if (localTask() && (target() === 'comment' || target() === 'new')) setTarget('local');
+  });
+  // Sessions load after comments — when a steerable thread appears late,
+  // upgrade from the spawn-new default (steering ≠ spawning a 2nd agent).
+  createEffect(() => {
+    if (userSetTarget) return;
+    const threads = agentThreads();
+    if (threads.length && (target() === 'comment' || target() === 'new'))
+      setTarget(`thread:${threads[0].id}`);
   });
 
   const sendMutation = createMutation(() => ({
@@ -982,6 +1009,22 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
     props.session.activities.filter((a) => a.content?.body || a.content?.action).slice(-15),
   );
 
+  // Follow the live feed: stick to the BOTTOM (newest activity) as polls
+  // append, but never yank the view while the user is scrolled up reading.
+  let feedEl: HTMLDivElement | undefined;
+  let nearBottom = true;
+  const onFeedScroll = () => {
+    if (!feedEl) return;
+    nearBottom = feedEl.scrollTop + feedEl.clientHeight >= feedEl.scrollHeight - 40;
+  };
+  createEffect(() => {
+    const len = recentActivities().length;
+    if (!feedEl || !len || !nearBottom) return;
+    requestAnimationFrame(() => {
+      if (feedEl) feedEl.scrollTop = feedEl.scrollHeight;
+    });
+  });
+
   return (
     <div class="bg-surface border-border rounded-lg border p-2.5 flex flex-col gap-1.5">
       {/* Session header */}
@@ -1007,7 +1050,11 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
       {/* Live activity timeline — Index + memoized markdown so the 8s poll
           never rebuilds unchanged rows (the flicker rule). */}
       <Show when={recentActivities().length > 0}>
-        <div class="border-border mt-0.5 flex max-h-64 flex-col gap-1 overflow-y-auto border-t pt-1.5 pl-0.5 pr-3">
+        <div
+          ref={feedEl}
+          onScroll={onFeedScroll}
+          class="border-border mt-0.5 flex max-h-64 flex-col gap-1 overflow-y-auto border-t pt-1.5 pl-0.5 pr-3"
+        >
           <Index each={recentActivities()}>
             {(activity) => (
               <Show
