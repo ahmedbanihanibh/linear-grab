@@ -1,4 +1,5 @@
 import { toCanvas, getFontEmbedCSS } from 'html-to-image';
+import { captureRegionSliced, prewarmSnapshot } from './domSnapshot';
 import { callWorker } from './workerClient';
 
 /**
@@ -20,9 +21,29 @@ function cachedFontCss(node: HTMLElement): Promise<string> {
   return fontCssPromise;
 }
 
-/** Skip container context when the subtree is huge — serialization would lag.
-    (The DOM clone is the one part that CANNOT leave the main thread.) */
-const MAX_NODES = 1_500;
+/** Move ALL one-time costs (font-CSS harvest, UA-defaults iframe) off the
+    first pick — call during init idle time. */
+export function prewarmCapture(): void {
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(
+      () => {
+        prewarmSnapshot();
+        void cachedFontCss(document.body);
+      },
+      { timeout: 3000 },
+    );
+  } else {
+    setTimeout(() => {
+      prewarmSnapshot();
+      void cachedFontCss(document.body);
+    }, 1500);
+  }
+}
+
+/** Cap for the SYNC fallback path only — the sliced capturer yields, so it
+    tolerates much larger subtrees. */
+const MAX_NODES_SLICED = 4_000;
+const MAX_NODES_SYNC = 1_000;
 
 export async function captureElementShot(target: Element): Promise<string | null> {
   try {
@@ -38,22 +59,33 @@ export async function captureElementShot(target: Element): Promise<string | null
     if (!target.isConnected) return null;
 
     let container = pickContainer(target);
-    if (container.querySelectorAll('*').length > MAX_NODES) {
-      container = target; // too heavy — element-only beats a laggy page
+    const nodeCount = container.querySelectorAll('*').length;
+    if (nodeCount > MAX_NODES_SLICED) {
+      container = target; // truly enormous — element-only
     }
 
-    const canvas = await toCanvas(container as HTMLElement, {
-      pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
-      fontEmbedCSS: await cachedFontCss(container as HTMLElement),
-      filter: (node: HTMLElement) => {
-        if (!(node instanceof Element)) return true;
-        // Never capture our own panel or react-grab's overlay chrome.
-        if (node.id === 'linear-grab-root') return false;
-        const tag = node.tagName?.toLowerCase() ?? '';
-        if (tag === 'overlay-canvas' || tag.startsWith('react-grab')) return false;
-        return true;
-      },
-    });
+    let canvas: HTMLCanvasElement;
+    try {
+      // Primary: time-sliced capturer — yields every ~6ms, page never freezes.
+      canvas = await captureRegionSliced(
+        container as HTMLElement,
+        await cachedFontCss(container as HTMLElement),
+      );
+    } catch {
+      // Fallback: html-to-image (synchronous clone) on a tightly capped region.
+      if (container !== target && nodeCount > MAX_NODES_SYNC) container = target;
+      canvas = await toCanvas(container as HTMLElement, {
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+        fontEmbedCSS: await cachedFontCss(container as HTMLElement),
+        filter: (node: HTMLElement) => {
+          if (!(node instanceof Element)) return true;
+          if (node.id === 'linear-grab-root') return false;
+          const tag = node.tagName?.toLowerCase() ?? '';
+          if (tag === 'overlay-canvas' || tag.startsWith('react-grab')) return false;
+          return true;
+        },
+      });
+    }
     if (container !== target) drawHighlight(canvas, container, target);
     return await encodeCanvas(canvas);
   } catch {

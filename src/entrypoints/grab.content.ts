@@ -1,5 +1,6 @@
 import { init, getGlobalApi, registerPlugin } from 'react-grab';
 import { createSelectionPipeline } from '@/lib/picker';
+import { prewarmCapture } from '@/lib/elementShot';
 import type { GrabbedElement, PageMessage } from '@/lib/types';
 
 /**
@@ -28,6 +29,7 @@ export default defineContentScript({
       try {
         init();
         registerPlugin(pipeline.plugin);
+        prewarmCapture();
       } catch {
         started = false;
       }

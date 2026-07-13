@@ -1,6 +1,6 @@
 import { isExtensionContext } from './env';
 import { setLastGrab } from './storage';
-import { captureElementShot } from './elementShot';
+import { captureElementShot, prewarmCapture } from './elementShot';
 import type { GrabbedElement, RuntimeMessage } from './types';
 
 /**
@@ -145,6 +145,7 @@ export async function ensurePagePicker(): Promise<void> {
     () => rg.getGlobalApi() as PickerApi | null,
   );
   rg.registerPlugin(pipeline.plugin);
+  prewarmCapture(); // one-time capture costs paid at idle, not on first pick
   window.addEventListener('react-grab:element-selected', (event) => {
     pipeline.handleSelection(event.detail.elements ?? []);
   });

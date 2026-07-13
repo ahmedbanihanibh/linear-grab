@@ -350,8 +350,8 @@ export default function DraftView(props: { onCreated: () => void }) {
           />
         </Field>
 
-        {/* Tier segmented control */}
-        <div class="flex items-center gap-1.5">
+        {/* Tier segmented control — label left, chooser right */}
+        <div class="flex items-center justify-between gap-1.5">
           <span class="text-text-faint text-[11px]">Model:</span>
           <div class="flex rounded-md border border-border overflow-hidden">
             {(['fast', 'best'] as const).map((t) => (
