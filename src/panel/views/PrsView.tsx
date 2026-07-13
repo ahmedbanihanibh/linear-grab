@@ -60,9 +60,20 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
     const q = search().trim().toLowerCase();
     return prs().filter((row) => {
       const stateType = row.issue.state.type;
-      if (filter() === 'review' && stateType !== 'started') return false;
-      if (filter() === 'open' && !(stateType === 'started' || stateType === 'unstarted' || stateType === 'backlog')) return false;
-      if (filter() === 'done' && stateType !== 'completed') return false;
+      // Buckets follow the PR's REAL state first (bridge gh lookup) — a
+      // closed/merged PR is never 'Open' no matter what the issue says.
+      const pr = prState(row); // 'MERGED' | 'CLOSED' | 'OPEN' | undefined
+      if (filter() === 'review' && (stateType !== 'started' || pr === 'MERGED' || pr === 'CLOSED'))
+        return false;
+      if (
+        filter() === 'open' &&
+        (pr === 'MERGED' ||
+          pr === 'CLOSED' ||
+          !(stateType === 'started' || stateType === 'unstarted' || stateType === 'backlog'))
+      )
+        return false;
+      if (filter() === 'done' && !(stateType === 'completed' || pr === 'MERGED' || pr === 'CLOSED'))
+        return false;
       if (
         q &&
         ![row.attachment.title, row.issue.title, row.issue.identifier]

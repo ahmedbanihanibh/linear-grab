@@ -44907,8 +44907,8 @@ function m0(e) {
 	})), a = (e) => g().has(e.attachment.url) ? "MERGED" : i.data?.statuses[e.attachment.url], o = (e) => !!r.data?.some((t) => t.title.startsWith(e.issue.identifier)), [s, c] = T("all"), [l, u] = T(""), d = k(() => {
 		let e = l().trim().toLowerCase();
 		return n().filter((t) => {
-			let n = t.issue.state.type;
-			return !(s() === "review" && n !== "started" || s() === "open" && !(n === "started" || n === "unstarted" || n === "backlog") || s() === "done" && n !== "completed" || e && ![
+			let n = t.issue.state.type, r = a(t);
+			return !(s() === "review" && (n !== "started" || r === "MERGED" || r === "CLOSED") || s() === "open" && (r === "MERGED" || r === "CLOSED" || !(n === "started" || n === "unstarted" || n === "backlog")) || s() === "done" && !(n === "completed" || r === "MERGED" || r === "CLOSED") || e && ![
 				t.attachment.title,
 				t.issue.title,
 				t.issue.identifier
