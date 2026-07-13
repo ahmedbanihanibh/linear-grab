@@ -15,6 +15,8 @@ export interface GrabbedElement {
   source?: GrabbedSource | null;
   /** Formatted multi-line component owner stack. */
   stackContext?: string;
+  /** Highlighted screenshot of the element in its container (data URL, best-effort). */
+  screenshotDataUrl?: string;
   pageUrl: string;
   grabbedAt: number;
 }

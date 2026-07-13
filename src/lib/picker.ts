@@ -1,5 +1,6 @@
 import { isExtensionContext } from './env';
 import { setLastGrab } from './storage';
+import { captureElementShot } from './elementShot';
 import type { GrabbedElement, RuntimeMessage } from './types';
 
 /**
@@ -33,6 +34,42 @@ export function mapSelectedElement(el: {
   };
 }
 
+/**
+ * Selection pipeline shared by both hosts (page mode and the extension's
+ * MAIN-world script). react-grab's selection EVENT carries flat data only, so
+ * the plugin hook grabs the real Element for a highlighted screenshot. The
+ * capture is async (~0.5s): publish the grab instantly for snappy UX, then
+ * re-publish enriched with the screenshot when it resolves.
+ */
+export function createSelectionPipeline(publish: (els: GrabbedElement[]) => void) {
+  let pendingShot: Promise<string | null> | null = null;
+
+  return {
+    plugin: {
+      name: 'linear-grab',
+      hooks: {
+        onElementSelect: (element: Element) => {
+          pendingShot = captureElementShot(element);
+        },
+      },
+    },
+    handleSelection(payloads: Array<Parameters<typeof mapSelectedElement>[0]>) {
+      const elements = payloads.map(mapSelectedElement);
+      if (!elements.length) return;
+      publish(elements);
+      const shot = pendingShot;
+      pendingShot = null;
+      if (shot) {
+        void shot.then((dataUrl) => {
+          if (dataUrl) {
+            publish([{ ...elements[0], screenshotDataUrl: dataUrl }, ...elements.slice(1)]);
+          }
+        });
+      }
+    },
+  };
+}
+
 let pageStarted = false;
 
 /**
@@ -50,9 +87,10 @@ export async function ensurePagePicker(): Promise<void> {
     pageStarted = false;
     return;
   }
+  const pipeline = createSelectionPipeline((els) => void setLastGrab(els));
+  rg.registerPlugin(pipeline.plugin);
   window.addEventListener('react-grab:element-selected', (event) => {
-    const elements = (event.detail.elements ?? []).map(mapSelectedElement);
-    if (elements.length) void setLastGrab(elements);
+    pipeline.handleSelection(event.detail.elements ?? []);
   });
 }
 

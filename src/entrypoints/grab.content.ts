@@ -1,6 +1,6 @@
-import { init, getGlobalApi } from 'react-grab';
-import { mapSelectedElement } from '@/lib/picker';
-import type { PageMessage } from '@/lib/types';
+import { init, getGlobalApi, registerPlugin } from 'react-grab';
+import { createSelectionPipeline } from '@/lib/picker';
+import type { GrabbedElement, PageMessage } from '@/lib/types';
 
 /**
  * MAIN-world script: must run in the page's JS world to reach React fiber internals
@@ -14,11 +14,17 @@ export default defineContentScript({
   main() {
     let started = false;
 
+    const pipeline = createSelectionPipeline((elements: GrabbedElement[]) => {
+      const msg: PageMessage = { __lineargrab: true, type: 'selected', elements };
+      window.postMessage(msg, '*');
+    });
+
     const ensureStarted = () => {
       if (started) return;
       started = true;
       try {
         init();
+        registerPlugin(pipeline.plugin);
       } catch {
         started = false;
       }
@@ -35,12 +41,10 @@ export default defineContentScript({
     });
 
     // react-grab dispatches this on every selection; its typings augment
-    // WindowEventMap, so `event.detail.elements` is fully typed.
+    // WindowEventMap. The pipeline publishes instantly, then again with the
+    // element screenshot once captured.
     window.addEventListener('react-grab:element-selected', (event) => {
-      const elements = (event.detail.elements ?? []).map(mapSelectedElement);
-      if (!elements.length) return;
-      const msg: PageMessage = { __lineargrab: true, type: 'selected', elements };
-      window.postMessage(msg, '*');
+      pipeline.handleSelection(event.detail.elements ?? []);
     });
   },
 });

@@ -22,6 +22,7 @@ import {
 } from '@/lib/recorder';
 import { fetchTeams, createIssue } from '@/lib/linear/api';
 import { uploadFileToLinear } from '@/lib/linear/upload';
+import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
 import { composeIssueBody } from '@/lib/ai/prompt';
 import {
@@ -267,6 +268,7 @@ export default function DraftView(props: { onCreated: () => void }) {
   // ---- Create issue mutation -------------------------------------------------
 
   const [createError, setCreateError] = createSignal<string | null>(null);
+  const [createWarning, setCreateWarning] = createSignal<string | null>(null);
   const [createdIssue, setCreatedIssue] = createSignal<{
     identifier: string;
     url: string;
@@ -287,6 +289,18 @@ export default function DraftView(props: { onCreated: () => void }) {
       if (recording && attachRec()) {
         const assetUrl = await ensureRecordingUploaded();
         body += `\n\n### Recording\n![Screen recording](${assetUrl})`;
+      }
+      // Attach the highlighted element screenshot — best-effort: a failed
+      // upload must never block the issue itself.
+      const shot = grab()?.screenshotDataUrl;
+      if (shot) {
+        try {
+          const url = await uploadFileToLinear(dataUrlToBlob(shot), `element-${Date.now()}.png`);
+          body += `\n\n### Element location\n![Highlighted element in context](${url})`;
+          setCreateWarning(null);
+        } catch {
+          setCreateWarning('Element screenshot upload failed — issue created without it.');
+        }
       }
       return createIssue({
         teamId: teamId(),
@@ -383,6 +397,17 @@ export default function DraftView(props: { onCreated: () => void }) {
                     {el().stackContext}
                   </pre>
                 </details>
+              </Show>
+              {/* Highlighted screenshot of the element in context — attached to the issue on create. */}
+              <Show when={el().screenshotDataUrl}>
+                <img
+                  src={el().screenshotDataUrl}
+                  alt="Element location screenshot"
+                  class="border-border bg-bg max-h-32 w-full rounded-md border object-contain"
+                />
+                <span class="text-text-faint text-[10.5px]">
+                  Element screenshot — attached to the issue on create.
+                </span>
               </Show>
             </div>
           )}
@@ -717,6 +742,10 @@ export default function DraftView(props: { onCreated: () => void }) {
       <div class="flex flex-col gap-2">
         <Show when={createError()}>
           <ErrorNote message={createError()!} />
+        </Show>
+
+        <Show when={createWarning()}>
+          <p class="text-warn text-[11px] leading-snug">{createWarning()}</p>
         </Show>
 
         <Show when={createdIssue()}>
