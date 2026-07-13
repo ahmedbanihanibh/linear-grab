@@ -153,10 +153,17 @@ export async function captureRegionSliced(
     `<div xmlns="http://www.w3.org/1999/xhtml">${serialized}</div>` +
     `</foreignObject></svg>`;
 
+  // Blob URL instead of a data URL: skips the synchronous encodeURIComponent
+  // pass over a megabyte-scale string (a measurable main-thread lump).
+  const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
   const img = new Image();
   img.decoding = 'async';
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  await img.decode(); // async rasterize — no sync decode on draw
+  img.src = svgUrl;
+  try {
+    await img.decode(); // async rasterize — no sync decode on draw
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
 
   const scale = Math.min(window.devicePixelRatio || 1, 1.5);
   const canvas = document.createElement('canvas');

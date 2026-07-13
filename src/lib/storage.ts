@@ -44,20 +44,58 @@ export async function saveSettings(patch: Partial<Settings>): Promise<Settings> 
   return next;
 }
 
+/* Screenshots are multi-MB data URLs — persisting them INSIDE the grab list
+   meant every publish pass re-stringified megabytes on the main thread (a
+   real pick-freeze source). They live under separate per-grab keys instead;
+   the list itself stays tiny metadata. */
+const SHOT_PREFIX = 'linear-grab:shot:';
+const shotKey = (grabbedAt: number) => `${SHOT_PREFIX}${grabbedAt}`;
+
 /** Latest picker capture. Session-scoped: chrome.storage.session / sessionStorage. */
 export async function getLastGrab(): Promise<GrabbedElement[] | null> {
   if (isExtensionContext) {
     const record = await chrome.storage.session.get(LAST_GRAB_KEY);
-    return (record[LAST_GRAB_KEY] as GrabbedElement[] | undefined) ?? null;
+    const metas = (record[LAST_GRAB_KEY] as GrabbedElement[] | undefined) ?? null;
+    if (!metas?.length) return metas;
+    const shots = await chrome.storage.session.get(metas.map((m) => shotKey(m.grabbedAt)));
+    return metas.map((m) => ({
+      ...m,
+      screenshotDataUrl: (shots[shotKey(m.grabbedAt)] as string | undefined) ?? undefined,
+    }));
   }
-  return readPageJson<GrabbedElement[]>(sessionStorage, PAGE_GRAB_KEY);
+  const metas = readPageJson<GrabbedElement[]>(sessionStorage, PAGE_GRAB_KEY);
+  if (!metas?.length) return metas;
+  return metas.map((m) => ({
+    ...m,
+    screenshotDataUrl: sessionStorage.getItem(shotKey(m.grabbedAt)) ?? undefined,
+  }));
 }
 
 export async function setLastGrab(elements: GrabbedElement[]): Promise<void> {
+  const metas = elements.map(({ screenshotDataUrl: _shot, ...meta }) => meta);
   if (isExtensionContext) {
-    await chrome.storage.session.set({ [LAST_GRAB_KEY]: elements });
+    const shotWrites: Record<string, string> = {};
+    for (const el of elements) {
+      if (el.screenshotDataUrl) shotWrites[shotKey(el.grabbedAt)] = el.screenshotDataUrl;
+    }
+    await chrome.storage.session.set({ [LAST_GRAB_KEY]: metas, ...shotWrites });
   } else {
-    sessionStorage.setItem(PAGE_GRAB_KEY, JSON.stringify(elements));
+    for (const el of elements) {
+      if (el.screenshotDataUrl) {
+        try {
+          sessionStorage.setItem(shotKey(el.grabbedAt), el.screenshotDataUrl);
+        } catch {
+          /* quota — skip the shot, keep the grab */
+        }
+      }
+    }
+    // Drop shots whose grab is gone.
+    const live = new Set(metas.map((m) => shotKey(m.grabbedAt)));
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith(SHOT_PREFIX) && !live.has(key)) sessionStorage.removeItem(key);
+    }
+    sessionStorage.setItem(PAGE_GRAB_KEY, JSON.stringify(metas));
     emit('grab');
   }
 }
