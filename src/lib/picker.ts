@@ -7,6 +7,10 @@ import type { GrabbedElement, RuntimeMessage } from './types';
 /** Fired on window after a local-mode auto-copy so the pill can flash "Copied". */
 export const CONTEXT_COPIED_EVENT = 'linear-grab:context-copied';
 
+/** Fired when the picker activates — the panel minimizes so the page is clear
+    for hovering/selecting (same choreography as recording). */
+export const PICKER_ACTIVATED_EVENT = 'linear-grab:picker-activated';
+
 // Local-workflow auto-copy: at most once per grab, preferring the pass that
 // carries source info; falls back to a source-less copy shortly after (prod
 // builds have no fiber debug data).
@@ -203,6 +207,7 @@ export async function activatePicker(): Promise<void> {
   }
   await ensurePagePicker();
   const rg = await import('react-grab');
+  window.dispatchEvent(new CustomEvent(PICKER_ACTIVATED_EVENT));
   rg.getGlobalApi()?.activate();
 }
 

@@ -1,7 +1,12 @@
 import { render } from 'solid-js/web';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import App, { LinearLogo } from '@/panel/App';
-import { activatePicker, ensurePagePicker, CONTEXT_COPIED_EVENT } from '@/lib/picker';
+import {
+  activatePicker,
+  ensurePagePicker,
+  CONTEXT_COPIED_EVENT,
+  PICKER_ACTIVATED_EVENT,
+} from '@/lib/picker';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
 import { subscribeRunningAgents, type RunningAgentIssue } from '@/lib/agentWatch';
 import { getRecorderSnapshot, subscribeRecorder, stopRecording } from '@/lib/recorder';
@@ -184,7 +189,19 @@ function PagePanel(props: { defaultOpen: boolean }) {
       setTimeout(() => setCopiedFlash(false), 1600);
     };
     window.addEventListener(CONTEXT_COPIED_EVENT, onCopied);
-    onCleanup(() => window.removeEventListener(CONTEXT_COPIED_EVENT, onCopied));
+
+    // Picker activated → minimize (like recording) so the page is clear to
+    // hover/select; the grab landing reopens the panel in cloud mode.
+    const onPickerActivated = () => {
+      setMinimapOpen(false);
+      setOpen(false);
+    };
+    window.addEventListener(PICKER_ACTIVATED_EVENT, onPickerActivated);
+
+    onCleanup(() => {
+      window.removeEventListener(CONTEXT_COPIED_EVENT, onCopied);
+      window.removeEventListener(PICKER_ACTIVATED_EVENT, onPickerActivated);
+    });
     const unsubAgents = subscribeRunningAgents(setRunning);
 
     // Recording choreography: minimize while capturing so the recording shows
