@@ -3,6 +3,8 @@ import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { getSettings, saveSettings } from '@/lib/storage';
 import { isExtensionContext } from '@/lib/env';
 import { fetchViewer, fetchTeams, fetchAgents, fetchProjects, fetchLabels } from '@/lib/linear/api';
+import { fetchBridgeHealth } from '@/lib/bridge';
+import { pickShareable, SHAREABLE_KEYS } from '@/lib/projectConfig';
 import { oauthLogin, disconnectLinear } from '@/lib/linear/auth';
 import { MODELS, resolveProvider } from '@/lib/ai/providers';
 import { listSlackChannels } from '@/lib/notify';
@@ -14,6 +16,7 @@ import {
   Section,
   Textarea,
   ErrorNote,
+  Badge,
 } from '../components/ui';
 import { DEFAULT_AGENT_INSTRUCTIONS } from '@/lib/ai/prompt';
 import type { Settings, AiProvider } from '@/lib/types';
@@ -64,6 +67,29 @@ export default function SettingsView() {
     queryFn: fetchProjects,
     enabled: connected(),
   }));
+  const healthQ = createQuery(() => ({
+    queryKey: ['bridge-health'],
+    queryFn: fetchBridgeHealth,
+    retry: 0,
+  }));
+  const [copiedConfig, setCopiedConfig] = createSignal(false);
+  const copyProjectConfig = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(pickShareable(s()), null, 2) + '\n');
+      setCopiedConfig(true);
+      setTimeout(() => setCopiedConfig(false), 1800);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+  const applyProjectConfig = () => {
+    const cfg = healthQ.data?.projectConfig;
+    if (!cfg) return;
+    const patch: Record<string, unknown> = {};
+    for (const k of SHAREABLE_KEYS) if (cfg[k] !== undefined) patch[k] = cfg[k];
+    void update(patch);
+  };
+
   const labelsQ = createQuery(() => ({
     queryKey: ['linear-labels'],
     queryFn: fetchLabels,
@@ -669,6 +695,50 @@ export default function SettingsView() {
             }}
           />
         </Field>
+      </Section>
+
+      {/* ── PROJECT CONFIG — committed, shareable defaults ─────────────────── */}
+      <Section title="Project config (.lineargrab.json)">
+        <p class="text-text-faint text-[10.5px] leading-snug">
+          A committed <code>.lineargrab.json</code> at the repo root (where the
+          bridge runs) shares team/project/labels, skills, staging branch, and
+          workflow defaults with every machine and teammate — it seeds any
+          setting you haven't set locally. Secrets never belong in it.
+        </p>
+        <div class="flex items-center gap-2">
+          <Show
+            when={healthQ.data?.projectConfig}
+            fallback={
+              <Badge title="No .lineargrab.json found at the bridge's cwd (or bridge offline / outdated)">
+                not detected
+              </Badge>
+            }
+          >
+            <Badge class="text-success">detected</Badge>
+            <Button
+              variant="ghost"
+              class="h-7 px-2 text-[11px]"
+              title="Overwrite your local settings with every value from the repo's config"
+              onClick={applyProjectConfig}
+            >
+              Apply all
+            </Button>
+          </Show>
+          <Button
+            variant="ghost"
+            class="h-7 px-2 text-[11px]"
+            title={
+              copiedConfig()
+                ? 'Copied!'
+                : 'Copy your current shareable settings as .lineargrab.json — commit it to the repo root'
+            }
+            onClick={() => void copyProjectConfig()}
+          >
+            <span class="inline-block min-w-[10ch] text-center">
+              {copiedConfig() ? 'Copied ✓' : 'Copy config'}
+            </span>
+          </Button>
+        </div>
       </Section>
 
       {/* ── 2.5 ASSET UPLOADS FALLBACK ────────────────────────────────────────── */}

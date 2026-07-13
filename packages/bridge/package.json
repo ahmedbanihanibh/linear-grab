@@ -1,6 +1,6 @@
 {
   "name": "linear-grab-bridge",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Local bridge for Linear Grab — delegate issues from the browser panel to headless Claude Code sessions running in your repo, with live status and an upload relay.",
   "type": "module",
   "bin": {

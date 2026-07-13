@@ -8,10 +8,11 @@ import RunningView from './views/RunningView';
 import LocalView from './views/LocalView';
 import PrsView from './views/PrsView';
 import SettingsView from './views/SettingsView';
-import { subscribeStorage } from '@/lib/storage';
+import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
 import { subscribeGrabBroadcast } from '@/lib/picker';
 import { wireIdbCache } from '@/lib/idbCache';
-import { bridgeBase, listBridgeTasks, pushBridgeConfig } from '@/lib/bridge';
+import { bridgeBase, fetchBridgeHealth, listBridgeTasks, pushBridgeConfig } from '@/lib/bridge';
+import { seedFromConfig } from '@/lib/projectConfig';
 import { fetchAllAgentSessions } from '@/lib/linear/api';
 import { setLinearMediaProxy } from './components/markdown';
 import { grabSink, requestedTab, type PanelTab } from './nav';
@@ -126,6 +127,15 @@ export default function App(props: {
     const syncBridge = () => {
       void bridgeBase().then(setLinearMediaProxy);
       void pushBridgeConfig();
+      // Committed .lineargrab.json seeds settings the user hasn't set locally
+      // — clone the repo, start the bridge, and the panel arrives configured.
+      void fetchBridgeHealth()
+        .then(async (h) => {
+          if (!h.projectConfig) return;
+          const patch = seedFromConfig(await getSettings(), h.projectConfig);
+          if (patch) await saveSettings(patch);
+        })
+        .catch(() => {});
     };
     syncBridge();
     const unsubStorage = subscribeStorage((area) => {

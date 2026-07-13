@@ -13,6 +13,8 @@ export interface BridgeHealth {
   version: string;
   cwd: string;
   active: number;
+  /** Committed .lineargrab.json at the bridge's cwd — shareable project defaults. */
+  projectConfig?: Partial<import('./types').Settings> | null;
 }
 
 export interface BridgeUsage {

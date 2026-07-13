@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.21.0';
+const VERSION = '0.22.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -465,11 +465,19 @@ createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
 
     if (req.method === 'GET' && url.pathname === '/health') {
+      // Committed project config — read fresh each poll so edits apply live.
+      let projectConfig = null;
+      try {
+        projectConfig = JSON.parse(readFileSync(join(DIR, '.lineargrab.json'), 'utf8'));
+      } catch {
+        /* missing or invalid — fine */
+      }
       return json(res, 200, {
         ok: true,
         version: VERSION,
         cwd: DIR,
         active: [...tasks.values()].filter((t) => t.status === 'running').length,
+        projectConfig,
       });
     }
     if (req.method === 'GET' && url.pathname === '/tasks') {
