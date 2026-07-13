@@ -9,7 +9,7 @@ import {
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import type { LinearIssueSummary, LinearAgentSession, Settings } from '@/lib/types';
-import { getSettings } from '@/lib/storage';
+import { getSettings, getLastGrab } from '@/lib/storage';
 import {
   fetchMyIssues,
   fetchIssueDetail,
@@ -19,8 +19,9 @@ import {
   findAgentThreadRoots,
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
+import { activatePicker } from '@/lib/picker';
 import { listBridgeTasks, mergePr, type BridgeTask } from '@/lib/bridge';
-import { requestedIssueId, consumeNavRequest, openPanelTo } from '../nav';
+import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
   Button,
@@ -268,6 +269,35 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
 
   const [body, setBody] = createSignal('');
   const [sendError, setSendError] = createSignal<string | null>(null);
+
+  // Composer element-picking: point at page elements and their source refs
+  // append to the reply — 'fix these too' steering with exact pointers.
+  const [pickStartedAt, setPickStartedAt] = createSignal(0);
+  const grabQuery = createQuery(() => ({
+    queryKey: ['grab'],
+    queryFn: getLastGrab,
+    enabled: grabSink() === 'composer',
+  }));
+  const pickForReply = () => {
+    setPickStartedAt(Date.now());
+    setGrabSink('composer');
+    void activatePicker().catch(() => setGrabSink('capture'));
+  };
+  createEffect(() => {
+    if (grabSink() !== 'composer') return;
+    const fresh = (grabQuery.data ?? []).filter((g) => g.grabbedAt >= pickStartedAt());
+    if (!fresh.length) return;
+    const refs = fresh
+      .map((g) => {
+        const loc = g.source?.filePath
+          ? ` — \`${g.source.filePath}${g.source.lineNumber != null ? `:${g.source.lineNumber}` : ''}\``
+          : '';
+        return `- \`<${g.componentName ?? g.tagName ?? 'element'}>\`${loc}`;
+      })
+      .join('\n');
+    setBody((prev) => `${prev ? `${prev}\n` : ''}${refs}\n`);
+    setGrabSink('capture');
+  });
 
   // Fast-merge: reviewed the demo → one click ships the PR (bridge gh).
   const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
@@ -558,6 +588,18 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
               Comment only
             </option>
           </Select>
+          <Button
+            variant="ghost"
+            class="size-7 shrink-0 px-0"
+            title="Pick elements on the page — their source refs drop into this reply"
+            aria-label="Pick element for reply"
+            onClick={pickForReply}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+              <circle cx="8" cy="8" r="2.2" />
+              <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
+            </svg>
+          </Button>
           <Button
             class="min-w-[52px] shrink-0"
             variant="primary"

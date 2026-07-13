@@ -11,7 +11,7 @@ import { subscribeGrabBroadcast } from '@/lib/picker';
 import { wireIdbCache } from '@/lib/idbCache';
 import { bridgeBase, pushBridgeConfig } from '@/lib/bridge';
 import { setLinearMediaProxy } from './components/markdown';
-import { requestedTab, type PanelTab } from './nav';
+import { grabSink, requestedTab, type PanelTab } from './nav';
 
 const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'draft', label: 'Draft' },
@@ -56,7 +56,8 @@ export default function App(props: {
 
   const handleGrab = () => {
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
-    setTab('capture'); // show the captured element + incoming screenshot
+    // Composer picks stay on Activity — the ref lands in the reply text.
+    if (grabSink() !== 'composer') setTab('capture');
     props.onGrab?.();
   };
 
