@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
 import DraftView from './views/DraftView';
 import CaptureView from './views/CaptureView';
 import ActivityView from './views/ActivityView';
+import CloudView from './views/CloudView';
 import LocalView from './views/LocalView';
 import PrsView from './views/PrsView';
 import SettingsView from './views/SettingsView';
@@ -17,6 +18,7 @@ const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'draft', label: 'Draft' },
   { id: 'capture', label: 'Capture' },
   { id: 'activity', label: 'Activity' },
+  { id: 'cloud', label: 'Cloud' },
   { id: 'local', label: 'Local' },
   { id: 'prs', label: 'PRs' },
   { id: 'settings', label: 'Settings' },
@@ -160,6 +162,9 @@ export default function App(props: {
           </div>
           <div class="h-full" classList={{ hidden: tab() !== 'activity' }}>
             <ActivityView />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'cloud' }}>
+            <CloudView />
           </div>
           <div class="h-full" classList={{ hidden: tab() !== 'local' }}>
             <LocalView />

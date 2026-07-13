@@ -172,7 +172,14 @@ export interface LinearIssueDetail extends LinearIssueSummary {
 export interface LinearAgentActivity {
   id: string;
   createdAt: string;
-  content: Record<string, unknown>;
+  /** Union: thought/response/error/prompt/elicitation carry body; action carries action+parameter(+result). */
+  content: {
+    __typename?: string;
+    body?: string;
+    action?: string;
+    parameter?: string;
+    result?: string | null;
+  };
 }
 
 export interface LinearAgentSession {
@@ -180,7 +187,16 @@ export interface LinearAgentSession {
   status: string;
   summary?: string | null;
   updatedAt: string;
+  createdAt?: string;
   appUser?: { displayName: string } | null;
+  /** Present on the workspace-wide fleet query; absent on per-issue fetches. */
+  issue?: {
+    id: string;
+    identifier: string;
+    title: string;
+    url: string;
+    state: { name: string; color: string; type: string };
+  } | null;
   activities: LinearAgentActivity[];
 }
 

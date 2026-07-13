@@ -115,7 +115,17 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
             nodes {
               id status summary updatedAt
               appUser { displayName }
-              activities(first: 50) { nodes { id createdAt content } }
+              activities(first: 50) {
+              nodes { id createdAt content {
+                    __typename
+                    ... on AgentActivityThoughtContent { body }
+                    ... on AgentActivityResponseContent { body }
+                    ... on AgentActivityErrorContent { body }
+                    ... on AgentActivityPromptContent { body }
+                    ... on AgentActivityElicitationContent { body }
+                    ... on AgentActivityActionContent { action parameter result }
+                  } }
+            }
             }
           }
         }
@@ -125,6 +135,68 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
     return data.issue.agentSessions.nodes.map((s) => ({ ...s, activities: s.activities.nodes }));
   } catch {
     return [];
+  }
+}
+
+/** Workspace-wide agent sessions — the Cloud tab's fleet view. Newest first. */
+export async function fetchAllAgentSessions(): Promise<LinearAgentSession[]> {
+  try {
+    const data = await gql<{
+      agentSessions: {
+        nodes: Array<
+          Omit<LinearAgentSession, 'activities'> & {
+            activities: { nodes: LinearAgentSession['activities'] };
+          }
+        >;
+      };
+    }>(
+      `query {
+        agentSessions(first: 50) {
+          nodes {
+            id status summary updatedAt createdAt
+            appUser { displayName }
+            issue { id identifier title url state { name color type } }
+            activities(last: 3) {
+              nodes { id createdAt content {
+                  __typename
+                  ... on AgentActivityThoughtContent { body }
+                  ... on AgentActivityResponseContent { body }
+                  ... on AgentActivityErrorContent { body }
+                  ... on AgentActivityPromptContent { body }
+                  ... on AgentActivityElicitationContent { body }
+                  ... on AgentActivityActionContent { action parameter result }
+                } }
+            }
+          }
+        }
+      }`,
+    );
+    return data.agentSessions.nodes
+      .map((s) => ({ ...s, activities: s.activities.nodes }))
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  } catch {
+    // last-without-before pagination may be rejected — retry without the
+    // activity preview rather than blanking the whole fleet view.
+    try {
+      const data = await gql<{
+        agentSessions: { nodes: Array<Omit<LinearAgentSession, 'activities'>> };
+      }>(
+        `query {
+          agentSessions(first: 50) {
+            nodes {
+              id status summary updatedAt createdAt
+              appUser { displayName }
+              issue { id identifier title url state { name color type } }
+            }
+          }
+        }`,
+      );
+      return data.agentSessions.nodes
+        .map((s) => ({ ...s, activities: [] }))
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    } catch {
+      return [];
+    }
   }
 }
 

@@ -46,6 +46,7 @@ import {
   MonitorIcon,
   Spinner,
   timeAgo,
+  Input,
 } from '../components/ui';
 
 /** Memoized markdown body — equal innerHTML re-assignment re-parses the DOM
@@ -100,7 +101,52 @@ function IssueListScreen(props: { onSelect: (id: string) => void }) {
     refetchInterval: 12_000,
   }));
 
-  const issues = createMemo(() => query.data ?? []);
+  // Local delegations carry no Linear delegate — the bridge task list is the
+  // only truth for the 'local' executor tag.
+  const listBridge = createQuery(() => ({
+    queryKey: ['bridge-tasks'],
+    queryFn: listBridgeTasks,
+    refetchInterval: 10_000,
+    retry: 0,
+  }));
+  const isLocal = (i: LinearIssueSummary) =>
+    (listBridge.data ?? []).some((t) => t.title.startsWith(i.identifier));
+  const needsReview = (i: LinearIssueSummary) =>
+    i.state.type === 'started' &&
+    i.attachments?.some((a) => /github\.com\/[^/]+\/[^/]+\/pull\/\d+/i.test(a.url));
+
+  type ListFilter = 'all' | 'active' | 'review' | 'done' | 'cloud' | 'local';
+  const FILTERS: Array<{ id: ListFilter; label: string }> = [
+    { id: 'all', label: 'All' },
+    { id: 'active', label: 'In Progress' },
+    { id: 'review', label: 'Review' },
+    { id: 'done', label: 'Done' },
+    { id: 'cloud', label: 'Cloud' },
+    { id: 'local', label: 'Local' },
+  ];
+  const [filter, setFilter] = persistentSignal<ListFilter>('issues:filter', 'all');
+  const [term, setTerm] = persistentSignal('issues:search', '');
+
+  const issues = createMemo(() => {
+    const t = term().trim().toLowerCase();
+    return (query.data ?? []).filter((i) => {
+      if (t && !`${i.identifier} ${i.title}`.toLowerCase().includes(t)) return false;
+      switch (filter()) {
+        case 'active':
+          return i.state.type === 'started';
+        case 'review':
+          return !!needsReview(i);
+        case 'done':
+          return i.state.type === 'completed';
+        case 'cloud':
+          return !!i.delegate;
+        case 'local':
+          return isLocal(i);
+        default:
+          return true;
+      }
+    });
+  });
 
   const virtualizer = createVirtualizer({
     get count() { return issues().length; },
@@ -148,6 +194,30 @@ function IssueListScreen(props: { onSelect: (id: string) => void }) {
         </div>
       </div>
 
+      {/* Filters — same pattern as the PRs tab */}
+      <div class="border-border flex shrink-0 items-center gap-1 border-b px-3 py-1.5">
+        <For each={FILTERS}>
+          {(f) => (
+            <button
+              class={`h-6 shrink-0 cursor-pointer rounded-md px-2 text-[11px] font-medium transition-colors ${
+                filter() === f.id
+                  ? 'bg-accent-soft text-accent'
+                  : 'text-text-dim hover:bg-surface-2'
+              }`}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+            </button>
+          )}
+        </For>
+        <Input
+          class="ml-auto h-6 w-28 text-[11px]"
+          placeholder="Search…"
+          value={term()}
+          onInput={(e) => setTerm(e.currentTarget.value)}
+        />
+      </div>
+
       {/* Error / empty states */}
       <Show when={query.isError}>
         <div class="flex-1 overflow-y-auto">
@@ -187,7 +257,7 @@ function IssueListScreen(props: { onSelect: (id: string) => void }) {
                       transform: `translateY(${vRow.start}px)`,
                     }}
                   >
-                    <IssueRow issue={issue()} onSelect={props.onSelect} />
+                    <IssueRow issue={issue()} local={isLocal(issue())} onSelect={props.onSelect} />
                   </div>
                 );
               }}
@@ -199,7 +269,11 @@ function IssueListScreen(props: { onSelect: (id: string) => void }) {
   );
 }
 
-function IssueRow(props: { issue: LinearIssueSummary; onSelect: (id: string) => void }) {
+function IssueRow(props: {
+  issue: LinearIssueSummary;
+  local?: boolean;
+  onSelect: (id: string) => void;
+}) {
   return (
     <button
       class="w-full cursor-pointer rounded-md px-2 py-1.5 text-left hover:bg-surface-2 transition-colors"
@@ -220,6 +294,9 @@ function IssueRow(props: { issue: LinearIssueSummary; onSelect: (id: string) => 
         <Badge>{props.issue.state.name}</Badge>
         <Show when={props.issue.delegate}>
           <Badge class="text-accent"><CloudIcon /> {props.issue.delegate!.displayName}</Badge>
+        </Show>
+        <Show when={props.local}>
+          <Badge class="text-accent"><MonitorIcon /> local</Badge>
         </Show>
         {/* Agent finished (PR linked) but the issue is still open — your turn. */}
         <Show
@@ -889,16 +966,27 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
     return 'var(--color-accent)';
   });
 
-  // Last ~10 activities
+  const statusWord = createMemo(() => {
+    const s = props.session.status;
+    if (/active/i.test(s)) return 'Working…';
+    if (/awaitingInput|elicit/i.test(s)) return 'Needs input';
+    if (/complete/i.test(s)) return 'Complete';
+    if (/error/i.test(s)) return 'Error';
+    if (/pending/i.test(s)) return 'Queued';
+    return s;
+  });
+
+  // Last ~15 activities, rendered like Linear's session popup: markdown
+  // paragraphs for thoughts/responses, compact mono rows for actions.
   const recentActivities = createMemo(() =>
-    props.session.activities.slice(-10),
+    props.session.activities.filter((a) => a.content?.body || a.content?.action).slice(-15),
   );
 
   return (
     <div class="bg-surface border-border rounded-lg border p-2.5 flex flex-col gap-1.5">
       {/* Session header */}
       <div class="flex items-center gap-1.5 flex-wrap">
-        <Badge color={statusColor()}>{props.session.status}</Badge>
+        <Badge color={statusColor()}>{statusWord()}</Badge>
         <Show when={props.session.appUser?.displayName}>
           <span class="text-[11px] text-text-dim">
             {props.session.appUser!.displayName}
@@ -916,28 +1004,32 @@ function AgentSessionCard(props: { session: LinearAgentSession }) {
         </p>
       </Show>
 
-      {/* Activity timeline */}
+      {/* Live activity timeline — Index + memoized markdown so the 8s poll
+          never rebuilds unchanged rows (the flicker rule). */}
       <Show when={recentActivities().length > 0}>
-        <div class="flex flex-col gap-0.5 border-t border-border pt-1.5 mt-0.5">
-          <For each={recentActivities()}>
-            {(activity) => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const content = activity.content as any;
-              const text = String(
-                content?.body ?? content?.text ?? content?.type ?? JSON.stringify(content),
-              ).slice(0, 300);
-              return (
-                <div class="flex items-start gap-1.5">
-                  <span class="tabular-nums text-[10px] text-text-faint shrink-0 mt-px">
-                    {timeAgo(activity.createdAt)}
-                  </span>
-                  <span class="text-[11px] text-text-dim break-words min-w-0">
-                    {text}
-                  </span>
-                </div>
-              );
-            }}
-          </For>
+        <div class="border-border mt-0.5 flex max-h-64 flex-col gap-1 overflow-y-auto border-t pt-1.5 pl-0.5 pr-3">
+          <Index each={recentActivities()}>
+            {(activity) => (
+              <Show
+                when={activity().content.action}
+                fallback={
+                  <div
+                    class={`lg-md text-[11.5px] leading-relaxed break-words ${
+                      activity().content.__typename === 'AgentActivityErrorContent'
+                        ? 'text-danger'
+                        : 'text-text'
+                    }`}
+                  >
+                    <CommentBody text={activity().content.body ?? ''} />
+                  </div>
+                }
+              >
+                <p class="font-mono text-text-faint text-[10.5px] leading-relaxed break-words">
+                  → {activity().content.action} {activity().content.parameter}
+                </p>
+              </Show>
+            )}
+          </Index>
         </div>
       </Show>
     </div>

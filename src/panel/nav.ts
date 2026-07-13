@@ -5,7 +5,7 @@ import { createSignal } from 'solid-js';
  * lives outside <App>) deep-link the panel to a specific tab/issue (e.g. a
  * running agent clicked in the minimap popover).
  */
-export type PanelTab = 'draft' | 'capture' | 'activity' | 'local' | 'prs' | 'settings';
+export type PanelTab = 'draft' | 'capture' | 'activity' | 'cloud' | 'local' | 'prs' | 'settings';
 
 const [requestedTab, setRequestedTab] = createSignal<PanelTab | null>(null);
 const [requestedIssueId, setRequestedIssueId] = createSignal<string | null>(null);
