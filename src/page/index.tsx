@@ -84,7 +84,7 @@ function detectTheme(): 'light' | 'dark' {
 const PILL_W = 130;
 const PILL_H = 36;
 const PANEL_W_DEFAULT = 380;
-const PANEL_W_MIN = 300;
+const PANEL_W_MIN = 280;
 const PANEL_W_MAX = 720;
 
 /** Floating launcher pill (react-grab-style) + docked panel hosting the shared App. */

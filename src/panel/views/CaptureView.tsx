@@ -119,9 +119,14 @@ export default function CaptureView() {
       }
       setCopyState('copied');
       setTimeout(() => setCopyState('idle'), 2000);
-    } catch (err) {
+    } catch {
+      // Direct upload blocked (Linear storage rejects cross-origin browser
+      // uploads) — degrade to copying the GIF itself, which paste-uploads.
       setCopyState('idle');
-      setRecActionError(err instanceof Error ? err.message : 'Copy failed.');
+      await copyGif();
+      setRecActionError(
+        'Direct upload is blocked in this browser — copied the GIF instead. Paste it into a Linear comment and Linear uploads it.',
+      );
     }
   };
 
@@ -306,43 +311,74 @@ export default function CaptureView() {
                 />
                 <span class="text-text text-[12px]">Attach to issue on create</span>
               </label>
-              <div class="flex items-center gap-1.5">
+              {/* Icon actions — fixed-size squares with tooltips, so the row
+                  never overflows at the panel's minimum width. */}
+              <div class="flex items-center gap-1">
                 <Button
                   variant="ghost"
-                  class="h-6 px-2 text-[11px]"
+                  class="size-7 px-0"
                   loading={copyState() === 'busy'}
                   disabled={!linearConnected()}
                   title={
                     linearConnected()
-                      ? 'Uploads to Linear and copies embeddable markdown'
+                      ? 'Copy markdown — uploads to Linear, copies embeddable link'
                       : 'Connect Linear in Settings first'
                   }
+                  aria-label="Copy markdown"
                   onClick={() => void copyRecordingMarkdown()}
                 >
-                  <span class="inline-block min-w-[9ch] text-center">
-                    {copyState() === 'copied' ? 'Copied!' : 'Copy markdown'}
-                  </span>
+                  <Show
+                    when={copyState() === 'copied'}
+                    fallback={
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                        <path d="M6.5 9.5 9.5 6.5M7.5 4.5 9 3a2.5 2.5 0 0 1 3.5 3.5L11 8M8.5 11.5 7 13a2.5 2.5 0 0 1-3.5-3.5L5 8" />
+                      </svg>
+                    }
+                  >
+                    <span class="text-success text-[12px] leading-none">✓</span>
+                  </Show>
                 </Button>
                 <Button
                   variant="ghost"
-                  class="h-6 px-2 text-[11px]"
+                  class="size-7 px-0"
                   loading={gifCopyState() === 'busy'}
-                  title="Copy the GIF itself — paste into a Linear comment and Linear uploads it"
+                  title="Copy GIF — paste into a Linear comment and Linear uploads it"
+                  aria-label="Copy GIF"
                   onClick={() => void copyGif()}
                 >
-                  <span class="inline-block min-w-[7ch] text-center">
-                    {gifCopyState() === 'copied' ? 'Copied!' : 'Copy GIF'}
-                  </span>
+                  <Show
+                    when={gifCopyState() === 'copied'}
+                    fallback={
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                        <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+                        <path d="M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" />
+                      </svg>
+                    }
+                  >
+                    <span class="text-success text-[12px] leading-none">✓</span>
+                  </Show>
                 </Button>
-                <Button variant="ghost" class="h-6 px-2 text-[11px]" onClick={downloadRecording}>
-                  Download
+                <Button
+                  variant="ghost"
+                  class="size-7 px-0"
+                  title="Download GIF"
+                  aria-label="Download GIF"
+                  onClick={downloadRecording}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                    <path d="M8 2.5v8M4.5 7.5 8 11l3.5-3.5M2.5 13.5h11" />
+                  </svg>
                 </Button>
                 <Button
                   variant="danger"
-                  class="ml-auto h-6 px-2 text-[11px]"
+                  class="ml-auto size-7 px-0"
+                  title="Discard recording"
+                  aria-label="Discard recording"
                   onClick={discardRecording}
                 >
-                  Discard
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                    <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9a1.5 1.5 0 0 0 1.5 1.4h3.6A1.5 1.5 0 0 0 11.3 13l.7-9M6.5 7v4.5M9.5 7v4.5" />
+                  </svg>
                 </Button>
               </div>
               <Show when={recActionError()}>

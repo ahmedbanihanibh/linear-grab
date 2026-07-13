@@ -233,24 +233,34 @@ export default function DraftView(props: { onCreated: () => void }) {
         model: settings().cursorModel,
         agentInstructions: buildAgentInstructions(settings()),
       });
-      // Attach the screen recording so the coding agent can watch the interaction.
+      // Attach GIF + element screenshot automatically — BOTH best-effort:
+      // Linear's storage rejects cross-origin browser uploads in some
+      // browsers, and a blocked attachment must NEVER block the issue.
+      setCreateWarning(null);
+      const failed: string[] = [];
       const recorder = getRecorderSnapshot();
       const recording = recorder.result;
       if (recording && recorder.attachOnCreate) {
-        const assetUrl = await ensureRecordingUploaded();
-        body += `\n\n### Recording\n![Screen recording](${assetUrl})`;
+        try {
+          const assetUrl = await ensureRecordingUploaded();
+          body += `\n\n### Recording\n![Screen recording](${assetUrl})`;
+        } catch {
+          failed.push('recording');
+        }
       }
-      // Attach the highlighted element screenshot — best-effort: a failed
-      // upload must never block the issue itself.
       const shot = grab()?.screenshotDataUrl;
       if (shot) {
         try {
           const url = await uploadFileToLinear(dataUrlToBlob(shot), `element-${Date.now()}.png`);
           body += `\n\n### Element location\n![Highlighted element in context](${url})`;
-          setCreateWarning(null);
         } catch {
-          setCreateWarning('Element screenshot upload failed — issue created without it.');
+          failed.push('screenshot');
         }
+      }
+      if (failed.length) {
+        setCreateWarning(
+          `${failed.join(' + ')} upload blocked by the browser — issue created without ${failed.length > 1 ? 'them' : 'it'}. Use "Copy GIF" in Capture and paste into a comment on the issue.`,
+        );
       }
       return createIssue({
         teamId: teamId(),
