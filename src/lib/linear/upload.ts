@@ -32,11 +32,34 @@ export async function uploadFileToLinear(blob: Blob, filename: string): Promise<
     throw new Error('Linear did not provide an upload URL.');
   }
 
-  const headers = new Headers({ 'Content-Type': blob.type });
-  for (const h of uploadFile.headers ?? []) headers.set(h.key, h.value);
+  // Signed-URL uploads are picky: a header not in the signature (or a missing
+  // signed one) fails the request. Try the documented set first, then narrower
+  // fallbacks — Safari surfaces all of these as an opaque "Load failed".
+  const attempts: Array<Record<string, string>> = [
+    {
+      'Content-Type': blob.type,
+      ...Object.fromEntries((uploadFile.headers ?? []).map((h) => [h.key, h.value])),
+    },
+    { 'Content-Type': blob.type },
+    {},
+  ];
 
-  const res = await fetch(uploadFile.uploadUrl, { method: 'PUT', headers, body: blob });
-  if (!res.ok) throw new Error(`Recording upload failed (${res.status}).`);
-
-  return uploadFile.assetUrl;
+  let lastError: unknown = null;
+  for (const headers of attempts) {
+    try {
+      const res = await fetch(uploadFile.uploadUrl, {
+        method: 'PUT',
+        mode: 'cors',
+        headers,
+        body: blob,
+      });
+      if (res.ok) return uploadFile.assetUrl;
+      lastError = new Error(`Upload rejected (${res.status}).`);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw new Error(
+    `Upload to Linear storage failed${lastError instanceof Error ? ` — ${lastError.message}` : ''}. If this keeps happening in this browser, use Download and drag the file into Linear.`,
+  );
 }

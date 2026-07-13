@@ -14,10 +14,13 @@ export default defineContentScript({
   main() {
     let started = false;
 
-    const pipeline = createSelectionPipeline((elements: GrabbedElement[]) => {
-      const msg: PageMessage = { __lineargrab: true, type: 'selected', elements };
-      window.postMessage(msg, '*');
-    });
+    const pipeline = createSelectionPipeline(
+      (elements: GrabbedElement[]) => {
+        const msg: PageMessage = { __lineargrab: true, type: 'selected', elements };
+        window.postMessage(msg, '*');
+      },
+      () => getGlobalApi() as import('@/lib/picker').PickerApi | null,
+    );
 
     const ensureStarted = () => {
       if (started) return;

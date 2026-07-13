@@ -25,6 +25,27 @@ export const DEFAULT_AGENT_INSTRUCTIONS = `- Use computer use to execute and tes
 - Keep going until the code works and you're happy with the implementation.
 - Put up a PR, babysit it for the first set of review comments, and address them.`;
 
+/**
+ * Final "### Agent instructions" content: the user's template (or the default)
+ * plus the structured test-account credentials when configured.
+ */
+export function buildAgentInstructions(settings: {
+  issueTemplate?: string;
+  testUsername?: string;
+  testPassword?: string;
+}): string {
+  const base = settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS;
+  const creds: string[] = [];
+  if (settings.testUsername?.trim()) {
+    creds.push(`- Username / email: \`${settings.testUsername.trim()}\``);
+  }
+  if (settings.testPassword?.trim()) {
+    creds.push(`- Password: \`${settings.testPassword.trim()}\``);
+  }
+  if (!creds.length) return base;
+  return `${base}\n\n**Test account — log into the app with this while testing:**\n${creds.join('\n')}`;
+}
+
 function formatGrabbed(el: GrabbedElement): string {
   const lines: string[] = [];
   if (el.componentName) lines.push(`Component: <${el.componentName}>`);

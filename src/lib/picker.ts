@@ -34,14 +34,30 @@ export function mapSelectedElement(el: {
   };
 }
 
+/** The subset of react-grab's global API the pipeline uses for instant capture. */
+export interface PickerApi {
+  getDisplayName?: (el: Element) => string | null;
+  getSource?: (el: Element) => Promise<{
+    filePath?: string | null;
+    lineNumber?: number | null;
+    columnNumber?: number | null;
+    componentName?: string | null;
+  } | null>;
+}
+
 /**
  * Selection pipeline shared by both hosts (page mode and the extension's
- * MAIN-world script). react-grab's selection EVENT carries flat data only, so
- * the plugin hook grabs the real Element for a highlighted screenshot. The
- * capture is async (~0.5s): publish the grab instantly for snappy UX, then
- * re-publish enriched with the screenshot when it resolves.
+ * MAIN-world script). Publishing happens in escalating passes so the panel
+ * reacts THE INSTANT the user clicks:
+ *   1. onElementSelect (synchronous click) → tag/component/text immediately
+ *   2. getSource resolves (~ms)           → + file:line
+ *   3. react-grab's copy-flow event       → authoritative flat payload
+ *   4. screenshot resolves (~0.5s idle)   → + highlighted context image
  */
-export function createSelectionPipeline(publish: (els: GrabbedElement[]) => void) {
+export function createSelectionPipeline(
+  publish: (els: GrabbedElement[]) => void,
+  getApi?: () => PickerApi | null | undefined,
+) {
   let pendingShot: Promise<string | null> | null = null;
 
   return {
@@ -50,16 +66,51 @@ export function createSelectionPipeline(publish: (els: GrabbedElement[]) => void
       hooks: {
         onElementSelect: (element: Element) => {
           pendingShot = captureElementShot(element);
+
+          // Pass 1: instant publish — no waiting on react-grab's copy flow.
+          const api = getApi?.();
+          const immediate: GrabbedElement = {
+            tagName: element.tagName?.toLowerCase() || undefined,
+            componentName: api?.getDisplayName?.(element) || undefined,
+            content: (element.textContent ?? '').slice(0, 500),
+            source: null,
+            stackContext: undefined,
+            pageUrl: location.href,
+            grabbedAt: Date.now(),
+          };
+          publish([immediate]);
+
+          // Pass 2: source resolution (fiber walk — fast, but async).
+          try {
+            void api?.getSource?.(element)?.then((src) => {
+              if (!src?.filePath) return;
+              publish([
+                {
+                  ...immediate,
+                  source: {
+                    filePath: src.filePath,
+                    lineNumber: src.lineNumber ?? null,
+                    columnNumber: src.columnNumber ?? null,
+                    componentName: src.componentName ?? immediate.componentName ?? null,
+                  },
+                },
+              ]);
+            });
+          } catch {
+            /* source is best-effort */
+          }
         },
       },
     },
     handleSelection(payloads: Array<Parameters<typeof mapSelectedElement>[0]>) {
+      // Pass 3: react-grab's own event payload (authoritative when it fires).
       const elements = payloads.map(mapSelectedElement);
       if (!elements.length) return;
       publish(elements);
       const shot = pendingShot;
       pendingShot = null;
       if (shot) {
+        // Pass 4: highlighted screenshot.
         void shot.then((dataUrl) => {
           if (dataUrl) {
             publish([{ ...elements[0], screenshotDataUrl: dataUrl }, ...elements.slice(1)]);
@@ -87,7 +138,10 @@ export async function ensurePagePicker(): Promise<void> {
     pageStarted = false;
     return;
   }
-  const pipeline = createSelectionPipeline((els) => void setLastGrab(els));
+  const pipeline = createSelectionPipeline(
+    (els) => void setLastGrab(els),
+    () => rg.getGlobalApi() as PickerApi | null,
+  );
   rg.registerPlugin(pipeline.plugin);
   window.addEventListener('react-grab:element-selected', (event) => {
     pipeline.handleSelection(event.detail.elements ?? []);

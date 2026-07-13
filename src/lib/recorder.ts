@@ -35,6 +35,8 @@ export interface RecorderSnapshot {
   startedAt: number | null;
   result: RecordingResult | null;
   error: string | null;
+  /** Whether the recording is attached to the issue on create (Capture tab toggle). */
+  attachOnCreate: boolean;
 }
 
 const FPS = 6;
@@ -42,7 +44,13 @@ const FRAME_DELAY_MS = Math.round(1000 / FPS);
 const MAX_DURATION_MS = 30_000;
 const MAX_WIDTH = 640;
 
-let snapshot: RecorderSnapshot = { phase: 'idle', startedAt: null, result: null, error: null };
+let snapshot: RecorderSnapshot = {
+  phase: 'idle',
+  startedAt: null,
+  result: null,
+  error: null,
+  attachOnCreate: true,
+};
 const listeners = new Set<(s: RecorderSnapshot) => void>();
 
 function setSnapshot(patch: Partial<RecorderSnapshot>) {
@@ -210,7 +218,11 @@ export function discardRecording(): void {
   }
   encoder = null;
   frameCount = 0;
-  setSnapshot({ phase: 'idle', startedAt: null, result: null, error: null });
+  setSnapshot({ phase: 'idle', startedAt: null, result: null, error: null, attachOnCreate: true });
+}
+
+export function setRecordingAttach(attach: boolean): void {
+  setSnapshot({ attachOnCreate: attach });
 }
 
 /** Remember the Linear asset URL after upload so attach + copy reuse it. */

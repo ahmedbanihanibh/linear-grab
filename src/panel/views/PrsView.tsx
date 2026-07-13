@@ -90,9 +90,18 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                     <Show when={row.issue.delegate}>
                       <Badge class="text-accent">⟠ {row.issue.delegate!.displayName}</Badge>
                     </Show>
+                    <a
+                      href={row.issue.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      class="text-accent ml-auto shrink-0 text-[11px] hover:underline"
+                      title="Open the issue in Linear"
+                    >
+                      Open in Linear ↗
+                    </a>
                     <Button
                       variant="ghost"
-                      class="ml-auto h-6 px-2 text-[11px]"
+                      class="h-6 px-2 text-[11px]"
                       onClick={() => {
                         openPanelTo('activity', row.issue.id);
                         props.onOpenIssue();

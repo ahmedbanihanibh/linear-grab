@@ -4,6 +4,7 @@ import App, { LinearLogo } from '@/panel/App';
 import { ensurePagePicker } from '@/lib/picker';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
 import { subscribeRunningAgents, type RunningAgentIssue } from '@/lib/agentWatch';
+import { getRecorderSnapshot, subscribeRecorder, stopRecording } from '@/lib/recorder';
 import { openPanelTo } from '@/panel/nav';
 // Compiled Tailwind CSS as a string — injected into the shadow root so the
 // host app's styles and ours never collide.
@@ -82,6 +83,7 @@ function detectTheme(): 'light' | 'dark' {
 
 const PILL_W = 130;
 const PILL_H = 36;
+const PANEL_W = 380;
 
 /** Floating launcher pill (react-grab-style) + docked panel hosting the shared App. */
 function PagePanel(props: { defaultOpen: boolean }) {
@@ -93,16 +95,41 @@ function PagePanel(props: { defaultOpen: boolean }) {
   });
   const [running, setRunning] = createSignal<RunningAgentIssue[]>([]);
   const [minimapOpen, setMinimapOpen] = createSignal(false);
+  const [recPhase, setRecPhase] = createSignal(getRecorderSnapshot().phase);
+  const [recElapsed, setRecElapsed] = createSignal(0);
+
+  // Live elapsed readout in the pill while recording.
+  onMount(() => {
+    const iv = setInterval(() => {
+      if (recPhase() === 'recording') {
+        setRecElapsed(Date.now() - (getRecorderSnapshot().startedAt ?? Date.now()));
+      }
+    }, 250);
+    onCleanup(() => clearInterval(iv));
+  });
+
+  const fmtElapsed = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  // Free-floating panel position; null = docked to the configured side.
+  const [panelPos, setPanelPos] = createSignal<{ x: number; y: number } | null>(null);
 
   const clamp = (p: { x: number; y: number }) => ({
     x: Math.min(Math.max(8, p.x), window.innerWidth - PILL_W - 8),
     y: Math.min(Math.max(8, p.y), window.innerHeight - PILL_H - 8),
   });
 
+  const clampPanel = (p: { x: number; y: number }) => ({
+    x: Math.min(Math.max(8 - (PANEL_W - 80), p.x), window.innerWidth - 80),
+    y: Math.min(Math.max(0, p.y), window.innerHeight - 80),
+  });
+
   onMount(() => {
     void getSettings().then((s) => {
       if (s.panelSide) setSide(s.panelSide);
       if (s.launcherPos) setPos(clamp(s.launcherPos));
+      if (s.panelPos) setPanelPos(clampPanel(s.panelPos));
     });
     const unsubSettings = subscribeStorage((area) => {
       if (area === 'settings') void getSettings().then((s) => setSide(s.panelSide ?? 'right'));
@@ -110,11 +137,33 @@ function PagePanel(props: { defaultOpen: boolean }) {
       if (area === 'grab') setOpen(true);
     });
     const unsubAgents = subscribeRunningAgents(setRunning);
-    const onResize = () => setPos(clamp(pos()));
+
+    // Recording choreography: minimize while capturing so the recording shows
+    // the APP (not our panel); the pill becomes the stop control; reopen on
+    // the Capture tab when the GIF is ready.
+    let prevPhase = getRecorderSnapshot().phase;
+    const unsubRec = subscribeRecorder((snap) => {
+      setRecPhase(snap.phase);
+      if (snap.phase === 'recording' && prevPhase !== 'recording') {
+        setOpen(false);
+      }
+      if (snap.phase === 'ready' && prevPhase !== 'ready') {
+        openPanelTo('capture');
+        setOpen(true);
+      }
+      prevPhase = snap.phase;
+    });
+
+    const onResize = () => {
+      setPos(clamp(pos()));
+      const pp = panelPos();
+      if (pp) setPanelPos(clampPanel(pp));
+    };
     window.addEventListener('resize', onResize);
     onCleanup(() => {
       unsubSettings();
       unsubAgents();
+      unsubRec();
       window.removeEventListener('resize', onResize);
     });
   });
@@ -143,6 +192,34 @@ function PagePanel(props: { defaultOpen: boolean }) {
 
   const showMinimapAbove = () => pos().y > 260;
 
+  // Panel drag (header = handle). Double-click the header to re-dock.
+  const onPanelPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    if (e.detail === 2) {
+      setPanelPos(null);
+      void saveSettings({ panelPos: undefined });
+      return;
+    }
+    const start = { x: e.clientX, y: e.clientY };
+    const origin =
+      panelPos() ?? { x: side() === 'right' ? window.innerWidth - PANEL_W : 0, y: 0 };
+    let moved = false;
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - start.x;
+      const dy = ev.clientY - start.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+      if (moved) setPanelPos(clampPanel({ x: origin.x + dx, y: origin.y + dy }));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const pp = panelPos();
+      if (moved && pp) void saveSettings({ panelPos: pp });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
   return (
     <>
       {/* Launcher pill — hidden while the panel is open (the panel has its own
@@ -156,39 +233,62 @@ function PagePanel(props: { defaultOpen: boolean }) {
             onPointerDown={onPointerDown}
             class="bg-surface border-border text-text flex h-9 cursor-grab items-center gap-1 rounded-full border py-1 pr-1 pl-2.5 font-sans shadow-lg active:cursor-grabbing"
           >
-            <button
-              onClick={() => {
-                if (dragMoved) return;
-                setMinimapOpen(false);
-                setOpen(true);
-              }}
-              title="Open Linear Grab"
-              aria-label="Open Linear Grab"
-              class="text-accent hover:opacity-80 inline-flex cursor-pointer items-center gap-1.5"
+            <Show
+              when={recPhase() === 'recording'}
+              fallback={
+                <>
+                  <button
+                    onClick={() => {
+                      if (dragMoved) return;
+                      setMinimapOpen(false);
+                      setOpen(true);
+                    }}
+                    title="Open Linear Grab"
+                    aria-label="Open Linear Grab"
+                    class="text-accent hover:opacity-80 inline-flex cursor-pointer items-center gap-1.5"
+                  >
+                    <LinearLogo size={13} />
+                  </button>
+                  <span class="bg-border h-4 w-px" aria-hidden />
+                  {/* Live agent status — dot pulses while agents run; count is fixed-width. */}
+                  <button
+                    onClick={() => {
+                      if (dragMoved) return;
+                      setMinimapOpen((v) => !v);
+                    }}
+                    title="Running agents"
+                    aria-label="Running agents"
+                    class="hover:bg-surface-2 flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-2 transition-colors"
+                  >
+                    <span
+                      aria-hidden
+                      class={`size-2 rounded-full ${
+                        running().length ? 'bg-success animate-pulse' : 'bg-text-faint'
+                      }`}
+                    />
+                    <span class="text-text-dim min-w-[3.5ch] text-left text-[11px] font-medium tabular-nums">
+                      {running().length} run
+                    </span>
+                  </button>
+                </>
+              }
             >
-              <LinearLogo size={13} />
-            </button>
-            <span class="bg-border h-4 w-px" aria-hidden />
-            {/* Live agent status — dot pulses while agents run; count is fixed-width. */}
-            <button
-              onClick={() => {
-                if (dragMoved) return;
-                setMinimapOpen((v) => !v);
-              }}
-              title="Running agents"
-              aria-label="Running agents"
-              class="hover:bg-surface-2 flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-2 transition-colors"
-            >
-              <span
-                aria-hidden
-                class={`size-2 rounded-full ${
-                  running().length ? 'bg-success animate-pulse' : 'bg-text-faint'
-                }`}
-              />
-              <span class="text-text-dim min-w-[3.5ch] text-left text-[11px] font-medium tabular-nums">
-                {running().length} run
+              {/* Recording mode: the panel is minimized so the capture shows the
+                  app — the pill is the stop control with a live clock. */}
+              <span aria-hidden class="bg-danger size-2 shrink-0 animate-pulse rounded-full" />
+              <span class="text-text min-w-[5ch] text-[11px] font-medium tabular-nums">
+                {fmtElapsed(recElapsed())}
               </span>
-            </button>
+              <button
+                onClick={() => {
+                  if (dragMoved) return;
+                  void stopRecording();
+                }}
+                class="bg-accent hover:bg-accent-hover h-7 cursor-pointer rounded-full px-2.5 text-[11px] font-medium text-white transition-colors"
+              >
+                <span class="inline-block min-w-[4ch] text-center">Stop</span>
+              </button>
+            </Show>
           </div>
 
           {/* Minimap popover — the running agents at a glance. */}
@@ -244,11 +344,29 @@ function PagePanel(props: { defaultOpen: boolean }) {
 
       <Show when={open()}>
         <div
-          class={`bg-bg text-text fixed top-0 z-[2147483645] flex h-screen w-[380px] max-w-[100vw] flex-col font-sans text-[13px] antialiased shadow-2xl ${
-            side() === 'right' ? 'border-border right-0 border-l' : 'border-border left-0 border-r'
+          class={`bg-bg text-text border-border fixed z-[2147483645] flex w-[380px] max-w-[100vw] flex-col overflow-hidden font-sans text-[13px] antialiased shadow-2xl ${
+            panelPos()
+              ? 'rounded-xl border'
+              : side() === 'right'
+                ? 'top-0 right-0 h-screen border-l'
+                : 'top-0 left-0 h-screen border-r'
           }`}
+          style={
+            panelPos()
+              ? {
+                  left: `${panelPos()!.x}px`,
+                  top: `${panelPos()!.y}px`,
+                  height: `${Math.min(680, window.innerHeight - 16)}px`,
+                }
+              : undefined
+          }
         >
-          <App onGrab={() => setOpen(true)} onClose={() => setOpen(false)} />
+          {/* Drag the header to float the panel anywhere; double-click to re-dock. */}
+          <App
+            onGrab={() => setOpen(true)}
+            onClose={() => setOpen(false)}
+            onHeaderPointerDown={onPanelPointerDown}
+          />
         </div>
       </Show>
     </>

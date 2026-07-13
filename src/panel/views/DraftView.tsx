@@ -9,14 +9,11 @@ import {
 } from 'solid-js';
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
 import type { AiProvider, AiTier, GrabbedElement } from '@/lib/types';
-import { getSettings, clearLastGrab, getLastGrab } from '@/lib/storage';
+import { getSettings, getLastGrab } from '@/lib/storage';
 import { startDraftStream } from '@/lib/draftClient';
-import { activatePicker } from '@/lib/picker';
 import {
   getRecorderSnapshot,
   subscribeRecorder,
-  startRecording,
-  stopRecording,
   discardRecording,
   markRecordingUploaded,
 } from '@/lib/recorder';
@@ -24,7 +21,8 @@ import { fetchTeams, createIssue } from '@/lib/linear/api';
 import { uploadFileToLinear } from '@/lib/linear/upload';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
-import { composeIssueBody, DEFAULT_AGENT_INSTRUCTIONS } from '@/lib/ai/prompt';
+import { composeIssueBody, buildAgentInstructions } from '@/lib/ai/prompt';
+import { openPanelTo } from '../nav';
 import {
   Button,
   Input,
@@ -33,9 +31,7 @@ import {
   Field,
   Section,
   Badge,
-  EmptyState,
   ErrorNote,
-  Spinner,
   PRIORITY_LABELS,
 } from '../components/ui';
 
@@ -173,7 +169,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         grabbed: grab() ?? null,
         teamName: selectedTeamName(),
         tier: tier(),
-        template: settings().issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS,
+        template: buildAgentInstructions(settings()),
       },
       {
         onPartial: applyDraft,
@@ -198,51 +194,12 @@ export default function DraftView(props: { onCreated: () => void }) {
     );
   };
 
-  // ---- Pick element ---------------------------------------------------------
-
-  const [pickError, setPickError] = createSignal<string | null>(null);
-
-  const pickElement = () => {
-    setPickError(null);
-    activatePicker().catch((err: unknown) => {
-      setPickError(
-        err instanceof Error && err.message
-          ? err.message
-          : 'Cannot activate the picker — open your dev app in the active tab first.',
-      );
-    });
-  };
-
-  const clearGrab = async () => {
-    await clearLastGrab();
-    void queryClient.invalidateQueries({ queryKey: ['grab'] });
-  };
-
-  // ---- Screen recording -------------------------------------------------------
+  // ---- Capture state (owned by the Capture tab; summarized here) --------------
 
   const [rec, setRec] = createSignal(getRecorderSnapshot());
   onCleanup(subscribeRecorder(setRec));
 
-  const [elapsed, setElapsed] = createSignal(0);
-  createEffect(() => {
-    if (rec().phase !== 'recording') return;
-    const iv = setInterval(
-      () => setElapsed(Date.now() - (getRecorderSnapshot().startedAt ?? Date.now())),
-      250,
-    );
-    onCleanup(() => clearInterval(iv));
-  });
-
-  const formatElapsed = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-
-  const [attachRec, setAttachRec] = createSignal(true);
-  const [copyState, setCopyState] = createSignal<'idle' | 'busy' | 'copied'>('idle');
-  const [recActionError, setRecActionError] = createSignal<string | null>(null);
-
-  /** Upload once, reuse the Linear asset URL for both attach and copy. */
+  /** Upload once, reuse the Linear asset URL. */
   const ensureRecordingUploaded = async (): Promise<string> => {
     const result = getRecorderSnapshot().result;
     if (!result) throw new Error('No recording available.');
@@ -250,29 +207,6 @@ export default function DraftView(props: { onCreated: () => void }) {
     const assetUrl = await uploadFileToLinear(result.blob, `recording-${Date.now()}.gif`);
     markRecordingUploaded(assetUrl);
     return assetUrl;
-  };
-
-  const copyRecordingMarkdown = async () => {
-    setRecActionError(null);
-    setCopyState('busy');
-    try {
-      const url = await ensureRecordingUploaded();
-      await navigator.clipboard.writeText(`![Screen recording](${url})`);
-      setCopyState('copied');
-      setTimeout(() => setCopyState('idle'), 2000);
-    } catch (err) {
-      setCopyState('idle');
-      setRecActionError(err instanceof Error ? err.message : 'Copy failed.');
-    }
-  };
-
-  const downloadRecording = () => {
-    const result = rec().result;
-    if (!result) return;
-    const a = document.createElement('a');
-    a.href = result.url;
-    a.download = 'linear-grab-recording.gif';
-    a.click();
   };
 
   // ---- Create issue mutation -------------------------------------------------
@@ -297,11 +231,12 @@ export default function DraftView(props: { onCreated: () => void }) {
         grabbed: grab(),
         repo: repo(),
         model: settings().cursorModel,
-        agentInstructions: settings().issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS,
+        agentInstructions: buildAgentInstructions(settings()),
       });
       // Attach the screen recording so the coding agent can watch the interaction.
-      const recording = getRecorderSnapshot().result;
-      if (recording && attachRec()) {
+      const recorder = getRecorderSnapshot();
+      const recording = recorder.result;
+      if (recording && recorder.attachOnCreate) {
         const assetUrl = await ensureRecordingUploaded();
         body += `\n\n### Recording\n![Screen recording](${assetUrl})`;
       }
@@ -364,174 +299,45 @@ export default function DraftView(props: { onCreated: () => void }) {
   return (
     <div class="flex h-full flex-col gap-4 overflow-y-auto pt-3 pb-4 pl-3 pr-4">
 
-      {/* ---- Captured element card ----------------------------------------- */}
-      <Section title="Captured element">
-        <Show
-          when={grab()}
-          fallback={
-            <EmptyState title="No element captured">
-              Click "Pick element" below, then use the Linear Grab overlay on your
-              dev app. Source info is only available in dev builds — production
-              bundles have no fiber debug data.
-            </EmptyState>
-          }
-        >
-          {(el) => (
-            <div class="bg-surface border-border rounded-lg border p-2.5 flex flex-col gap-1.5">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex flex-col gap-0.5 min-w-0">
-                  <Show when={el().componentName}>
-                    <span class="font-mono text-accent text-[12px]">
-                      {'<'}{el().componentName}{'>'}
-                    </span>
-                  </Show>
-                  <Show when={el().source?.filePath}>
-                    <span class="font-mono text-[11px] text-text-dim break-all">
-                      {el().source!.filePath}
-                      {el().source?.lineNumber != null ? `:${el().source!.lineNumber}` : ''}
-                    </span>
-                  </Show>
-                  <span class="text-text-faint text-[10.5px] break-all truncate">
-                    {el().pageUrl}
-                  </span>
-                </div>
-                <Button
-                  class="shrink-0 h-6 px-2 text-[11px]"
-                  variant="ghost"
-                  onClick={clearGrab}
-                >
-                  Clear
-                </Button>
-              </div>
-              <Show when={el().stackContext}>
-                <details class="text-[10.5px]">
-                  <summary class="text-text-faint cursor-pointer select-none">
-                    Component stack
-                  </summary>
-                  <pre class="font-mono text-text-faint text-[10.5px] overflow-x-auto mt-1 whitespace-pre-wrap break-all">
-                    {el().stackContext}
-                  </pre>
-                </details>
-              </Show>
-              {/* Highlighted screenshot of the element in context — attached to the issue on create. */}
-              <Show when={el().screenshotDataUrl}>
-                <img
-                  src={el().screenshotDataUrl}
-                  alt="Element location screenshot"
-                  class="border-border bg-bg max-h-32 w-full rounded-md border object-contain"
-                />
-                <span class="text-text-faint text-[10.5px]">
-                  Element screenshot — attached to the issue on create.
+      {/* ---- Context summary — full management lives in the Capture tab ------- */}
+      <div class="bg-surface border-border flex items-center gap-2 rounded-lg border px-2.5 py-2">
+        <div class="flex min-w-0 flex-1 flex-col gap-1">
+          <span class="text-text-dim text-[11px] font-medium">Attached context</span>
+          <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+            <Show
+              when={grab()}
+              fallback={<Badge class="text-text-faint">No element</Badge>}
+            >
+              <Badge class="text-accent max-w-full">
+                <span class="truncate font-mono">
+                  {grab()!.componentName
+                    ? `<${grab()!.componentName}>`
+                    : (grab()!.source?.filePath?.split('/').pop() ?? 'element')}
                 </span>
-              </Show>
-            </div>
-          )}
-        </Show>
-
-        <div class="flex flex-col gap-1.5">
-          <Button variant="primary" onClick={pickElement}>
-            Pick element
-          </Button>
-          <Show when={pickError()}>
-            <ErrorNote message={pickError()!} />
-          </Show>
-        </div>
-      </Section>
-
-      {/* ---- Screen recording ------------------------------------------------ */}
-      <Section title="Recording">
-        <Show when={rec().phase === 'idle' || rec().phase === 'error'}>
-          <div class="flex flex-col gap-1.5">
-            <Button variant="ghost" onClick={() => void startRecording()}>
-              <span class="text-danger">●</span> Record interaction
-            </Button>
-            <span class="text-text-faint text-[10.5px] leading-snug">
-              Captures your screen as a looping GIF (max 30s) the coding agent can
-              watch. Pick this tab in the share dialog, then reproduce the issue.
-            </span>
-            <Show when={rec().phase === 'error' && rec().error}>
-              <ErrorNote message={rec().error!} />
+              </Badge>
+            </Show>
+            <Show when={grab()?.screenshotDataUrl}>
+              <Badge class="text-success">screenshot ✓</Badge>
+            </Show>
+            <Show when={rec().result}>
+              <Badge class={rec().attachOnCreate ? 'text-success' : 'text-text-faint'}>
+                gif {(rec().result!.durationMs / 1000).toFixed(0)}s
+                {rec().attachOnCreate ? ' ✓' : ' (off)'}
+              </Badge>
+            </Show>
+            <Show when={rec().phase === 'recording'}>
+              <Badge class="text-danger">● recording…</Badge>
             </Show>
           </div>
-        </Show>
-
-        <Show when={rec().phase === 'recording'}>
-          <div class="bg-surface border-border flex items-center gap-2 rounded-lg border p-2.5">
-            <span aria-hidden class="bg-danger size-2 shrink-0 animate-pulse rounded-full" />
-            <span class="text-text min-w-[5ch] text-[12px] tabular-nums">
-              {formatElapsed(elapsed())}
-            </span>
-            <span class="text-text-faint text-[10.5px]">max 0:30</span>
-            <Button variant="primary" class="ml-auto" onClick={() => void stopRecording()}>
-              <span class="inline-block min-w-[4ch] text-center">Stop</span>
-            </Button>
-          </div>
-        </Show>
-
-        <Show when={rec().phase === 'processing'}>
-          <div class="bg-surface border-border flex items-center gap-2 rounded-lg border p-2.5">
-            <Spinner />
-            <span class="text-text-dim text-[12px]">Encoding GIF…</span>
-          </div>
-        </Show>
-
-        <Show when={rec().phase === 'ready' && rec().result}>
-          {(result) => (
-            <div class="bg-surface border-border flex flex-col gap-2 rounded-lg border p-2.5">
-              <img
-                src={result().url}
-                alt="Screen recording preview"
-                class="border-border bg-bg max-h-44 w-full rounded-md border object-contain"
-              />
-              <span class="text-text-faint text-[10.5px] tabular-nums">
-                {(result().blob.size / 1024).toFixed(0)} KB ·{' '}
-                {(result().durationMs / 1000).toFixed(1)}s · {result().width}×
-                {result().height}
-              </span>
-              <label class="flex cursor-pointer items-center gap-2 select-none">
-                <input
-                  type="checkbox"
-                  checked={attachRec()}
-                  onChange={(e) => setAttachRec(e.currentTarget.checked)}
-                  class="accent-accent rounded"
-                />
-                <span class="text-text text-[12px]">Attach to issue on create</span>
-              </label>
-              <div class="flex items-center gap-1.5">
-                <Button
-                  variant="ghost"
-                  class="h-6 px-2 text-[11px]"
-                  loading={copyState() === 'busy'}
-                  disabled={!linearConnected()}
-                  title={
-                    linearConnected()
-                      ? 'Uploads to Linear and copies embeddable markdown'
-                      : 'Connect Linear in Settings first'
-                  }
-                  onClick={() => void copyRecordingMarkdown()}
-                >
-                  <span class="inline-block min-w-[9ch] text-center">
-                    {copyState() === 'copied' ? 'Copied!' : 'Copy markdown'}
-                  </span>
-                </Button>
-                <Button variant="ghost" class="h-6 px-2 text-[11px]" onClick={downloadRecording}>
-                  Download
-                </Button>
-                <Button
-                  variant="danger"
-                  class="ml-auto h-6 px-2 text-[11px]"
-                  onClick={discardRecording}
-                >
-                  Discard
-                </Button>
-              </div>
-              <Show when={recActionError()}>
-                <ErrorNote message={recActionError()!} />
-              </Show>
-            </div>
-          )}
-        </Show>
-      </Section>
+        </div>
+        <Button
+          variant="ghost"
+          class="h-6 shrink-0 px-2 text-[11px]"
+          onClick={() => openPanelTo('capture')}
+        >
+          Capture →
+        </Button>
+      </div>
 
       {/* ---- Note + AI drafting -------------------------------------------- */}
       <Section title="AI draft">

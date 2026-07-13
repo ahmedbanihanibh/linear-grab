@@ -20,6 +20,7 @@ import {
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
 import { requestedIssueId, consumeNavRequest } from '../nav';
+import { renderMarkdown } from '../components/markdown';
 import {
   Button,
   Textarea,
@@ -379,9 +380,10 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
                       {timeAgo(comment.createdAt)}
                     </span>
                   </div>
-                  <p class="whitespace-pre-wrap break-words text-[12px] text-text leading-relaxed">
-                    {comment.body}
-                  </p>
+                  <div
+                    class="lg-md text-text text-[12px] leading-relaxed break-words"
+                    innerHTML={renderMarkdown(comment.body)}
+                  />
                 </div>
               )}
             </For>

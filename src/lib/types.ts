@@ -64,10 +64,15 @@ export interface Settings {
   /** Standing instructions appended to every issue as "### Agent instructions"
       (demo credentials, "record a video", etc.) and fed to the AI draft. */
   issueTemplate?: string;
-  /** Page mode: which edge the panel docks to. */
+  /** Test account the cloud agent uses to log into the app while testing. */
+  testUsername?: string;
+  testPassword?: string;
+  /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: persisted launcher pill position (viewport px from left/top). */
   launcherPos?: { x: number; y: number };
+  /** Page mode: persisted free-floating panel position. */
+  panelPos?: { x: number; y: number };
 }
 
 // ---- Linear API shapes (thin, only what the UI needs) ----

@@ -374,6 +374,32 @@ export default function SettingsView() {
               Empty = the default above (computer-use testing, video demo, PR + review babysitting).
             </span>
           </Field>
+
+          {/* Test account for the agent's in-app testing */}
+          <Field
+            label="Test account"
+            hint="The cloud agent logs into the app with this while testing and recording its demo. Added to every issue's Agent instructions. Use a throwaway account — it's visible to everyone who can read the issue."
+          >
+            <div class="flex flex-col gap-1.5">
+              <Input
+                placeholder="Username or email (e.g. demo@yourapp.com)"
+                value={s().testUsername ?? ''}
+                onBlur={(e) => {
+                  const v = e.currentTarget.value.trim();
+                  void update({ testUsername: v || undefined });
+                }}
+              />
+              <Input
+                type="password"
+                placeholder="Password"
+                value={s().testPassword ?? ''}
+                onBlur={(e) => {
+                  const v = e.currentTarget.value.trim();
+                  void update({ testPassword: v || undefined });
+                }}
+              />
+            </div>
+          </Field>
         </Section>
       </Show>
 

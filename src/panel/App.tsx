@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onCleanup, onMount, Match, Switch, For, Show } from 'solid-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
 import DraftView from './views/DraftView';
+import CaptureView from './views/CaptureView';
 import ActivityView from './views/ActivityView';
 import PrsView from './views/PrsView';
 import SettingsView from './views/SettingsView';
@@ -11,6 +12,7 @@ import { requestedTab, type PanelTab } from './nav';
 
 const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'draft', label: 'Draft' },
+  { id: 'capture', label: 'Capture' },
   { id: 'activity', label: 'Activity' },
   { id: 'prs', label: 'PRs' },
   { id: 'settings', label: 'Settings' },
@@ -37,12 +39,17 @@ export function LinearLogo(props: { size?: number }) {
   );
 }
 
-export default function App(props: { onGrab?: () => void; onClose?: () => void }) {
+export default function App(props: {
+  onGrab?: () => void;
+  onClose?: () => void;
+  /** Page mode: header doubles as the drag handle for the floating panel. */
+  onHeaderPointerDown?: (e: PointerEvent) => void;
+}) {
   const [tab, setTab] = createSignal<PanelTab>('draft');
 
   const handleGrab = () => {
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
-    setTab('draft');
+    setTab('capture'); // show the captured element + incoming screenshot
     props.onGrab?.();
   };
 
@@ -70,7 +77,12 @@ export default function App(props: { onGrab?: () => void; onClose?: () => void }
   return (
     <QueryClientProvider client={queryClient}>
       <div class="bg-bg text-text flex h-full flex-col">
-        <header class="border-border bg-surface flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+        <header
+          onPointerDown={(e) => props.onHeaderPointerDown?.(e)}
+          class={`border-border bg-surface flex shrink-0 items-center gap-1 border-b px-2 py-1.5 select-none ${
+            props.onHeaderPointerDown ? 'cursor-grab active:cursor-grabbing' : ''
+          }`}
+        >
           <span class="text-accent mr-0.5 inline-flex shrink-0" title="Linear Grab">
             <LinearLogo size={14} />
           </span>
@@ -91,11 +103,11 @@ export default function App(props: { onGrab?: () => void; onClose?: () => void }
           <Show when={props.onClose}>
             <button
               onClick={() => props.onClose?.()}
-              aria-label="Close panel"
-              title="Close panel"
-              class="text-text-dim hover:text-text hover:bg-surface-3 ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[14px] leading-none transition-colors"
+              aria-label="Minimize to launcher"
+              title="Minimize to launcher"
+              class="text-text-dim hover:text-text hover:bg-surface-3 ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[15px] leading-none transition-colors"
             >
-              ×
+              –
             </button>
           </Show>
         </header>
@@ -103,6 +115,9 @@ export default function App(props: { onGrab?: () => void; onClose?: () => void }
           <Switch>
             <Match when={tab() === 'draft'}>
               <DraftView onCreated={() => setTab('activity')} />
+            </Match>
+            <Match when={tab() === 'capture'}>
+              <CaptureView />
             </Match>
             <Match when={tab() === 'activity'}>
               <ActivityView />
