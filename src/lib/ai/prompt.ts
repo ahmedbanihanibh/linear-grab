@@ -103,6 +103,31 @@ export function buildAgentInstructions(settings: {
     );
   }
 
+  // Definition of Done — a literal checklist the agent must reproduce in its
+  // closeout comment with every box ticked. Built dynamically so it only
+  // demands what's actually configured. Instructions freeze into the issue at
+  // creation; the checklist is the enforcement layer prose never was.
+  const dod: string[] = [
+    '- [ ] Tested the change hands-on in the RUNNING app (state what you exercised)',
+    '- [ ] Demo media captured — GIF/video preferred; if recording is impossible in your environment, before/after screenshots + the stated reason',
+  ];
+  if (settings.githubAssetsRepo?.trim()) {
+    dod.push(
+      `- [ ] Demo media committed to \`${settings.githubAssetsRepo.trim()}\` and embedded via raw.githubusercontent.com URL in the Linear comment AND the PR body`,
+    );
+  }
+  dod.push(
+    '- [ ] Demo media attached to the Linear ISSUE itself (not only the PR)',
+    '- [ ] PR opened and linked here',
+    '- [ ] Issue moved to its review/done state',
+  );
+  if (notify.length) {
+    dod.push('- [ ] Announcement posted to the configured channel(s) with the demo attached');
+  }
+  parts.push(
+    `**DEFINITION OF DONE — acceptance checklist.** Copy this checklist VERBATIM into your Linear closeout comment and tick each box (\`- [x]\`) with a link or one-line evidence next to it. Any unchecked box means the work is NOT ACCEPTED — leave it unchecked and explain the blocker rather than omitting it:\n${dod.join('\n')}`,
+  );
+
   return parts.join('\n\n');
 }
 
