@@ -11,7 +11,8 @@ import SettingsView from './views/SettingsView';
 import { subscribeStorage } from '@/lib/storage';
 import { subscribeGrabBroadcast } from '@/lib/picker';
 import { wireIdbCache } from '@/lib/idbCache';
-import { bridgeBase, pushBridgeConfig } from '@/lib/bridge';
+import { bridgeBase, listBridgeTasks, pushBridgeConfig } from '@/lib/bridge';
+import { fetchAllAgentSessions } from '@/lib/linear/api';
 import { setLinearMediaProxy } from './components/markdown';
 import { grabSink, requestedTab, type PanelTab } from './nav';
 
@@ -25,6 +26,52 @@ const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'prs', label: 'PRs' },
   { id: 'settings', label: 'Settings' },
 ];
+
+/* Stuck-agent watchdog: agents that go quiet are invisible failures. Poll
+   both executors and raise a browser notification once per condition —
+   'needs input' cloud sessions and local sessions silent for 10+ minutes. */
+const watchdogNotified = new Set<string>();
+function watchdogNotify(key: string, title: string, body: string): void {
+  if (watchdogNotified.has(key) || typeof Notification === 'undefined') return;
+  watchdogNotified.add(key);
+  const fire = () => new Notification(title, { body });
+  if (Notification.permission === 'granted') fire();
+  else if (Notification.permission === 'default')
+    void Notification.requestPermission().then((p) => p === 'granted' && fire());
+}
+function startWatchdog(): void {
+  setInterval(() => {
+    void listBridgeTasks()
+      .then((tasks) => {
+        for (const t of tasks) {
+          if (t.status !== 'running') continue;
+          const last = t.lastEventAt ?? t.startedAt;
+          if (Date.now() - last > 10 * 60_000) {
+            watchdogNotify(
+              `local-stuck:${t.id}:${last}`,
+              'Local agent may be stuck',
+              `${t.title.slice(0, 80)} — no output for ${Math.round((Date.now() - last) / 60_000)}m. Nudge or interrupt it in the Local tab.`,
+            );
+          }
+        }
+      })
+      .catch(() => {});
+    void fetchAllAgentSessions()
+      .then((sessions) => {
+        for (const sn of sessions) {
+          if (/awaitingInput|elicit/i.test(sn.status)) {
+            watchdogNotify(
+              `cloud-input:${sn.id}`,
+              'Cloud agent needs input',
+              `${sn.issue?.identifier ?? 'Session'} — ${sn.issue?.title?.slice(0, 80) ?? 'a Cursor agent'} is waiting for you.`,
+            );
+          }
+        }
+      })
+      .catch(() => {});
+  }, 60_000);
+}
+startWatchdog();
 
 const queryClient = new QueryClient({
   defaultOptions: {

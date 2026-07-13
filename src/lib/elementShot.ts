@@ -144,7 +144,8 @@ export async function captureRectShot(rect: {
       crop.height,
     );
     return await encodeCanvas(crop);
-  } catch {
+  } catch (err) {
+    console.warn('[linear-grab] region capture failed:', err);
     return null;
   }
 }

@@ -4,6 +4,7 @@ import { fetchMyIssues } from '@/lib/linear/api';
 import { fetchBranchStatus, fetchPrStatuses, listBridgeTasks, mergePr, stagePr } from '@/lib/bridge';
 import { getSettings } from '@/lib/storage';
 import { openPanelTo } from '../nav';
+import { BuildLogsCard } from '../components/BuildLogs';
 import { Badge, Button, CloudIcon, EmptyState, ExtLink, Input, MonitorIcon, Spinner, StateDot, timeAgo } from '../components/ui';
 import type { LinearAttachment, LinearIssueSummary } from '@/lib/types';
 
@@ -266,9 +267,6 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                           <span class="text-success text-[11px]">✓</span>
                         </Show>
                       </Button>
-                      <Show when={staged().has(row.attachment.url)}>
-                        <StageStatusChip url={row.attachment.url} base={stagingBranch()} />
-                      </Show>
                       <Button
                         variant="primary"
                         class="size-7 px-0"
@@ -328,6 +326,9 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                         </Show>
                       </Button>
                     </div>
+                    <Show when={staged().has(row.attachment.url)}>
+                      <BuildLogsCard url={row.attachment.url} base={stagingBranch()} />
+                    </Show>
                   </div>
                 </div>
               )}

@@ -22,6 +22,7 @@ import {
   findAgentThreadRoots,
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
+import { BuildLogsCard } from '../components/BuildLogs';
 import { activatePicker } from '@/lib/picker';
 import {
   getRecorderSnapshot,
@@ -804,6 +805,7 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
                 {(att) => {
                   const isPr = /github\.com\/[^/]+\/[^/]+\/pull\/\d+/i.test(att.url);
                   return (
+                    <>
                     <div class="flex min-w-0 items-center gap-1.5">
                       <a
                         href={att.url}
@@ -851,9 +853,6 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
                             <span class="text-success text-[11px]">✓</span>
                           </Show>
                         </Button>
-                        <Show when={stagedUrls().has(att.url)}>
-                          <StageStatusChip url={att.url} base={stagingBranch()} />
-                        </Show>
                         <Button
                           variant="primary"
                           class="h-6 shrink-0 px-2 text-[11px]"
@@ -869,6 +868,10 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
                         </Button>
                       </Show>
                     </div>
+                    <Show when={stagedUrls().has(att.url)}>
+                      <BuildLogsCard url={att.url} base={stagingBranch()} />
+                    </Show>
+                    </>
                   );
                 }}
               </For>

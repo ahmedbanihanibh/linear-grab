@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.20.0';
+const VERSION = '0.21.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -175,6 +175,7 @@ function summary(t) {
     subagents: t.subagents ?? 0,
     permissionMode: t.permissionMode ?? 'acceptEdits',
     worktree: t.worktree ?? null,
+    lastEventAt: t.tail?.length ? t.tail[t.tail.length - 1].at : (t.startedAt ?? null),
   };
 }
 
@@ -620,6 +621,38 @@ createServer(async (req, res) => {
       );
       return json(res, 200, { statuses, previews });
     }
+    // Reset the staging branch: delete + recreate from the default branch.
+    if (req.method === 'POST' && url.pathname === '/branch/reset') {
+      const body = await readBody(req);
+      const prUrl = String(body.url ?? '');
+      const base = String(body.base || 'staging').replace(/[^\w./-]/g, '');
+      const m = prUrl.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/\d+$/);
+      if (!m) return json(res, 400, { error: 'invalid PR url' });
+      const repo = `${m[1]}/${m[2]}`;
+      await run('gh', ['api', '-X', 'DELETE', `repos/${repo}/git/refs/heads/${base}`]);
+      const def = ((await run('gh', ['api', `repos/${repo}`, '-q', '.default_branch'])) ?? 'main').trim();
+      const sha = ((await run('gh', ['api', `repos/${repo}/git/ref/heads/${def}`, '-q', '.object.sha'])) ?? '').trim();
+      if (!sha) return json(res, 500, { error: `could not read ${def}` });
+      const created = await run('gh', ['api', '-X', 'POST', `repos/${repo}/git/refs`, '-f', `ref=refs/heads/${base}`, '-f', `sha=${sha}`]);
+      if (created == null) return json(res, 500, { error: `could not recreate ${base}` });
+      return json(res, 200, { ok: true, base, from: def });
+    }
+    // Vercel build logs for a deployment URL — the panel's terminal card.
+    if (req.method === 'POST' && url.pathname === '/deploy/logs') {
+      const body = await readBody(req);
+      const deployUrl = String(body.deployUrl ?? '');
+      if (!/^https:\/\/[\w.-]+\.vercel\.app/.test(deployUrl))
+        return json(res, 400, { error: 'invalid deployment url' });
+      const out = await new Promise((resolve) => {
+        execFile(
+          'vercel',
+          ['inspect', deployUrl, '--logs'],
+          { timeout: 30_000, maxBuffer: 4_000_000 },
+          (err, stdout, stderr) => resolve(stdout || stderr || (err ? String(err.message) : '')),
+        );
+      });
+      return json(res, 200, { logs: String(out).split('\n').slice(-400).join('\n') });
+    }
     // Live status of the staging deploy: Vercel mirrors every branch deploy
     // into GitHub Deployments (state + environment_url) — pollable via gh.
     if (req.method === 'POST' && url.pathname === '/branch/status') {
@@ -633,7 +666,21 @@ createServer(async (req, res) => {
         const deps = JSON.parse(
           (await run('gh', ['api', `repos/${repo}/deployments?ref=${base}&per_page=1`])) ?? '[]',
         );
-        if (!deps.length) return json(res, 200, { state: 'none' });
+        if (!deps.length) {
+          // Not every Vercel project populates GitHub Deployments — the commit
+          // status ('vercel' context) is the reliable fallback.
+          const combined = JSON.parse(
+            (await run('gh', ['api', `repos/${repo}/commits/${base}/status`])) ?? '{}',
+          );
+          const st = (combined.statuses ?? []).find((x) => /vercel/i.test(x.context ?? '')) ?? null;
+          const map = { success: 'success', pending: 'in_progress', failure: 'failure', error: 'error' };
+          return json(res, 200, {
+            state: st ? (map[st.state] ?? st.state) : 'none',
+            url: st?.target_url ?? null,
+            at: st?.updated_at ?? null,
+            sha: (combined.sha ?? '').slice(0, 7),
+          });
+        }
         const statuses = JSON.parse(
           (await run('gh', ['api', `repos/${repo}/deployments/${deps[0].id}/statuses?per_page=1`])) ?? '[]',
         );

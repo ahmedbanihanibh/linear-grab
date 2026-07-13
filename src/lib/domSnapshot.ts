@@ -101,7 +101,18 @@ async function cloneWithStyles(node: Element, slicer: Slicer): Promise<Element |
   clone.setAttribute('style', css);
   clone.removeAttribute('class'); // page CSS doesn't exist inside the SVG doc
 
-  if (node instanceof HTMLImageElement) inlineImage(node, clone as HTMLImageElement);
+  if (node instanceof HTMLImageElement) {
+    inlineImage(node, clone as HTMLImageElement);
+    // srcset/sizes survive the clone and re-trigger REMOTE fetches inside the
+    // SVG document — one blocked fetch can fail the whole rasterization.
+    clone.removeAttribute('srcset');
+    clone.removeAttribute('sizes');
+  }
+  if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
+    clone.removeAttribute('src');
+    clone.removeAttribute('poster');
+  }
+  if (node.tagName === 'SOURCE') return null; // <picture>/<video> sources — remote fetches
   if (node instanceof HTMLCanvasElement) {
     try {
       const img = document.createElement('img');
@@ -160,7 +171,13 @@ export async function captureRegionSliced(
   img.decoding = 'async';
   img.src = svgUrl;
   try {
-    await img.decode(); // async rasterize — no sync decode on draw
+    // decode() rejects on ANY failed subresource in some engines even when
+    // the bitmap is usable — fall back to load-state checks before failing.
+    await img.decode().catch(() => {
+      if (!img.complete || !img.naturalWidth) {
+        throw new Error('SVG rasterize failed — a subresource in the region could not load');
+      }
+    });
   } finally {
     URL.revokeObjectURL(svgUrl);
   }

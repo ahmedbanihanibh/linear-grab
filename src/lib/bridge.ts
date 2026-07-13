@@ -40,6 +40,8 @@ export interface BridgeTask {
   permissionMode: string;
   worktree: { path: string; branch: string; removed: boolean } | null;
   tail?: Array<{ at: number; kind: string; text: string }>;
+  /** Timestamp of the last stream event — the stuck-agent watchdog's signal. */
+  lastEventAt?: number | null;
 }
 
 async function bridgeUrl(): Promise<string> {
@@ -178,6 +180,22 @@ export interface BranchDeployStatus {
 /** Live status of the staging branch's deploy (GitHub Deployments via gh). */
 export function fetchBranchStatus(url: string, base: string): Promise<BranchDeployStatus> {
   return call<BranchDeployStatus>('/branch/status', {
+    method: 'POST',
+    body: JSON.stringify({ url, base }),
+  });
+}
+
+/** Vercel build logs for a deployment (bridge runs `vercel inspect --logs`). */
+export function fetchDeployLogs(deployUrl: string): Promise<{ logs: string }> {
+  return call<{ logs: string }>('/deploy/logs', {
+    method: 'POST',
+    body: JSON.stringify({ deployUrl }),
+  });
+}
+
+/** Delete + recreate the staging branch from the default branch. */
+export function resetStagingBranch(url: string, base: string): Promise<{ ok: boolean }> {
+  return call<{ ok: boolean }>('/branch/reset', {
     method: 'POST',
     body: JSON.stringify({ url, base }),
   });

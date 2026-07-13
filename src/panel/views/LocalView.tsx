@@ -271,7 +271,13 @@ export default function LocalView() {
             class="text-text-faint max-w-[55%] truncate text-[10.5px] tabular-nums"
             title={health.data?.cwd}
           >
-            {health.data!.active} running · {health.data!.cwd.split('/').slice(-2).join('/')}
+            {health.data!.active} running
+            {(() => {
+              const cost = (tasks.data ?? []).reduce((n, t) => n + (t.usage?.costUsd ?? 0), 0);
+              return cost > 0 ? ` · Σ $${cost.toFixed(2)}` : '';
+            })()}
+            {' · '}
+            {health.data!.cwd.split('/').slice(-2).join('/')}
           </span>
         </Show>
       </div>

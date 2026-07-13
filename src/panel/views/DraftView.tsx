@@ -176,6 +176,31 @@ export default function DraftView(props: { onCreated: () => void }) {
 
   // ---- AI streaming state ---------------------------------------------------
 
+
+  const [copiedPrompt, setCopiedPrompt] = createSignal(false);
+  const copyPrompt = async () => {
+    const body = composeIssueBody({
+      description: description(),
+      reproSteps: reproSteps(),
+      expected: expected(),
+      actual: actual(),
+      impact: impact(),
+      analysisNotes: analysisNotes(),
+      suggestedNextSteps: nextSteps(),
+      grabs: grabQuery.data ?? [],
+      // NO repo/model tags, NO agent instructions — this is a clean prompt
+      // for a local session: no Slack, no video, no Linear closeout.
+    });
+    const text = `Fix this issue in the current repo. Test the change hands-on before calling it done.\n\n# ${title().trim() || 'Issue'}\n\n${body}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 1800);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+
   const [drafting, setDrafting] = createSignal(false);
   const [draftError, setDraftError] = createSignal<string | null>(null);
   const [fellBack, setFellBack] = createSignal<FellBackInfo | null>(null);
@@ -981,14 +1006,37 @@ export default function DraftView(props: { onCreated: () => void }) {
           )}
         </Show>
 
-        <Button
-          variant="primary"
-          loading={createMut.isPending}
-          disabled={!canCreate()}
-          onClick={() => createMut.mutate()}
-        >
-          Create issue
-        </Button>
+        <div class="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              class="h-9 shrink-0 px-3"
+              title={
+                copiedPrompt()
+                  ? 'Copied!'
+                  : 'Copy as a clean prompt — issue context only (no Slack/video/Linear closeout), paste into a local Claude Code session'
+              }
+              aria-label="Copy issue as prompt"
+              onClick={() => void copyPrompt()}
+            >
+              <Show when={copiedPrompt()} fallback={
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                  <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
+                </svg>
+              }>
+                <span class="text-success text-[11px]">✓</span>
+              </Show>
+            </Button>
+            <Button
+              variant="primary"
+              class="h-9 min-w-0 flex-1"
+              loading={createMut.isPending}
+              disabled={!canCreate()}
+              onClick={() => createMut.mutate()}
+            >
+              Create issue
+            </Button>
+          </div>
       </div>
     </div>
   );
