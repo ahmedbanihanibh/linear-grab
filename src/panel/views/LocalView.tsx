@@ -137,8 +137,10 @@ export default function LocalView() {
   const attachCaptures = async () => {
     setAttachBusy(true);
     try {
-      const block = await buildCaptureBlock();
+      const { block, failed } = await buildCaptureBlock();
       if (block) setMessage((prev) => `${prev ? `${prev}\n` : ''}${block}\n`);
+      if (failed.length)
+        setMessage((prev) => `${prev}\n<!-- upload issues: ${failed.join(' · ')} -->\n`);
     } finally {
       setAttachBusy(false);
     }

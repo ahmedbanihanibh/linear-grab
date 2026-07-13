@@ -470,9 +470,11 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
     setAttachBusy(true);
     setSendError(null);
     try {
-      const block = await buildCaptureBlock();
+      const { block, failed } = await buildCaptureBlock();
       if (block) setBody((prev) => `${prev ? `${prev}\n` : ''}${block}\n`);
-      else setSendError('Nothing captured yet — pick an element, capture a region, or record first.');
+      else if (!failed.length)
+        setSendError('Nothing captured yet — pick an element, capture a region, or record first.');
+      if (failed.length) setSendError(failed.join(' · '));
     } catch (err) {
       setSendError(err instanceof Error ? err.message : 'Attach failed.');
     } finally {

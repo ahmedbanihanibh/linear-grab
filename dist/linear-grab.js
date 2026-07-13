@@ -41930,7 +41930,7 @@ function vQ() {
 		let e = HD().result;
 		if (!e) throw Error("No recording available.");
 		if (e.assetUrl) return e.assetUrl;
-		let t = await DO(e.blob, `recording-${Date.now()}.gif`);
+		let t = await Promise.race([DO(e.blob, `recording-${Date.now()}.gif`), new Promise((e, t) => setTimeout(() => t(/* @__PURE__ */ Error("upload timed out")), 6e4))]);
 		return rO(t), t;
 	}, k = async () => {
 		w(null), S("busy");
@@ -43132,20 +43132,27 @@ function i$(e, t = 6e3) {
 	return Promise.race([e, new Promise((e, n) => setTimeout(() => n(/* @__PURE__ */ Error("upload timeout")), t))]);
 }
 async function a$() {
-	let e = [];
-	for (let t of await Dr() ?? []) {
-		let n = t.source?.filePath ? ` — \`${t.source.filePath}${t.source.lineNumber == null ? "" : `:${t.source.lineNumber}`}\`` : "";
-		if (e.push(`- \`<${t.componentName ?? t.tagName ?? "element"}>\`${n}`), t.screenshotDataUrl) try {
-			let n = await i$(DO(ej(t.screenshotDataUrl), `capture-${t.grabbedAt}.png`));
-			e.push(`  ![capture](${n})`);
-		} catch {}
+	let e = [], t = [];
+	for (let n of await Dr() ?? []) {
+		let r = n.source?.filePath ? ` — \`${n.source.filePath}${n.source.lineNumber == null ? "" : `:${n.source.lineNumber}`}\`` : "";
+		if (e.push(`- \`<${n.componentName ?? n.tagName ?? "element"}>\`${r}`), n.screenshotDataUrl) try {
+			let t = await i$(DO(ej(n.screenshotDataUrl), `capture-${n.grabbedAt}.png`), 15e3);
+			e.push(`  ![capture](${t})`);
+		} catch {
+			t.push("element screenshot upload failed — the ref line still landed");
+		}
 	}
-	let t = HD();
-	if (t.result) try {
-		let n = t.result.assetUrl ?? await i$(DO(t.result.blob, `recording-${Date.now()}.gif`));
-		rO(n), e.push(`![recording](${n})`);
-	} catch {}
-	return e.length ? `Captured context:\n${e.join("\n")}` : null;
+	let n = HD();
+	if (n.result) try {
+		let t = n.result.assetUrl ?? await i$(DO(n.result.blob, `recording-${Date.now()}.gif`), 6e4);
+		rO(t), e.push(`![recording](${t})`);
+	} catch (e) {
+		t.push(`recording upload failed (${e instanceof Error ? e.message : "error"}) — Copy GIF from the Capture tab and paste it instead`);
+	}
+	return {
+		block: e.length ? `Captured context:\n${e.join("\n")}` : null,
+		failed: t
+	};
 }
 //#endregion
 //#region src/panel/components/markdown.ts
@@ -43573,8 +43580,8 @@ function p1(e) {
 	})), [C, w] = T(!1), E = async () => {
 		w(!0), y(null);
 		try {
-			let e = await a$();
-			e ? _((t) => `${t ? `${t}\n` : ""}${e}\n`) : y("Nothing captured yet — pick an element, capture a region, or record first.");
+			let { block: e, failed: t } = await a$();
+			e ? _((t) => `${t ? `${t}\n` : ""}${e}\n`) : t.length || y("Nothing captured yet — pick an element, capture a region, or record first."), t.length && y(t.join(" · "));
 		} catch (e) {
 			y(e instanceof Error ? e.message : "Attach failed.");
 		} finally {
@@ -44694,8 +44701,8 @@ function v0() {
 	let y = async () => {
 		m(!0);
 		try {
-			let e = await a$();
-			e && f((t) => `${t ? `${t}\n` : ""}${e}\n`);
+			let { block: e, failed: t } = await a$();
+			e && f((t) => `${t ? `${t}\n` : ""}${e}\n`), t.length && f((e) => `${e}\n<!-- upload issues: ${t.join(" · ")} -->\n`);
 		} finally {
 			m(!1);
 		}

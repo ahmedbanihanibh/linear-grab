@@ -16,8 +16,15 @@ function withTimeout<T>(promise: Promise<T>, ms = 6_000): Promise<T> {
   ]);
 }
 
-export async function buildCaptureBlock(): Promise<string | null> {
+export interface CaptureBlockResult {
+  block: string | null;
+  /** Human-readable upload failures — surface these, never swallow them. */
+  failed: string[];
+}
+
+export async function buildCaptureBlock(): Promise<CaptureBlockResult> {
   const lines: string[] = [];
+  const failed: string[] = [];
 
   for (const g of (await getLastGrab()) ?? []) {
     const loc = g.source?.filePath
@@ -28,10 +35,11 @@ export async function buildCaptureBlock(): Promise<string | null> {
       try {
         const url = await withTimeout(
           uploadAsset(dataUrlToBlob(g.screenshotDataUrl), `capture-${g.grabbedAt}.png`),
+          15_000,
         );
         lines.push(`  ![capture](${url})`);
       } catch {
-        /* screenshot upload blocked — the ref line still lands */
+        failed.push('element screenshot upload failed — the ref line still landed');
       }
     }
   }
@@ -39,15 +47,18 @@ export async function buildCaptureBlock(): Promise<string | null> {
   const rec = getRecorderSnapshot();
   if (rec.result) {
     try {
+      // GIFs are multi-MB — a short timeout silently dropped every recording.
       const url =
         rec.result.assetUrl ??
-        (await withTimeout(uploadAsset(rec.result.blob, `recording-${Date.now()}.gif`)));
+        (await withTimeout(uploadAsset(rec.result.blob, `recording-${Date.now()}.gif`), 60_000));
       markRecordingUploaded(url);
       lines.push(`![recording](${url})`);
-    } catch {
-      /* recording upload blocked */
+    } catch (err) {
+      failed.push(
+        `recording upload failed (${err instanceof Error ? err.message : 'error'}) — Copy GIF from the Capture tab and paste it instead`,
+      );
     }
   }
 
-  return lines.length ? `Captured context:\n${lines.join('\n')}` : null;
+  return { block: lines.length ? `Captured context:\n${lines.join('\n')}` : null, failed };
 }
