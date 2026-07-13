@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from 'solid-js';
+import { createEffect, createSignal, For, Index, Show } from 'solid-js';
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
 import {
   fetchBridgeHealth,
@@ -14,11 +14,12 @@ import {
 } from '@/lib/bridge';
 import { fetchMyIssues } from '@/lib/linear/api';
 import { openPanelTo } from '../nav';
-import { Button, Badge, EmptyState, Select, Spinner, Textarea, timeAgo } from '../components/ui';
+import { Button, Badge, EmptyState, ExtLink, Select, Spinner, Textarea, timeAgo } from '../components/ui';
 import { renderMarkdown } from '../components/markdown';
 
 const MODEL_OPTIONS = [
   { id: '', label: 'Default model' },
+  { id: 'fable', label: 'Fable 5' },
   { id: 'opus', label: 'Opus' },
   { id: 'sonnet', label: 'Sonnet' },
   { id: 'haiku', label: 'Haiku' },
@@ -106,6 +107,23 @@ export default function LocalView() {
     mutationFn: (id: string) => removeBridgeWorktree(id),
     onSuccess: invalidate,
   }));
+
+  // Chat scroll: stick to the bottom while following a live agent, but never
+  // yank the view when the user has scrolled up to read history.
+  let chatEl: HTMLDivElement | undefined;
+  let chatNearBottom = true;
+  const onChatScroll = () => {
+    if (!chatEl) return;
+    chatNearBottom = chatEl.scrollTop + chatEl.clientHeight >= chatEl.scrollHeight - 48;
+  };
+  createEffect(() => {
+    const len = detail.data?.tail?.length ?? 0;
+    expandedId(); // re-run when a different thread opens
+    if (!chatEl || !len || !chatNearBottom) return;
+    requestAnimationFrame(() => {
+      if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+    });
+  });
 
   const [copiedResume, setCopiedResume] = createSignal<string | null>(null);
   const copyResume = async (task: BridgeTask) => {
@@ -248,9 +266,7 @@ export default function LocalView() {
                     {/* Telemetry: status · model · subagents · tokens · cost */}
                     <div class="flex flex-wrap items-center gap-1.5">
                       <Badge color={statusColor(task.status)}>{task.status}</Badge>
-                      <Show when={task.model}>
-                        <Badge>{task.model}</Badge>
-                      </Show>
+                      <Badge>{task.model ?? 'default model'}</Badge>
                       <Show when={task.pendingModel}>
                         <Badge class="text-warn">→ {task.pendingModel} next msg</Badge>
                       </Show>
@@ -269,24 +285,9 @@ export default function LocalView() {
                     {/* Linked Linear issue */}
                     <Show when={issueFor(task)}>
                       {(issue) => (
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex min-w-0 items-center gap-1.5">
                           <Badge>{issue().state.name}</Badge>
-                          <a
-                            href={issue().url}
-                            target="_blank"
-                            rel="noreferrer"
-                            class="text-accent text-[11px] hover:underline"
-                          >
-                            Open in Linear ↗
-                          </a>
-                          <Button
-                            variant="ghost"
-                            class="ml-auto h-6 px-2 text-[11px]"
-                            title="Open the issue's Activity thread"
-                            onClick={() => openPanelTo('activity', issue().id)}
-                          >
-                            Issue
-                          </Button>
+                          <ExtLink href={issue().url}>Open in Linear</ExtLink>
                         </div>
                       )}
                     </Show>
@@ -315,34 +316,15 @@ export default function LocalView() {
                       </div>
                     </Show>
 
-                    {/* Session id + resume */}
-                    <Show when={task.sessionId}>
-                      <div class="flex min-w-0 items-center gap-1.5">
-                        <span class="font-mono text-text-faint min-w-0 truncate text-[10.5px]">
-                          session {task.sessionId}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          class="ml-auto h-6 shrink-0 px-2 text-[11px]"
-                          title={`Copy: ${resumeCommand(task)}`}
-                          onClick={() => void copyResume(task)}
-                        >
-                          <span class="inline-block min-w-[9ch] text-center">
-                            {copiedResume() === task.id ? 'Copied ✓' : 'Copy resume'}
-                          </span>
-                        </Button>
-                      </div>
-                    </Show>
-
-                    {/* Actions */}
-                    <div class="flex items-center gap-1.5">
+                    {/* ONE compact action row — icons with tooltips, thread below */}
+                    <div class="flex items-center gap-1">
                       <Select
-                        class="h-6 w-auto min-w-0 flex-1 text-[11px]"
+                        class="h-7 w-auto min-w-0 flex-1 text-[11px]"
                         value={task.pendingModel ?? task.model ?? ''}
                         onChange={(e) =>
                           modelMut.mutate({ id: task.id, model: e.currentTarget.value })
                         }
-                        title="Model — applies from the next message (never kills the current turn)"
+                        title="Model — applies from the next message"
                       >
                         <For each={MODEL_OPTIONS}>
                           {(m) => (
@@ -355,24 +337,64 @@ export default function LocalView() {
                           )}
                         </For>
                       </Select>
+                      <Show when={issueFor(task)}>
+                        {(issue) => (
+                          <Button
+                            variant="ghost"
+                            class="size-7 px-0"
+                            title="Open the issue's Activity thread"
+                            onClick={() => openPanelTo('activity', issue().id)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden>
+                              <circle cx="8" cy="8" r="6" />
+                              <circle cx="8" cy="8" r="1.6" fill="currentColor" stroke="none" />
+                            </svg>
+                          </Button>
+                        )}
+                      </Show>
                       <Button
                         variant="ghost"
-                        class="h-6 px-2 text-[11px]"
+                        class="size-7 px-0"
+                        disabled={!task.sessionId}
+                        title={
+                          task.sessionId
+                            ? `Copy resume command · session ${task.sessionId.slice(0, 8)}…`
+                            : 'No session yet'
+                        }
+                        onClick={() => void copyResume(task)}
+                      >
+                        <Show
+                          when={copiedResume() === task.id}
+                          fallback={
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                              <path d="M2.5 3.5 6 7 2.5 10.5M7.5 12.5h6" />
+                            </svg>
+                          }
+                        >
+                          <span class="text-success text-[12px] leading-none">✓</span>
+                        </Show>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        class="size-7 px-0"
+                        title={expandedId() === task.id ? 'Hide thread' : 'Open thread — chat & changes'}
                         onClick={() => setExpandedId(expandedId() === task.id ? null : task.id)}
                       >
-                        <span class="inline-block min-w-[4ch] text-center">
-                          {expandedId() === task.id ? 'Hide' : 'Chat'}
-                        </span>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                          <path d="M14 10a2 2 0 0 1-2 2H6l-3.5 2.5V4a2 2 0 0 1 2-2H12a2 2 0 0 1 2 2v6Z" />
+                        </svg>
                       </Button>
                       <Show when={task.status === 'running'}>
                         <Button
                           variant="danger"
-                          class="h-6 px-2 text-[11px]"
+                          class="size-7 px-0"
                           loading={stopMut.isPending}
                           title="Interrupt — the session stays resumable"
                           onClick={() => stopMut.mutate(task.id)}
                         >
-                          Interrupt
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                            <rect x="3" y="3" width="10" height="10" rx="1.5" />
+                          </svg>
                         </Button>
                       </Show>
                     </div>
@@ -439,12 +461,24 @@ export default function LocalView() {
                           </For>
                         </div>
                       </Show>
-                      <div class="border-border bg-bg flex max-h-80 flex-col gap-1.5 overflow-y-auto rounded-md border py-2 pl-2 pr-3">
+                      <div
+                        ref={(el) => {
+                          chatEl = el;
+                          chatNearBottom = true;
+                        }}
+                        onScroll={onChatScroll}
+                        class="border-border bg-bg flex max-h-80 flex-col gap-1.5 overflow-y-auto rounded-md border py-2 pl-2 pr-3"
+                      >
                         <Show
                           when={(detail.data?.tail ?? []).length > 0}
                           fallback={<p class="text-text-faint text-[11px]">Waiting for output…</p>}
                         >
-                          <For each={detail.data!.tail}>{(line) => <ChatLine line={line} />}</For>
+                          {/* Index (not For): position-keyed, so poll refreshes
+                              update rows IN PLACE instead of recreating them —
+                              which was resetting the scroll to the top. */}
+                          <Index each={detail.data?.tail ?? []}>
+                            {(line) => <ChatLine line={line()} />}
+                          </Index>
                         </Show>
                       </div>
                       <div class="flex flex-col gap-1.5">

@@ -818,6 +818,7 @@ export default function DraftView(props: { onCreated: () => void }) {
           <Field label="Local model" hint="Switchable while running from the Local tab.">
             <Select value={localModel()} onChange={(e) => setLocalModel(e.currentTarget.value)}>
               <option value="" selected={localModel() === ''}>Claude Code default</option>
+              <option value="fable" selected={localModel() === 'fable'}>Fable 5</option>
               <option value="opus" selected={localModel() === 'opus'}>Opus</option>
               <option value="sonnet" selected={localModel() === 'sonnet'}>Sonnet</option>
               <option value="haiku" selected={localModel() === 'haiku'}>Haiku</option>

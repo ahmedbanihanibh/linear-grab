@@ -2,7 +2,7 @@ import { createMemo, createSignal, For, Show } from 'solid-js';
 import { createQuery } from '@tanstack/solid-query';
 import { fetchMyIssues } from '@/lib/linear/api';
 import { openPanelTo } from '../nav';
-import { Badge, Button, EmptyState, StateDot, timeAgo } from '../components/ui';
+import { Badge, Button, EmptyState, ExtLink, StateDot, timeAgo } from '../components/ui';
 import type { LinearAttachment, LinearIssueSummary } from '@/lib/types';
 
 interface PrRow {
@@ -91,15 +91,9 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                     <Show when={row.issue.delegate}>
                       <Badge class="text-accent">⟠ {row.issue.delegate!.displayName}</Badge>
                     </Show>
-                    <a
-                      href={row.issue.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      class="text-accent shrink-0 text-[11px] hover:underline"
-                      title="Open the issue in Linear"
-                    >
-                      Linear ↗
-                    </a>
+                    <ExtLink href={row.issue.url} class="shrink-0" title="Open the issue in Linear">
+                      Linear
+                    </ExtLink>
                     <div class="ml-auto flex shrink-0 items-center gap-1">
                       <Button
                         variant="ghost"

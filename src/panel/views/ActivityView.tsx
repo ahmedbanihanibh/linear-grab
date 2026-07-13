@@ -29,6 +29,7 @@ import {
   StateDot,
   EmptyState,
   ErrorNote,
+  ExtLink,
   timeAgo,
 } from '../components/ui';
 
@@ -323,14 +324,9 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
           <div class="flex items-center gap-2">
             <StateDot color={issue()!.state.color} />
             <span class="text-[11px] text-text-dim">{issue()!.state.name}</span>
-            <a
-              href={issue()!.url}
-              target="_blank"
-              rel="noreferrer"
-              class="ml-auto text-[11px] text-accent hover:underline shrink-0"
-            >
-              Open in Linear ↗
-            </a>
+            <ExtLink href={issue()!.url} class="ml-auto shrink-0">
+              Open in Linear
+            </ExtLink>
           </div>
         </Show>
       </div>

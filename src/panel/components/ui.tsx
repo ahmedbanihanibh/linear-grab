@@ -1,4 +1,4 @@
-import { splitProps, type JSX, type ParentProps, Show } from 'solid-js';
+import { splitProps, For, type JSX, type ParentProps, Show } from 'solid-js';
 
 /* Shared UI primitives. All views build from these so the panel stays visually
    coherent and the no-layout-shift rules live in one place. */
@@ -21,10 +21,20 @@ export function Button(
     }
   >,
 ) {
-  const [local, rest] = splitProps(props, ['variant', 'loading', 'children', 'class', 'disabled']);
+  const [local, rest] = splitProps(props, [
+    'variant',
+    'loading',
+    'children',
+    'class',
+    'disabled',
+    'title',
+  ]);
   return (
     <button
       {...rest}
+      // Styled instant tooltip (see [data-tip] CSS) instead of the laggy native one.
+      data-tip={local.title || undefined}
+      aria-label={rest['aria-label'] ?? local.title}
       disabled={local.disabled || local.loading}
       class={`relative inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed ${buttonVariants[local.variant ?? 'ghost']} ${local.class ?? ''}`}
     >
@@ -41,12 +51,36 @@ export function Button(
   );
 }
 
-export function Spinner() {
+/** Geist-style 12-bar spinner (bars fade around the clock). */
+export function Spinner(props: { size?: number }) {
+  const size = () => props.size ?? 14;
+  const barW = () => Math.max(1, Math.round(size() * 0.09));
+  const barH = () => Math.round(size() * 0.26);
   return (
     <span
-      aria-hidden
-      class="border-text-dim inline-block size-3.5 animate-spin rounded-full border-[1.5px] border-t-transparent"
-    />
+      role="status"
+      aria-label="Loading"
+      class="text-text-dim relative inline-block shrink-0"
+      style={{ width: `${size()}px`, height: `${size()}px` }}
+    >
+      <For each={Array.from({ length: 12 }, (_, i) => i)}>
+        {(i) => (
+          <span
+            class="absolute top-0 left-1/2 rounded-full bg-current"
+            style={{
+              width: `${barW()}px`,
+              height: `${barH()}px`,
+              'margin-left': `-${barW() / 2}px`,
+              'transform-origin': `center ${size() / 2}px`,
+              transform: `rotate(${i * 30}deg)`,
+              animation: 'geist-spinner-fade 1.2s linear infinite',
+              'animation-delay': `${(i - 12) * 0.1}s`,
+              'will-change': 'opacity',
+            }}
+          />
+        )}
+      </For>
+    </span>
   );
 }
 
@@ -79,6 +113,36 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement>) {
     >
       {local.children}
     </select>
+  );
+}
+
+/** External (new-tab) link: accent + underline + ExternalLink icon. */
+export function ExtLink(props: ParentProps<{ href: string; class?: string; title?: string }>) {
+  return (
+    <a
+      href={props.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-tip={props.title || undefined}
+      class={`text-accent inline-flex min-w-0 items-center gap-1 text-[11px] underline-offset-2 hover:underline ${props.class ?? ''}`}
+    >
+      <span class="min-w-0 truncate">{props.children}</span>
+      <svg
+        width="11"
+        height="11"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden
+        class="shrink-0"
+      >
+        {/* ArrowUpRight — matches Linear's own link affordance */}
+        <path d="M4.5 11.5 11.5 4.5M5.5 4.5h6v6" />
+      </svg>
+    </a>
   );
 }
 

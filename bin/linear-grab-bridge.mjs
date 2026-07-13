@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.10.0';
+const VERSION = '0.12.1';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -274,6 +274,8 @@ function ingest(task, event) {
     return;
   }
   if (event.type === 'assistant') {
+    // The stream tells us the ACTUAL model — surface it even for defaults.
+    if (event.message?.model) task.model = event.message.model;
     const usage = event.message?.usage;
     if (usage) {
       const context =
