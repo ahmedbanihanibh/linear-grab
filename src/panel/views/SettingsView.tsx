@@ -407,6 +407,29 @@ export default function SettingsView() {
       <Show when={!isExtensionContext}>
         <Section title="Panel">
           <div class="flex flex-col gap-1">
+            <span class="text-text-dim text-[11px] font-medium">Mode</span>
+            <div class="bg-surface-2 border-border flex rounded-md border p-0.5">
+              <For each={[{ id: 'overlay', label: 'Overlay' }, { id: 'pinned', label: 'Beside page' }] as const}>
+                {(mode) => (
+                  <button
+                    class={`flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                      (s().panelMode ?? 'overlay') === mode.id
+                        ? 'bg-surface-3 text-text'
+                        : 'text-text-dim hover:text-text cursor-pointer'
+                    }`}
+                    onClick={() => void update({ panelMode: mode.id, panelPos: undefined })}
+                  >
+                    {mode.label}
+                  </button>
+                )}
+              </For>
+            </div>
+            <span class="text-text-faint text-[10.5px] leading-snug">
+              Beside page squeezes the app next to the panel, DevTools-style — nothing gets covered. Also toggleable from the dock icon in the panel header.
+            </span>
+          </div>
+
+          <div class="flex flex-col gap-1">
             <span class="text-text-dim text-[11px] font-medium">Dock side</span>
             <div class="bg-surface-2 border-border flex rounded-md border p-0.5">
               <For each={['left', 'right'] as const}>

@@ -69,6 +69,9 @@ export interface Settings {
   testPassword?: string;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
+  /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page
+      beside the panel, DevTools-style. */
+  panelMode?: 'overlay' | 'pinned';
   /** Page mode: persisted launcher pill position (viewport px from left/top). */
   launcherPos?: { x: number; y: number };
   /** Page mode: persisted free-floating panel position. */

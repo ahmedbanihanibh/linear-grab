@@ -44,6 +44,9 @@ export default function App(props: {
   onClose?: () => void;
   /** Page mode: header doubles as the drag handle for the floating panel. */
   onHeaderPointerDown?: (e: PointerEvent) => void;
+  /** Page mode: DevTools-style dock-beside-page toggle. */
+  pinned?: boolean;
+  onTogglePin?: () => void;
 }) {
   const [tab, setTab] = createSignal<PanelTab>('draft');
 
@@ -100,12 +103,30 @@ export default function App(props: {
               </button>
             )}
           </For>
+          <Show when={props.onTogglePin}>
+            <button
+              onClick={() => props.onTogglePin?.()}
+              aria-label={props.pinned ? 'Switch to overlay' : 'Dock beside page'}
+              title={props.pinned ? 'Overlay the page' : 'Dock beside page (squeezes the app, DevTools-style)'}
+              class={`hover:bg-surface-3 ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded-md transition-colors ${
+                props.pinned ? 'text-accent' : 'text-text-dim hover:text-text'
+              }`}
+            >
+              {/* Dock-to-side glyph */}
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden>
+                <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+                <path d="M10 2.5v11" />
+              </svg>
+            </button>
+          </Show>
           <Show when={props.onClose}>
             <button
               onClick={() => props.onClose?.()}
               aria-label="Minimize to launcher"
               title="Minimize to launcher"
-              class="text-text-dim hover:text-text hover:bg-surface-3 ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[15px] leading-none transition-colors"
+              class={`text-text-dim hover:text-text hover:bg-surface-3 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[15px] leading-none transition-colors ${
+                props.onTogglePin ? '' : 'ml-auto'
+              }`}
             >
               –
             </button>

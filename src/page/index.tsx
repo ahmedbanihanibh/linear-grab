@@ -1,5 +1,5 @@
 import { render } from 'solid-js/web';
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import App, { LinearLogo } from '@/panel/App';
 import { activatePicker, ensurePagePicker } from '@/lib/picker';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
@@ -125,14 +125,44 @@ function PagePanel(props: { defaultOpen: boolean }) {
     y: Math.min(Math.max(0, p.y), window.innerHeight - 80),
   });
 
+  const [pinned, setPinned] = createSignal(false);
+
+  // DevTools-style dock: squeeze the page via a margin on <html> so the app
+  // renders BESIDE the panel instead of underneath it. Fixed-position page
+  // elements still track the viewport (same caveat real sidebars have).
+  createEffect(() => {
+    const html = document.documentElement;
+    const active = open() && pinned();
+    html.style.transition = 'margin 0.2s ease';
+    html.style.marginRight = active && side() === 'right' ? `${PANEL_W}px` : '';
+    html.style.marginLeft = active && side() === 'left' ? `${PANEL_W}px` : '';
+  });
+  onCleanup(() => {
+    document.documentElement.style.marginRight = '';
+    document.documentElement.style.marginLeft = '';
+  });
+
+  const togglePin = () => {
+    const next = !pinned();
+    setPinned(next);
+    if (next) setPanelPos(null); // pinned mode is always edge-docked
+    void saveSettings({ panelMode: next ? 'pinned' : 'overlay', panelPos: undefined });
+  };
+
   onMount(() => {
     void getSettings().then((s) => {
       if (s.panelSide) setSide(s.panelSide);
       if (s.launcherPos) setPos(clamp(s.launcherPos));
       if (s.panelPos) setPanelPos(clampPanel(s.panelPos));
+      setPinned(s.panelMode === 'pinned');
     });
     const unsubSettings = subscribeStorage((area) => {
-      if (area === 'settings') void getSettings().then((s) => setSide(s.panelSide ?? 'right'));
+      if (area === 'settings') {
+        void getSettings().then((s) => {
+          setSide(s.panelSide ?? 'right');
+          setPinned(s.panelMode === 'pinned');
+        });
+      }
       // App unmounts while closed (so Activity polling stops) — reopen on new grabs.
       if (area === 'grab') setOpen(true);
     });
@@ -361,15 +391,17 @@ function PagePanel(props: { defaultOpen: boolean }) {
 
       <Show when={open()}>
         <div
-          class={`bg-bg text-text border-border fixed z-[2147483645] flex w-[380px] max-w-[100vw] flex-col overflow-hidden font-sans text-[13px] antialiased shadow-2xl ${
-            panelPos()
+          class={`bg-bg text-text border-border fixed z-[2147483645] flex w-[380px] max-w-[100vw] flex-col overflow-hidden font-sans text-[13px] antialiased ${
+            pinned() ? '' : 'shadow-2xl'
+          } ${
+            !pinned() && panelPos()
               ? 'rounded-xl border'
               : side() === 'right'
                 ? 'top-0 right-0 h-screen border-l'
                 : 'top-0 left-0 h-screen border-r'
           }`}
           style={
-            panelPos()
+            !pinned() && panelPos()
               ? {
                   left: `${panelPos()!.x}px`,
                   top: `${panelPos()!.y}px`,
@@ -378,11 +410,14 @@ function PagePanel(props: { defaultOpen: boolean }) {
               : undefined
           }
         >
-          {/* Drag the header to float the panel anywhere; double-click to re-dock. */}
+          {/* Drag the header to float the panel anywhere; double-click to re-dock.
+              Pinned mode is edge-locked, so dragging is disabled there. */}
           <App
             onGrab={() => setOpen(true)}
             onClose={() => setOpen(false)}
-            onHeaderPointerDown={onPanelPointerDown}
+            onHeaderPointerDown={pinned() ? undefined : onPanelPointerDown}
+            pinned={pinned()}
+            onTogglePin={togglePin}
           />
         </div>
       </Show>
