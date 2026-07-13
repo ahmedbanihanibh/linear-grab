@@ -30,7 +30,7 @@ import {
   stopRecording,
 } from '@/lib/recorder';
 import { buildCaptureBlock } from '@/lib/captureShare';
-import { fetchPrStatuses, listBridgeTasks, mergePr, sendBridgeMessage, setBridgeModel, type BridgeTask } from '@/lib/bridge';
+import { fetchPrStatuses, listBridgeTasks, mergePr, resumeCommand, sendBridgeMessage, setBridgeModel, stopBridgeTask, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
@@ -289,6 +289,29 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     },
   }));
 
+  const localResumeMut = createMutation(() => ({
+    mutationFn: (id: string) =>
+      sendBridgeMessage(
+        id,
+        'Continue where you left off. If the work is already complete, finish any remaining closeout steps (PR, Linear update, announcement).',
+      ),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['bridge-tasks'] }),
+  }));
+  const localStopMut = createMutation(() => ({
+    mutationFn: (id: string) => stopBridgeTask(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['bridge-tasks'] }),
+  }));
+  const [copiedResume, setCopiedResume] = createSignal(false);
+  const copyLocalResume = async (task: BridgeTask) => {
+    try {
+      await navigator.clipboard.writeText(resumeCommand(task));
+      setCopiedResume(true);
+      setTimeout(() => setCopiedResume(false), 1800);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+
   const localTask = createMemo<BridgeTask | undefined>(() => {
     const identifier = detailQuery.data?.identifier;
     return identifier
@@ -538,7 +561,7 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
                   {/* Same model control as the Local tab — applies from the
                       next message (a live turn is never killed mid-run). */}
                   <Select
-                    class="h-6 w-auto max-w-[40%] shrink-0 text-[10.5px]"
+                    class="h-6 w-auto max-w-[110px] shrink-0 text-[10.5px]"
                     value={t().pendingModel ?? t().model ?? ''}
                     onChange={(e) =>
                       localModelMut.mutate({ id: t().id, model: e.currentTarget.value })
@@ -566,24 +589,72 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
                     </Show>
                   </Select>
                 </div>
-                <button
-                  class="hover:bg-surface-2 flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 px-3 text-left transition-colors"
-                  title="Open the live thread in the Local tab"
-                  onClick={() => openPanelTo('local')}
-                >
+                <div class="flex h-9 items-center gap-1 pr-2">
+                  <button
+                    class="hover:bg-surface-2 flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-3 text-left transition-colors"
+                    title="Open the live thread in the Local tab"
+                    onClick={() => openPanelTo('local')}
+                  >
+                    <Show when={t().status === 'running'}>
+                      <Spinner size={12} />
+                    </Show>
+                    <span class={`shrink-0 text-[11.5px] font-medium ${st().cls}`}>
+                      {st().word}
+                    </span>
+                    <span class="text-text-faint min-w-0 flex-1 truncate text-[11.5px]">
+                      {t().status === 'done' ? (t().result ?? t().lastText) : t().lastText}
+                    </span>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden class="text-text-dim shrink-0">
+                      <path d="m6 3.5 4.5 4.5L6 12.5" />
+                    </svg>
+                  </button>
+                  {/* Session controls — same set as the Local tab card */}
                   <Show when={t().status === 'running'}>
-                    <Spinner size={12} />
+                    <Button
+                      variant="danger"
+                      class="size-6 shrink-0 px-0"
+                      loading={localStopMut.isPending}
+                      title="Stop the session — resumable afterwards"
+                      aria-label="Stop session"
+                      onClick={() => localStopMut.mutate(t().id)}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                        <rect x="3" y="3" width="10" height="10" rx="1.5" />
+                      </svg>
+                    </Button>
                   </Show>
-                  <span class={`shrink-0 text-[11.5px] font-medium ${st().cls}`}>
-                    {st().word}
-                  </span>
-                  <span class="text-text-faint min-w-0 flex-1 truncate text-[11.5px]">
-                    {t().status === 'done' ? (t().result ?? t().lastText) : t().lastText}
-                  </span>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden class="text-text-dim shrink-0">
-                    <path d="m6 3.5 4.5 4.5L6 12.5" />
-                  </svg>
-                </button>
+                  <Show when={t().status !== 'running' && t().sessionId}>
+                    <Button
+                      variant="ghost"
+                      class="size-6 shrink-0 px-0"
+                      loading={localResumeMut.isPending}
+                      title={`Run again — resumes this session${t().pendingModel ? ` on ${t().pendingModel}` : ''}`}
+                      aria-label="Resume session"
+                      onClick={() => localResumeMut.mutate(t().id)}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                        <path d="M4.5 2.8a.8.8 0 0 1 1.22-.68l8 5.2a.8.8 0 0 1 0 1.36l-8 5.2a.8.8 0 0 1-1.22-.68V2.8Z" />
+                      </svg>
+                    </Button>
+                  </Show>
+                  <Show when={t().sessionId}>
+                    <Button
+                      variant="ghost"
+                      class="size-6 shrink-0 px-0"
+                      title={
+                        copiedResume()
+                          ? 'Copied!'
+                          : 'Copy terminal resume command (claude --resume …)'
+                      }
+                      aria-label="Copy resume command"
+                      onClick={() => void copyLocalResume(t())}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                        <path d="m2.5 4 3.5 4-3.5 4M8 12.5h5.5" />
+                      </svg>
+                    </Button>
+                  </Show>
+                </div>
               </div>
             );
           }}
