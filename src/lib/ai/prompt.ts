@@ -33,8 +33,26 @@ export function buildAgentInstructions(settings: {
   issueTemplate?: string;
   testUsername?: string;
   testPassword?: string;
+  skillPaths?: string;
 }): string {
-  const base = settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS;
+  const parts: string[] = [settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS];
+
+  // Skills & memory: the cloud agent works in a full repo checkout, so
+  // committed skill/memory files just need authoritative POINTERS — the same
+  // mechanism Claude Code uses via CLAUDE.md. Also travels with the markdown
+  // when the issue is copied into any other agent.
+  const paths = (settings.skillPaths ?? '')
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paths.length) {
+    parts.push(
+      `**Project skills & memory — MANDATORY reading before implementing.** This repo ships maintained skills/memory files. Read each of these paths in your checkout and treat their guidance as authoritative for design, style, and architectural decisions:\n${paths
+        .map((p) => `- \`${p}\``)
+        .join('\n')}`,
+    );
+  }
+
   const creds: string[] = [];
   if (settings.testUsername?.trim()) {
     creds.push(`- Username / email: \`${settings.testUsername.trim()}\``);
@@ -42,8 +60,11 @@ export function buildAgentInstructions(settings: {
   if (settings.testPassword?.trim()) {
     creds.push(`- Password: \`${settings.testPassword.trim()}\``);
   }
-  if (!creds.length) return base;
-  return `${base}\n\n**Test account — log into the app with this while testing:**\n${creds.join('\n')}`;
+  if (creds.length) {
+    parts.push(`**Test account — log into the app with this while testing:**\n${creds.join('\n')}`);
+  }
+
+  return parts.join('\n\n');
 }
 
 function formatGrabbed(el: GrabbedElement): string {

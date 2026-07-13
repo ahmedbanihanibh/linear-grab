@@ -67,6 +67,9 @@ export interface Settings {
   /** Test account the cloud agent uses to log into the app while testing. */
   testUsername?: string;
   testPassword?: string;
+  /** Newline-separated skill/memory paths (repo-relative for cloud agents,
+      absolute also fine for local agents) injected into every issue. */
+  skillPaths?: string;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page

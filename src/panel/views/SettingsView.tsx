@@ -375,6 +375,22 @@ export default function SettingsView() {
             </span>
           </Field>
 
+          {/* Skills & memory pointers for the agent */}
+          <Field
+            label="Skills & memory paths"
+            hint="One path per line. The cloud agent works in a full repo checkout, so committed paths (e.g. .claude/skills/apple-hig-design-principles) are readable directly — every issue gets a MANDATORY-reading section pointing at them. Repo-relative for cloud agents; absolute paths also work when you paste the issue into a local Claude Code session. Per project: these settings live per dev origin."
+          >
+            <Textarea
+              rows={4}
+              placeholder={'.claude/skills/apple-hig-design-principles\n.claude/CLAUDE.md\ndocs/design-tokens.md'}
+              value={s().skillPaths ?? ''}
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                void update({ skillPaths: v || undefined });
+              }}
+            />
+          </Field>
+
           {/* Test account for the agent's in-app testing */}
           <Field
             label="Test account"
