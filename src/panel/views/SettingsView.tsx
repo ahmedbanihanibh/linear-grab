@@ -407,6 +407,24 @@ export default function SettingsView() {
             </div>
           </Field>
 
+          <label class="flex items-start gap-2">
+            <input
+              type="checkbox"
+              class="accent-accent mt-0.5"
+              checked={!!s().shareLinearKey}
+              onChange={(e) => void update({ shareLinearKey: e.currentTarget.checked })}
+            />
+            <span class="flex flex-col gap-0.5">
+              <span class="text-[12px]">Let agents close out Linear themselves</span>
+              <span class="text-text-faint text-[10.5px] leading-snug">
+                Embeds your Linear API key + raw GraphQL closeout recipes in every
+                issue's Agent instructions — cloud agent VMs have no authenticated
+                Linear MCP, so without this they can't comment, attach media, or
+                move the issue. The key is visible to anyone who can read the issue.
+              </span>
+            </span>
+          </label>
+
           {/* Cursor agent */}
           <Field
             label="Cursor agent"

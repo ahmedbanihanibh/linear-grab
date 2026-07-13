@@ -48,6 +48,9 @@ export function buildAgentInstructions(settings: {
   telegramToken?: string;
   telegramChatId?: string;
   githubAssetsRepo?: string;
+  githubToken?: string;
+  linearApiKey?: string;
+  shareLinearKey?: boolean;
 }): string {
   const parts: string[] = [settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS];
 
@@ -68,8 +71,26 @@ export function buildAgentInstructions(settings: {
   }
 
   if (settings.githubAssetsRepo?.trim()) {
+    const repo = settings.githubAssetsRepo.trim();
+    const tokenLine = settings.githubToken?.trim()
+      ? ` Your environment's git identity may lack push access to this repo — use this fine-grained token (scoped to the assets repo only): \`${settings.githubToken.trim()}\`. Push via \`https://x-access-token:<token>@github.com/${repo}.git\` or \`gh api\` with it.`
+      : '';
     parts.push(
-      `**Demo media hosting:** commit demo GIFs/videos to the PUBLIC assets repo \`${settings.githubAssetsRepo.trim()}\` under \`linear-grab/\` (clone it or use \`gh api\`), and embed the raw.githubusercontent.com URL in BOTH the Linear comment and the PR body. Prefer GIF for short demos — it renders inline everywhere (Linear, GitHub, the panel); Linear-hosted uploads do NOT render on GitHub.`,
+      `**Demo media hosting:** commit demo GIFs/videos to the PUBLIC assets repo \`${repo}\` under \`linear-grab/\` (clone it or use \`gh api\`), and embed the raw.githubusercontent.com URL in BOTH the Linear comment and the PR body. Prefer GIF for short demos — it renders inline everywhere (Linear, GitHub, the panel); Linear-hosted uploads do NOT render on GitHub.${tokenLine}`,
+    );
+  }
+
+  // Cloud agent VMs have no authenticated Linear MCP — closeout died there
+  // every run. Opt-in: hand the API key + exact raw-GraphQL recipes so the
+  // agent needs no MCP at all.
+  if (settings.shareLinearKey && settings.linearApiKey?.trim()) {
+    parts.push(
+      `**Linear access — close out this issue YOURSELF via the raw GraphQL API** (do not rely on a Linear MCP; it is not authenticated in your environment):
+- Endpoint: \`POST https://api.linear.app/graphql\` with headers \`Authorization: ${settings.linearApiKey.trim()}\` and \`Content-Type: application/json\`.
+- Resolve this issue's UUID: \`{"query":"query { issue(id: \\"<IDENTIFIER>\\") { id team { id } } }"}\` (the human identifier like ABC-12 works as input).
+- Post the closeout comment (the Definition of Done checklist): \`issueCreate\`-style mutation \`commentCreate(input: {issueId, body})\`.
+- Move to review: query \`team(id).states { nodes { id name type } }\`, pick the state you were asked to move to, then \`issueUpdate(id, input: {stateId})\`.
+- Embed demo media in the comment body as markdown — prefer the assets-repo GIF url (\`![demo](raw.githubusercontent.com/...gif)\` renders inline in Linear); mp4 links render as links.`,
     );
   }
 
@@ -89,7 +110,7 @@ export function buildAgentInstructions(settings: {
   const notify: string[] = [];
   if (settings.slackToken && settings.slackChannelId) {
     notify.push(
-      `- Slack: bot token \`${settings.slackToken}\`, channel \`${settings.slackChannelId}\`${settings.slackChannelName ? ` (#${settings.slackChannelName})` : ''}. Use \`chat.postMessage\` for the message and \`files.uploadV2\` (or getUploadURLExternal + completeUploadExternal) to upload the demo video into the channel.`,
+      `- Slack: bot token \`${settings.slackToken}\`, channel \`${settings.slackChannelId}\`${settings.slackChannelName ? ` (#${settings.slackChannelName})` : ''}. Use \`chat.postMessage\` for the message. For the demo video use the EXTERNAL upload flow — \`files.upload\` is REMOVED and \`files.uploadV2\` is SDK-only: 1) \`files.getUploadURLExternal\` (filename + length) → 2) POST the bytes to the returned URL → 3) \`files.completeUploadExternal\` with \`{files:[{id,title}], channel_id}\`. If that fails, post the raw.githubusercontent media URL in the message text — Slack unfurls it.`,
     );
   }
   if (settings.telegramToken && settings.telegramChatId) {

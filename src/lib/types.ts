@@ -44,6 +44,9 @@ export type AiTier = 'fast' | 'best';
 export interface Settings {
   /** Personal API key (primary auth path — works instantly). */
   linearApiKey?: string;
+  /** Embed the Linear API key in agent instructions so delegated agents can
+      close out issues themselves (visible to everyone who can read the issue). */
+  shareLinearKey?: boolean;
   /** OAuth access token (used when present, takes precedence). */
   linearAccessToken?: string;
   /** OAuth client id for the PKCE flow (optional). */
