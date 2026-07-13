@@ -53,9 +53,37 @@ export function init(options: InitOptions = {}): void {
     // Keyboard isolation: shadow retargeting makes e.target the host div (not
     // an input), so host-app "is the user typing?" checks fail and single-
     // letter hotkeys (p, k, …) preventDefault mid-word — swallowing letters.
-    // Nothing typed in the panel may reach the page's listeners.
+    // A host-level bubble stopper isn't enough: hotkey libs commonly listen in
+    // the CAPTURE phase on document, which fires before the host. Window
+    // capture is the one node guaranteed to run before document listeners, so
+    // panel keystrokes are killed there and re-dispatched (non-bubbling) at
+    // the real target so the panel's own handlers still fire. Default actions
+    // (text insertion) come from the original trusted event and are untouched.
+    const isolateKeys = (e: Event) => {
+      const path = e.composedPath();
+      if (!path.includes(host)) return;
+      e.stopImmediatePropagation();
+      const target = path[0];
+      if (e instanceof KeyboardEvent && target && target !== host) {
+        target.dispatchEvent(
+          new KeyboardEvent(e.type, {
+            key: e.key,
+            code: e.code,
+            location: e.location,
+            repeat: e.repeat,
+            isComposing: e.isComposing,
+            ctrlKey: e.ctrlKey,
+            shiftKey: e.shiftKey,
+            altKey: e.altKey,
+            metaKey: e.metaKey,
+            bubbles: false,
+            cancelable: false,
+          }),
+        );
+      }
+    };
     for (const type of ['keydown', 'keyup', 'keypress'] as const) {
-      host.addEventListener(type, (e) => e.stopPropagation());
+      window.addEventListener(type, isolateKeys, { capture: true });
     }
 
     const shadow = host.attachShadow({ mode: 'open' });

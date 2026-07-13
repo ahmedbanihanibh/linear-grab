@@ -223,7 +223,7 @@ export default function SettingsView() {
                     placeholder="lin_api_…"
                     value={apiKeyDraft()}
                     onInput={(e) => setApiKeyDraft(e.currentTarget.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') void connectWithKey(); }}
+                    on:keydown={(e) => { if (e.key === 'Enter') void connectWithKey(); }}
                   />
                   <Button
                     variant="primary"

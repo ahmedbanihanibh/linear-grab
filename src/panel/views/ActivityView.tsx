@@ -8,6 +8,7 @@ import {
   Index,
   type JSX,
 } from 'solid-js';
+import { persistentSignal } from '../persist';
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import type { LinearIssueSummary, LinearAgentSession, Settings } from '@/lib/types';
@@ -303,7 +304,8 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
           ? { word: 'Stopped', cls: 'text-warn' }
           : { word: 'Error', cls: 'text-danger' };
 
-  const [body, setBody] = createSignal('');
+  // eslint-disable-next-line solid/reactivity -- key fixed per mount; the screen remounts per issue
+  const [body, setBody] = persistentSignal(`activity-reply:${props.issueId}`, '');
   const [sendError, setSendError] = createSignal<string | null>(null);
 
   // Composer element-picking: point at page elements and their source refs

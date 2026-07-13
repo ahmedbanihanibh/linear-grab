@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, Index, Show } from 'solid-js';
+import { persistentSignal } from '../persist';
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
 import {
   fetchBridgeHealth,
@@ -101,7 +102,7 @@ export default function LocalView() {
     onSuccess: invalidate,
   }));
 
-  const [message, setMessage] = createSignal('');
+  const [message, setMessage] = persistentSignal('local:message', '');
   const [attachBusy, setAttachBusy] = createSignal(false);
 
   // Pick elements straight into the follow-up message (grab-sink 'local').

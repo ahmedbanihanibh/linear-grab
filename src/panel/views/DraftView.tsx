@@ -7,6 +7,7 @@ import {
   Index,
   onCleanup,
 } from 'solid-js';
+import { persistentSignal } from '../persist';
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
 import type { AiProvider, AiTier, GrabbedElement } from '@/lib/types';
 import { getSettings, getLastGrab } from '@/lib/storage';
@@ -89,25 +90,25 @@ export default function DraftView(props: { onCreated: () => void }) {
 
   // ---- Form signals ---------------------------------------------------------
 
-  const [title, setTitle] = createSignal('');
-  const [description, setDescription] = createSignal('');
-  const [reproSteps, setReproSteps] = createSignal<string[]>([]);
-  const [expected, setExpected] = createSignal('');
-  const [actual, setActual] = createSignal('');
-  const [impact, setImpact] = createSignal('');
-  const [analysisNotes, setAnalysisNotes] = createSignal('');
-  const [nextSteps, setNextSteps] = createSignal('');
-  const [priority, setPriority] = createSignal(0);
+  const [title, setTitle] = persistentSignal('draft:title', '');
+  const [description, setDescription] = persistentSignal('draft:description', '');
+  const [reproSteps, setReproSteps] = persistentSignal<string[]>('draft:steps', []);
+  const [expected, setExpected] = persistentSignal('draft:expected', '');
+  const [actual, setActual] = persistentSignal('draft:actual', '');
+  const [impact, setImpact] = persistentSignal('draft:impact', '');
+  const [analysisNotes, setAnalysisNotes] = persistentSignal('draft:analysis', '');
+  const [nextSteps, setNextSteps] = persistentSignal('draft:next-steps', '');
+  const [priority, setPriority] = persistentSignal('draft:priority', 0);
   const [teamId, setTeamId] = createSignal(settings().defaultTeamId ?? '');
   const [repo, setRepo] = createSignal(settings().defaultRepo ?? '');
   /** Who executes the issue: Cursor cloud agent, local Claude Code, or nobody. */
-  const [target, setTarget] = createSignal<'cursor' | 'local' | 'none'>('none');
+  const [target, setTarget] = persistentSignal<'cursor' | 'local' | 'none'>('draft:target', 'none');
   /** Claude Code model for local delegation ('' = its default). */
-  const [localModel, setLocalModel] = createSignal('');
+  const [localModel, setLocalModel] = persistentSignal('draft:local-model', '');
   /** Per-draft Cursor cloud model override → [model=…] ('' = Settings default). */
-  const [cloudModel, setCloudModel] = createSignal('');
+  const [cloudModel, setCloudModel] = persistentSignal('draft:cloud-model', '');
   /** Isolated git worktree for local delegation (parallel-safe). */
-  const [useWorktree, setUseWorktree] = createSignal(false);
+  const [useWorktree, setUseWorktree] = persistentSignal('draft:worktree', false);
   /** Attach captured console errors (auto-on when any exist). */
   const [includeConsole, setIncludeConsole] = createSignal(true);
   const [consoleCount, setConsoleCount] = createSignal(getConsoleTail().length);
@@ -129,7 +130,7 @@ export default function DraftView(props: { onCreated: () => void }) {
     enabled: !!dupTerm() && linearConnected(),
     staleTime: 30_000,
   }));
-  const [note, setNote] = createSignal('');
+  const [note, setNote] = persistentSignal('draft:note', '');
 
   // Pasted images (⌘V straight into the note) — attached to the issue on create.
   const [pasted, setPasted] = createSignal<Array<{ id: number; dataUrl: string }>>([]);
@@ -463,6 +464,18 @@ export default function DraftView(props: { onCreated: () => void }) {
       setCreateError(null);
       setFellBack(null);
       setPasted([]);
+      // The issue owns this content now — clear the (reload-persisted) form
+      // so leftovers can't leak into the next draft.
+      setNote('');
+      setTitle('');
+      setDescription('');
+      setReproSteps([]);
+      setExpected('');
+      setActual('');
+      setImpact('');
+      setAnalysisNotes('');
+      setNextSteps('');
+      setPriority(0);
       discardRecording();
       if (issue.localTask) openPanelTo('local');
     },
