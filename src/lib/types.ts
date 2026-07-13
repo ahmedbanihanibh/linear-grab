@@ -76,6 +76,8 @@ export interface Settings {
   launcherPos?: { x: number; y: number };
   /** Page mode: persisted free-floating panel position. */
   panelPos?: { x: number; y: number };
+  /** Page mode: persisted panel width (drag-resizable, DevTools-style). */
+  panelWidth?: number;
 }
 
 // ---- Linear API shapes (thin, only what the UI needs) ----

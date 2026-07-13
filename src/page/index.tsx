@@ -83,7 +83,9 @@ function detectTheme(): 'light' | 'dark' {
 
 const PILL_W = 130;
 const PILL_H = 36;
-const PANEL_W = 380;
+const PANEL_W_DEFAULT = 380;
+const PANEL_W_MIN = 300;
+const PANEL_W_MAX = 720;
 
 /** Floating launcher pill (react-grab-style) + docked panel hosting the shared App. */
 function PagePanel(props: { defaultOpen: boolean }) {
@@ -121,11 +123,14 @@ function PagePanel(props: { defaultOpen: boolean }) {
   });
 
   const clampPanel = (p: { x: number; y: number }) => ({
-    x: Math.min(Math.max(8 - (PANEL_W - 80), p.x), window.innerWidth - 80),
+    x: Math.min(Math.max(8 - (panelWidth() - 80), p.x), window.innerWidth - 80),
     y: Math.min(Math.max(0, p.y), window.innerHeight - 80),
   });
 
   const [pinned, setPinned] = createSignal(false);
+  const [panelWidth, setPanelWidth] = createSignal(PANEL_W_DEFAULT);
+  const clampWidth = (w: number) =>
+    Math.min(PANEL_W_MAX, Math.max(PANEL_W_MIN, Math.min(w, window.innerWidth - 60)));
 
   // DevTools-style dock: squeeze the page via a margin on <html> so the app
   // renders BESIDE the panel instead of underneath it. Fixed-position page
@@ -134,8 +139,8 @@ function PagePanel(props: { defaultOpen: boolean }) {
     const html = document.documentElement;
     const active = open() && pinned();
     html.style.transition = 'margin 0.2s ease';
-    html.style.marginRight = active && side() === 'right' ? `${PANEL_W}px` : '';
-    html.style.marginLeft = active && side() === 'left' ? `${PANEL_W}px` : '';
+    html.style.marginRight = active && side() === 'right' ? `${panelWidth()}px` : '';
+    html.style.marginLeft = active && side() === 'left' ? `${panelWidth()}px` : '';
   });
   onCleanup(() => {
     document.documentElement.style.marginRight = '';
@@ -154,6 +159,7 @@ function PagePanel(props: { defaultOpen: boolean }) {
       if (s.panelSide) setSide(s.panelSide);
       if (s.launcherPos) setPos(clamp(s.launcherPos));
       if (s.panelPos) setPanelPos(clampPanel(s.panelPos));
+      if (s.panelWidth) setPanelWidth(clampWidth(s.panelWidth));
       setPinned(s.panelMode === 'pinned');
     });
     const unsubSettings = subscribeStorage((area) => {
@@ -222,6 +228,33 @@ function PagePanel(props: { defaultOpen: boolean }) {
 
   const showMinimapAbove = () => pos().y > 260;
 
+  // DevTools-style width resize from the panel's inner edge.
+  const onResizePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = panelWidth();
+    const startPos = panelPos();
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const grow = side() === 'right' ? -dx : dx;
+      const w = clampWidth(startW + grow);
+      setPanelWidth(w);
+      // Floating + right-side: the handle is the LEFT edge, keep it under the cursor.
+      if (startPos && side() === 'right') {
+        setPanelPos(clampPanel({ x: startPos.x + (startW - w), y: startPos.y }));
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      void saveSettings({ panelWidth: panelWidth(), ...(panelPos() ? { panelPos: panelPos()! } : {}) });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
   // Panel drag (header = handle). Double-click the header to re-dock.
   const onPanelPointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
@@ -232,7 +265,7 @@ function PagePanel(props: { defaultOpen: boolean }) {
     }
     const start = { x: e.clientX, y: e.clientY };
     const origin =
-      panelPos() ?? { x: side() === 'right' ? window.innerWidth - PANEL_W : 0, y: 0 };
+      panelPos() ?? { x: side() === 'right' ? window.innerWidth - panelWidth() : 0, y: 0 };
     let moved = false;
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - start.x;
@@ -391,7 +424,7 @@ function PagePanel(props: { defaultOpen: boolean }) {
 
       <Show when={open()}>
         <div
-          class={`bg-bg text-text border-border fixed z-[2147483645] flex w-[380px] max-w-[100vw] flex-col overflow-hidden font-sans text-[13px] antialiased ${
+          class={`bg-bg text-text border-border fixed z-[2147483645] flex max-w-[100vw] flex-col overflow-hidden font-sans text-[13px] antialiased ${
             pinned() ? '' : 'shadow-2xl'
           } ${
             !pinned() && panelPos()
@@ -400,16 +433,25 @@ function PagePanel(props: { defaultOpen: boolean }) {
                 ? 'top-0 right-0 h-screen border-l'
                 : 'top-0 left-0 h-screen border-r'
           }`}
-          style={
-            !pinned() && panelPos()
+          style={{
+            width: `${panelWidth()}px`,
+            ...(!pinned() && panelPos()
               ? {
                   left: `${panelPos()!.x}px`,
                   top: `${panelPos()!.y}px`,
                   height: `${Math.min(680, window.innerHeight - 16)}px`,
                 }
-              : undefined
-          }
+              : {}),
+          }}
         >
+          {/* Resize handle on the inner edge — drag to widen/narrow. */}
+          <div
+            onPointerDown={onResizePointerDown}
+            class={`hover:bg-accent/50 active:bg-accent absolute top-0 z-10 h-full w-1 cursor-col-resize transition-colors ${
+              side() === 'right' ? 'left-0' : 'right-0'
+            }`}
+            title="Drag to resize"
+          />
           {/* Drag the header to float the panel anywhere; double-click to re-dock.
               Pinned mode is edge-locked, so dragging is disabled there. */}
           <App

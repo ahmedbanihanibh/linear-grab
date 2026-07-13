@@ -89,26 +89,30 @@ export default function App(props: {
           <span class="text-accent mr-0.5 inline-flex shrink-0" title="Linear Grab">
             <LinearLogo size={14} />
           </span>
-          <For each={TABS}>
-            {(t) => (
-              <button
-                onClick={() => setTab(t.id)}
-                class={`h-6 rounded-md px-2 text-[12px] font-medium transition-colors ${
-                  tab() === t.id
-                    ? 'bg-surface-3 text-text'
-                    : 'text-text-dim hover:text-text cursor-pointer'
-                }`}
-              >
-                {t.label}
-              </button>
-            )}
-          </For>
+          {/* Tab strip scrolls on the x-axis at narrow widths instead of
+              colliding with the dock/minimize controls. */}
+          <div class="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            <For each={TABS}>
+              {(t) => (
+                <button
+                  onClick={() => setTab(t.id)}
+                  class={`h-6 shrink-0 rounded-md px-2 text-[12px] font-medium whitespace-nowrap transition-colors ${
+                    tab() === t.id
+                      ? 'bg-surface-3 text-text'
+                      : 'text-text-dim hover:text-text cursor-pointer'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              )}
+            </For>
+          </div>
           <Show when={props.onTogglePin}>
             <button
               onClick={() => props.onTogglePin?.()}
               aria-label={props.pinned ? 'Switch to overlay' : 'Dock beside page'}
               title={props.pinned ? 'Overlay the page' : 'Dock beside page (squeezes the app, DevTools-style)'}
-              class={`hover:bg-surface-3 ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded-md transition-colors ${
+              class={`hover:bg-surface-3 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md transition-colors ${
                 props.pinned ? 'text-accent' : 'text-text-dim hover:text-text'
               }`}
             >
@@ -124,9 +128,7 @@ export default function App(props: {
               onClick={() => props.onClose?.()}
               aria-label="Minimize to launcher"
               title="Minimize to launcher"
-              class={`text-text-dim hover:text-text hover:bg-surface-3 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[15px] leading-none transition-colors ${
-                props.onTogglePin ? '' : 'ml-auto'
-              }`}
+              class="text-text-dim hover:text-text hover:bg-surface-3 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[15px] leading-none transition-colors"
             >
               –
             </button>

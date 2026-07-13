@@ -79,6 +79,14 @@ body {
   min-width: 320px;
 }
 
+/* Scrollable rows that should hide their scrollbar (tab strip). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---- Rendered markdown (comment bodies, session summaries) ---- */
 .lg-md p {
   margin: 0 0 6px;
