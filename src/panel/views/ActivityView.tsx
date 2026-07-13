@@ -33,6 +33,8 @@ import {
   EmptyState,
   ErrorNote,
   ExtLink,
+  CloudIcon,
+  MonitorIcon,
   Spinner,
   timeAgo,
 } from '../components/ui';
@@ -199,7 +201,7 @@ function IssueRow(props: { issue: LinearIssueSummary; onSelect: (id: string) => 
       <div class="mt-0.5 flex items-center gap-1.5">
         <Badge>{props.issue.state.name}</Badge>
         <Show when={props.issue.delegate}>
-          <Badge class="text-accent">⟠ {props.issue.delegate!.displayName}</Badge>
+          <Badge class="text-accent"><CloudIcon /> {props.issue.delegate!.displayName}</Badge>
         </Show>
         {/* Agent finished (PR linked) but the issue is still open — your turn. */}
         <Show
@@ -432,7 +434,7 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
               <div class="bg-surface border-border overflow-clip rounded-lg border">
                 <div class="border-border flex h-9 min-w-0 items-center justify-between gap-2 border-b px-3">
                   <div class="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium">
-                    <span aria-hidden>🖥</span>
+                    <span aria-hidden class="text-text-dim inline-flex"><MonitorIcon size={12} /></span>
                     <span class="text-text shrink-0">Local Claude Code</span>
                     <span class="text-text-dim shrink-0">started by you</span>
                     <span class="text-text-faint shrink-0 tabular-nums">

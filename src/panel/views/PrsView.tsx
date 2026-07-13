@@ -3,7 +3,7 @@ import { createQuery } from '@tanstack/solid-query';
 import { fetchMyIssues } from '@/lib/linear/api';
 import { fetchPrStatuses, listBridgeTasks, mergePr } from '@/lib/bridge';
 import { openPanelTo } from '../nav';
-import { Badge, Button, EmptyState, ExtLink, Input, StateDot, timeAgo } from '../components/ui';
+import { Badge, Button, CloudIcon, EmptyState, ExtLink, Input, MonitorIcon, StateDot, timeAgo } from '../components/ui';
 import type { LinearAttachment, LinearIssueSummary } from '@/lib/types';
 
 interface PrRow {
@@ -182,10 +182,10 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                     <Badge>{row.issue.state.name}</Badge>
                     <Show when={row.issue.delegate}>
-                      <Badge class="text-accent">☁ {row.issue.delegate!.displayName}</Badge>
+                      <Badge class="text-accent"><CloudIcon /> {row.issue.delegate!.displayName}</Badge>
                     </Show>
                     <Show when={isLocal(row)}>
-                      <Badge class="text-warn">🖥 local</Badge>
+                      <Badge class="text-warn"><MonitorIcon /> local</Badge>
                     </Show>
                     <ExtLink href={row.issue.url} class="shrink-0" title="Open the issue in Linear">
                       Linear
