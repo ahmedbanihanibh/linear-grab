@@ -93,6 +93,62 @@ export async function captureElementShot(target: Element): Promise<string | null
   }
 }
 
+/**
+ * Rasterize an arbitrary viewport RECT (region capture): capture the smallest
+ * element containing it via the sliced pipeline, then crop to the selection.
+ */
+export async function captureRectShot(rect: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}): Promise<string | null> {
+  try {
+    const cx = rect.x + rect.w / 2;
+    const cy = rect.y + rect.h / 2;
+    let container: Element = document.elementFromPoint(cx, cy) ?? document.body;
+    const contains = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return (
+        r.left <= rect.x &&
+        r.top <= rect.y &&
+        r.right >= rect.x + rect.w &&
+        r.bottom >= rect.y + rect.h
+      );
+    };
+    while (container !== document.body && (!contains(container) || container.querySelectorAll('*').length < 1)) {
+      container = container.parentElement ?? document.body;
+    }
+
+    const canvas = await captureRegionSliced(
+      container as HTMLElement,
+      await cachedFontCss(container as HTMLElement),
+    );
+    const cRect = container.getBoundingClientRect();
+    const sx = canvas.width / cRect.width;
+    const sy = canvas.height / cRect.height;
+    const crop = document.createElement('canvas');
+    crop.width = Math.max(1, Math.round(rect.w * sx));
+    crop.height = Math.max(1, Math.round(rect.h * sy));
+    const ctx = crop.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(
+      canvas,
+      (rect.x - cRect.left + container.scrollLeft) * sx,
+      (rect.y - cRect.top + container.scrollTop) * sy,
+      rect.w * sx,
+      rect.h * sy,
+      0,
+      0,
+      crop.width,
+      crop.height,
+    );
+    return await encodeCanvas(crop);
+  } catch {
+    return null;
+  }
+}
+
 /** PNG encode OFF the main thread (worker + OffscreenCanvas); synchronous
     toDataURL only as the CSP/old-browser fallback. */
 async function encodeCanvas(canvas: HTMLCanvasElement): Promise<string> {

@@ -1,8 +1,10 @@
 import { createEffect, createSignal, onCleanup, For, Show, type ParentProps } from 'solid-js';
 import type { GrabbedElement } from '@/lib/types';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
-import { getSettings, clearLastGrab, getLastGrab, removeGrab } from '@/lib/storage';
-import { activatePicker } from '@/lib/picker';
+import { getSettings, clearLastGrab, getLastGrab, mergeGrabs, removeGrab } from '@/lib/storage';
+import { activatePicker, PICKER_ACTIVATED_EVENT } from '@/lib/picker';
+import { captureRegionInteractive } from '@/lib/regionCapture';
+import { isExtensionContext } from '@/lib/env';
 import {
   getRecorderSnapshot,
   subscribeRecorder,
@@ -86,6 +88,23 @@ export default function CaptureView() {
   const dropGrab = async (grabbedAt: number) => {
     await removeGrab(grabbedAt);
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
+  };
+
+  // Custom region capture: minimize (overlay mode), drag a rectangle, and the
+  // shot joins the capture list — attached to the issue for either executor.
+  const [regionBusy, setRegionBusy] = createSignal(false);
+  const captureRegion = async () => {
+    setPickError(null);
+    setRegionBusy(true);
+    window.dispatchEvent(new CustomEvent(PICKER_ACTIVATED_EVENT)); // panel out of the way
+    try {
+      const shot = await captureRegionInteractive();
+      if (shot) {
+        await mergeGrabs([shot]); // reopens the panel on Capture (cloud mode)
+      }
+    } finally {
+      setRegionBusy(false);
+    }
   };
 
   // ---- recording ----
@@ -284,9 +303,22 @@ export default function CaptureView() {
         </Show>
 
         <div class="flex flex-col gap-1.5">
-          <Button variant="primary" onClick={pickElement}>
-            Pick element
-          </Button>
+          <div class="flex gap-1.5">
+            <Button variant="primary" class="min-w-0 flex-1" onClick={pickElement}>
+              Pick element
+            </Button>
+            <Show when={!isExtensionContext}>
+              <Button
+                variant="ghost"
+                class="min-w-0 flex-1"
+                loading={regionBusy()}
+                title="Drag a rectangle over any part of the page — the shot attaches to the issue"
+                onClick={() => void captureRegion()}
+              >
+                Capture region
+              </Button>
+            </Show>
+          </div>
           <Show when={pickError()}>
             <ErrorNote message={pickError()!} />
           </Show>
