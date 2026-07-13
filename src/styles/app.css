@@ -117,6 +117,25 @@ body {
   z-index: 60;
 }
 
+/* Edge-aware tooltip placement — centered tooltips clip at the panel
+   boundary. `data-tip-pos` accepts space-separated words:
+   right → align tooltip's left edge to the element (for left-edge buttons)
+   left → align right edge (for right-edge buttons)
+   bottom → show below (for top-row buttons, avoids the header clip) */
+[data-tip][data-tip-pos~='right']:hover::after {
+  left: 0;
+  transform: none;
+}
+[data-tip][data-tip-pos~='left']:hover::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+[data-tip][data-tip-pos~='bottom']:hover::after {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
 /* Scrollable rows that should hide their scrollbar (tab strip). */
 .no-scrollbar {
   scrollbar-width: none;
