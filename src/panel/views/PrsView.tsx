@@ -48,7 +48,7 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
     enabled: prs().length > 0,
   }));
   const prState = (row: PrRow) =>
-    merged().has(row.attachment.url) ? 'MERGED' : prStatuses.data?.[row.attachment.url];
+    merged().has(row.attachment.url) ? 'MERGED' : prStatuses.data?.statuses[row.attachment.url];
 
   const isLocal = (row: PrRow) =>
     !!bridgeTasks.data?.some((t) => t.title.startsWith(row.issue.identifier));
@@ -177,6 +177,15 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                   >
                     {row.attachment.title || row.attachment.url}
                   </a>
+                  <Show when={prStatuses.data?.previews[row.attachment.url]}>
+                    <ExtLink
+                      href={prStatuses.data!.previews[row.attachment.url]}
+                      class="shrink-0 self-start"
+                      title="Vercel deploy preview of this PR's branch"
+                    >
+                      Preview
+                    </ExtLink>
+                  </Show>
                   <div class="flex min-w-0 items-center gap-1.5">
                     <StateDot color={row.issue.state.color} />
                     <span class="font-mono text-text-dim shrink-0 text-[11px]">

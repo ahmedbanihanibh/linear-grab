@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.15.1';
+const VERSION = '0.18.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -588,6 +588,7 @@ createServer(async (req, res) => {
       const body = await readBody(req);
       const urls = (Array.isArray(body.urls) ? body.urls : []).slice(0, 20);
       const statuses = {};
+      const previews = {};
       await Promise.all(
         urls.map(async (u) => {
           const prUrl = String(u);
@@ -595,21 +596,29 @@ createServer(async (req, res) => {
           const cached = prStatusCache.get(prUrl);
           if (cached && Date.now() - cached.at < 60_000) {
             statuses[prUrl] = cached.state;
+            if (cached.preview) previews[prUrl] = cached.preview;
             return;
           }
-          const out = await run('gh', ['pr', 'view', prUrl, '--json', 'state']);
+          // comments carry the Vercel bot's preview link; the PR body often
+          // has it too (agents embed it per the completion gate).
+          const out = await run('gh', ['pr', 'view', prUrl, '--json', 'state,comments,body']);
           try {
-            const state = JSON.parse(out ?? '').state;
+            const parsed = JSON.parse(out ?? '');
+            const state = parsed.state;
+            const haystack =
+              (parsed.comments ?? []).map((c) => c.body ?? '').join('\n') + '\n' + (parsed.body ?? '');
+            const preview = (haystack.match(/https:\/\/[a-z0-9-]+\.vercel\.app[^\s)"\]]*/i) ?? [])[0] ?? null;
             if (state) {
-              prStatusCache.set(prUrl, { state, at: Date.now() });
+              prStatusCache.set(prUrl, { state, preview, at: Date.now() });
               statuses[prUrl] = state;
+              if (preview) previews[prUrl] = preview;
             }
           } catch {
             /* gh missing / not accessible */
           }
         }),
       );
-      return json(res, 200, { statuses });
+      return json(res, 200, { statuses, previews });
     }
     // Fast-merge: after reviewing the demo, one click merges the PR via gh.
     if (req.method === 'POST' && url.pathname === '/pr/merge') {

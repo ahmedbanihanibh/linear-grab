@@ -145,13 +145,19 @@ export async function pushBridgeConfig(): Promise<void> {
 }
 
 /** Real PR states via the bridge's gh: OPEN | MERGED | CLOSED. */
-export async function fetchPrStatuses(urls: string[]): Promise<Record<string, string>> {
-  if (!urls.length) return {};
-  const data = await call<{ statuses: Record<string, string> }>('/pr/status', {
+export interface PrStatusInfo {
+  statuses: Record<string, string>;
+  /** Deploy-preview URLs (Vercel bot comments / PR body), keyed by PR url. */
+  previews: Record<string, string>;
+}
+
+export async function fetchPrStatuses(urls: string[]): Promise<PrStatusInfo> {
+  if (!urls.length) return { statuses: {}, previews: {} };
+  const data = await call<Partial<PrStatusInfo>>('/pr/status', {
     method: 'POST',
     body: JSON.stringify({ urls }),
   });
-  return data.statuses;
+  return { statuses: data.statuses ?? {}, previews: data.previews ?? {} };
 }
 
 /** One-click squash-merge via the bridge's gh. */

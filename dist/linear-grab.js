@@ -25699,7 +25699,7 @@ function lD(e) {
 	let i = [];
 	e.slackToken && e.slackChannelId && i.push(`- Slack: bot token \`${e.slackToken}\`, channel \`${e.slackChannelId}\`${e.slackChannelName ? ` (#${e.slackChannelName})` : ""}. Use \`chat.postMessage\` for the message and \`files.uploadV2\` (or getUploadURLExternal + completeUploadExternal) to upload the demo video into the channel.`), e.telegramToken && e.telegramChatId && i.push(`- Telegram: bot token \`${e.telegramToken}\`, chat id \`${e.telegramChatId}\`. Use \`sendMessage\` and \`sendVideo\` (multipart upload of the demo file).`), i.length && t.push(`**When the fix is complete and the PR is open, announce it yourself:**\n${i.join("\n")}\n\nMessage format — keep it short: what was broken → what you changed (one-line fix summary) → links to the Linear issue, the PR, and your agent run → attach/upload the demo video → end with the CTA "👉 Review the PR". You may also use these tokens to send yourself intermediate test notifications while verifying the integration works.`);
 	let a = ["- [ ] Tested the change hands-on in the RUNNING app (state what you exercised)", "- [ ] Demo media captured — GIF/video preferred; if recording is impossible in your environment, before/after screenshots + the stated reason"];
-	return e.githubAssetsRepo?.trim() && a.push(`- [ ] Demo media committed to \`${e.githubAssetsRepo.trim()}\` and embedded via raw.githubusercontent.com URL in the Linear comment AND the PR body`), a.push("- [ ] Demo media attached to the Linear ISSUE itself (not only the PR)", "- [ ] PR opened and linked here", "- [ ] Issue moved to its review/done state"), i.length && a.push("- [ ] Announcement posted to the configured channel(s) with the demo attached"), t.push(`**DEFINITION OF DONE — acceptance checklist.** Copy this checklist VERBATIM into your Linear closeout comment and tick each box (\`- [x]\`) with a link or one-line evidence next to it. Any unchecked box means the work is NOT ACCEPTED — leave it unchecked and explain the blocker rather than omitting it:\n${a.join("\n")}`), t.join("\n\n");
+	return e.githubAssetsRepo?.trim() && a.push(`- [ ] Demo media committed to \`${e.githubAssetsRepo.trim()}\` and embedded via raw.githubusercontent.com URL in the Linear comment AND the PR body`), a.push("- [ ] Demo media attached to the Linear ISSUE itself (not only the PR)", "- [ ] PR opened and linked here", "- [ ] Deploy-preview URL included, deep-linked to the changed page (if the repo has preview deployments, e.g. Vercel; otherwise state that it does not)", "- [ ] Issue moved to its review/done state"), i.length && a.push("- [ ] Announcement posted to the configured channel(s) with the demo attached"), t.push(`**DEFINITION OF DONE — acceptance checklist.** Copy this checklist VERBATIM into your Linear closeout comment and tick each box (\`- [x]\`) with a link or one-line evidence next to it. Any unchecked box means the work is NOT ACCEPTED — leave it unchecked and explain the blocker rather than omitting it:\n${a.join("\n")}`), t.join("\n\n");
 }
 function uD(e) {
 	let t = [];
@@ -25745,7 +25745,7 @@ function pD(e) {
 	return i.length && t.push(i.join(" ")), t.join("\n\n");
 }
 var mD, hD, gD = t((() => {
-	mD = "You are an expert engineer drafting a Linear issue for a development team.\nYou are given a rough note from the reporter and, when available, the exact React source\nlocation of the UI element the issue is about (captured from a running dev build).\n\nWrite a crisp, actionable issue a coding agent can execute against with zero follow-up\nquestions. Be specific, never invent details you were not given, and keep the tone neutral\nand technical. If the note implies a bug, structure it as a bug; if it implies a change or\nfeature, keep reproSteps minimal and focus the description on the desired change.\n\nThe issue renders in this exact section order — fill each field for its section:\nSummary (description field) → Steps to Reproduce (reproSteps) → Expected Behavior\n(expected) → Actual Behavior (actual) → Impact (impact) → Analysis / Notes\n(analysisNotes, markdown bullets grounded in the provided source context) →\nSuggested Next Steps (suggestedNextSteps, markdown bullets with concrete fixes).\nThe Summary is a short plain-prose paragraph — no headings inside it, no repetition\nof the other sections.", hD = "- FIRST, self-orient in the repo checkout (skip any path that doesn't exist):\n  1. Read `CLAUDE.md` and `AGENTS.md` at the repo root — the master map of product rules, architecture, and memory/skill pointers.\n  2. Skim `.claude/memory/MEMORY.md` (the index) to learn what project memory exists; load the specific `.claude/memory/*.md` files the map names for the surface you're touching.\n  3. Load the matching `.claude/skills/<name>/SKILL.md` files before designing, building UI, or animating (if skills are symlinked, follow them into `.agents/skills/`).\n  Treat all of this as authoritative — it overrides your defaults.\n- Keep going until the code works and you're happy with the implementation.\n- MANDATORY COMPLETION GATE — the task is NOT complete (and you may not call it complete) until every step below is done, in order. Skipping any step silently is a FAILED task:\n  1. RUN the app and TEST your change hands-on (computer use / a real browser against the running app). Code reading alone does not count as verification.\n  2. RECORD a demo video or GIF showing the fix working (before → after where possible). If your environment genuinely cannot record media, capture before/after screenshots instead AND state explicitly in your closeout comment why video was not possible — never just omit the demo.\n  3. Open the PR, babysit it for the first set of review comments, and address them.\n  4. CLOSE OUT THE LINEAR ISSUE: post a completion comment (one-line fix summary + PR link), attach the demo media to the ISSUE itself (not only the PR), and move the issue to its review/done state.";
+	mD = "You are an expert engineer drafting a Linear issue for a development team.\nYou are given a rough note from the reporter and, when available, the exact React source\nlocation of the UI element the issue is about (captured from a running dev build).\n\nWrite a crisp, actionable issue a coding agent can execute against with zero follow-up\nquestions. Be specific, never invent details you were not given, and keep the tone neutral\nand technical. If the note implies a bug, structure it as a bug; if it implies a change or\nfeature, keep reproSteps minimal and focus the description on the desired change.\n\nThe issue renders in this exact section order — fill each field for its section:\nSummary (description field) → Steps to Reproduce (reproSteps) → Expected Behavior\n(expected) → Actual Behavior (actual) → Impact (impact) → Analysis / Notes\n(analysisNotes, markdown bullets grounded in the provided source context) →\nSuggested Next Steps (suggestedNextSteps, markdown bullets with concrete fixes).\nThe Summary is a short plain-prose paragraph — no headings inside it, no repetition\nof the other sections.", hD = "- FIRST, self-orient in the repo checkout (skip any path that doesn't exist):\n  1. Read `CLAUDE.md` and `AGENTS.md` at the repo root — the master map of product rules, architecture, and memory/skill pointers.\n  2. Skim `.claude/memory/MEMORY.md` (the index) to learn what project memory exists; load the specific `.claude/memory/*.md` files the map names for the surface you're touching.\n  3. Load the matching `.claude/skills/<name>/SKILL.md` files before designing, building UI, or animating (if skills are symlinked, follow them into `.agents/skills/`).\n  Treat all of this as authoritative — it overrides your defaults.\n- Keep going until the code works and you're happy with the implementation.\n- MANDATORY COMPLETION GATE — the task is NOT complete (and you may not call it complete) until every step below is done, in order. Skipping any step silently is a FAILED task:\n  1. RUN the app and TEST your change hands-on (computer use / a real browser against the running app). Code reading alone does not count as verification.\n  2. RECORD a demo video or GIF showing the fix working (before → after where possible). If your environment genuinely cannot record media, capture before/after screenshots instead AND state explicitly in your closeout comment why video was not possible — never just omit the demo.\n  3. Open the PR, babysit it for the first set of review comments, and address them. If the repo has preview deployments (e.g. Vercel), wait for the preview to go green and include its URL — deep-linked to the changed page — in the PR body, the Linear closeout, and the announcement.\n  4. CLOSE OUT THE LINEAR ISSUE: post a completion comment (one-line fix summary + PR link), attach the demo media to the ISSUE itself (not only the PR), and move the issue to its review/done state.";
 })), _D = /* @__PURE__ */ r({
 	describeAiError: () => bD,
 	executeDraft: () => vD
@@ -26748,10 +26748,18 @@ async function BO() {
 	}).catch(() => void 0);
 }
 async function VO(e) {
-	return e.length ? (await AO("/pr/status", {
+	if (!e.length) return {
+		statuses: {},
+		previews: {}
+	};
+	let t = await AO("/pr/status", {
 		method: "POST",
 		body: JSON.stringify({ urls: e })
-	})).statuses : {};
+	});
+	return {
+		statuses: t.statuses ?? {},
+		previews: t.previews ?? {}
+	};
 }
 function HO(e) {
 	return AO("/pr/merge", {
@@ -43346,7 +43354,7 @@ function Y$(e) {
 		refetchInterval: 3e4,
 		retry: 0,
 		enabled: ie().length > 0
-	})), se = (e) => ue().has(e) ? "MERGED" : oe.data?.[e], [ce, le] = T(null), [ue, de] = T(/* @__PURE__ */ new Set()), [fe, pe] = T(null), me = async (n) => {
+	})), se = (e) => ue().has(e) ? "MERGED" : oe.data?.statuses[e], [ce, le] = T(null), [ue, de] = T(/* @__PURE__ */ new Set()), [fe, pe] = T(null), me = async (n) => {
 		pe(null), le(n);
 		try {
 			await HO(n), de((e) => new Set(e).add(n)), t.invalidateQueries({ queryKey: ["issue", e.issueId] }), t.invalidateQueries({ queryKey: ["my-issues"] }), VQ();
@@ -43584,6 +43592,20 @@ function Y$(e) {
 						return (() => {
 							var n = F$(), r = n.firstChild;
 							return P(r, () => e.title), P(n, j(M, {
+								get when() {
+									return t && oe.data?.previews[e.url];
+								},
+								get children() {
+									return j(Aj, {
+										get href() {
+											return oe.data.previews[e.url];
+										},
+										class: "shrink-0",
+										title: "Vercel deploy preview of this PR's branch",
+										children: "Preview"
+									});
+								}
+							}), null), P(n, j(M, {
 								get when() {
 									return $e(() => !!(t && se(e.url)))() && se(e.url) !== "OPEN";
 								},
@@ -44702,7 +44724,7 @@ function s0(e) {
 		refetchInterval: 3e4,
 		retry: 0,
 		enabled: n().length > 0
-	})), a = (e) => g().has(e.attachment.url) ? "MERGED" : i.data?.[e.attachment.url], o = (e) => !!r.data?.some((t) => t.title.startsWith(e.issue.identifier)), [s, c] = T("all"), [l, u] = T(""), d = k(() => {
+	})), a = (e) => g().has(e.attachment.url) ? "MERGED" : i.data?.statuses[e.attachment.url], o = (e) => !!r.data?.some((t) => t.title.startsWith(e.issue.identifier)), [s, c] = T("all"), [l, u] = T(""), d = k(() => {
 		let e = l().trim().toLowerCase();
 		return n().filter((t) => {
 			let n = t.issue.state.type;
@@ -44788,12 +44810,26 @@ function s0(e) {
 						return d();
 					},
 					children: (t) => (() => {
-						var n = r0(), r = n.firstChild, i = r.nextSibling, s = i.firstChild, c = s.nextSibling, l = c.nextSibling, u = i.nextSibling, d = u.firstChild;
-						return P(r, () => t.attachment.title || t.attachment.url), P(i, j(Pj, { get color() {
+						var n = r0(), r = n.firstChild, s = r.nextSibling, c = s.firstChild, l = c.nextSibling, u = l.nextSibling, d = s.nextSibling, p = d.firstChild;
+						return P(r, () => t.attachment.title || t.attachment.url), P(n, j(M, {
+							get when() {
+								return i.data?.previews[t.attachment.url];
+							},
+							get children() {
+								return j(Aj, {
+									get href() {
+										return i.data.previews[t.attachment.url];
+									},
+									class: "shrink-0 self-start",
+									title: "Vercel deploy preview of this PR's branch",
+									children: "Preview"
+								});
+							}
+						}), s), P(s, j(Pj, { get color() {
 							return t.issue.state.color;
-						} }), s), P(s, () => t.issue.identifier), P(c, () => t.issue.title), P(l, () => Rj(t.issue.updatedAt)), P(u, j(Nj, { get children() {
+						} }), c), P(c, () => t.issue.identifier), P(l, () => t.issue.title), P(u, () => Rj(t.issue.updatedAt)), P(d, j(Nj, { get children() {
 							return t.issue.state.name;
-						} }), d), P(u, j(M, {
+						} }), p), P(d, j(M, {
 							get when() {
 								return t.issue.delegate;
 							},
@@ -44809,7 +44845,7 @@ function s0(e) {
 									}
 								});
 							}
-						}), d), P(u, j(M, {
+						}), p), P(d, j(M, {
 							get when() {
 								return o(t);
 							},
@@ -44821,14 +44857,14 @@ function s0(e) {
 									}
 								});
 							}
-						}), d), P(u, j(Aj, {
+						}), p), P(d, j(Aj, {
 							get href() {
 								return t.issue.url;
 							},
 							class: "shrink-0",
 							title: "Open the issue in Linear",
 							children: "Linear"
-						}), d), P(d, j(M, {
+						}), p), P(p, j(M, {
 							get when() {
 								return $e(() => !!a(t))() && a(t) !== "OPEN";
 							},
@@ -44842,7 +44878,7 @@ function s0(e) {
 									}
 								});
 							}
-						}), null), P(d, j(Cj, {
+						}), null), P(p, j(Cj, {
 							variant: "primary",
 							class: "size-7 px-0",
 							get classList() {
@@ -44872,7 +44908,7 @@ function s0(e) {
 									}
 								});
 							}
-						}), null), P(d, j(Cj, {
+						}), null), P(p, j(Cj, {
 							variant: "ghost",
 							class: "size-7 px-0",
 							title: "Open the issue's Activity thread",
@@ -44883,7 +44919,7 @@ function s0(e) {
 							get children() {
 								return t0();
 							}
-						}), null), P(d, j(Cj, {
+						}), null), P(p, j(Cj, {
 							variant: "ghost",
 							class: "size-7 px-0",
 							title: "Copy PR URL",

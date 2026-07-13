@@ -495,7 +495,7 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     enabled: prUrls().length > 0,
   }));
   const prState = (url: string) =>
-    mergedUrls().has(url) ? 'MERGED' : prStatuses.data?.[url];
+    mergedUrls().has(url) ? 'MERGED' : prStatuses.data?.statuses[url];
 
   // Fast-merge: reviewed the demo → one click ships the PR (bridge gh).
   const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
@@ -794,6 +794,15 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
                       >
                         {att.title}
                       </a>
+                      <Show when={isPr && prStatuses.data?.previews[att.url]}>
+                        <ExtLink
+                          href={prStatuses.data!.previews[att.url]}
+                          class="shrink-0"
+                          title="Vercel deploy preview of this PR's branch"
+                        >
+                          Preview
+                        </ExtLink>
+                      </Show>
                       <Show when={isPr && prState(att.url) && prState(att.url) !== 'OPEN'}>
                         <Badge
                           class={`ml-auto shrink-0 ${prState(att.url) === 'MERGED' ? 'text-success' : 'text-text-faint'}`}

@@ -30,7 +30,7 @@ export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo chec
 - MANDATORY COMPLETION GATE — the task is NOT complete (and you may not call it complete) until every step below is done, in order. Skipping any step silently is a FAILED task:
   1. RUN the app and TEST your change hands-on (computer use / a real browser against the running app). Code reading alone does not count as verification.
   2. RECORD a demo video or GIF showing the fix working (before → after where possible). If your environment genuinely cannot record media, capture before/after screenshots instead AND state explicitly in your closeout comment why video was not possible — never just omit the demo.
-  3. Open the PR, babysit it for the first set of review comments, and address them.
+  3. Open the PR, babysit it for the first set of review comments, and address them. If the repo has preview deployments (e.g. Vercel), wait for the preview to go green and include its URL — deep-linked to the changed page — in the PR body, the Linear closeout, and the announcement.
   4. CLOSE OUT THE LINEAR ISSUE: post a completion comment (one-line fix summary + PR link), attach the demo media to the ISSUE itself (not only the PR), and move the issue to its review/done state.`;
 
 /**
@@ -119,6 +119,7 @@ export function buildAgentInstructions(settings: {
   dod.push(
     '- [ ] Demo media attached to the Linear ISSUE itself (not only the PR)',
     '- [ ] PR opened and linked here',
+    '- [ ] Deploy-preview URL included, deep-linked to the changed page (if the repo has preview deployments, e.g. Vercel; otherwise state that it does not)',
     '- [ ] Issue moved to its review/done state',
   );
   if (notify.length) {
