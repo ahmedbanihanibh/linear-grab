@@ -89,24 +89,27 @@ export async function announceIssue(settings: Settings, a: IssueAnnouncement): P
   return failed;
 }
 
-/** Slack channels for the Settings dropdown (chat:write + channels:read). */
+/** Slack channels for the Settings dropdown. Private channels need the extra
+    groups:read scope — Slack fails the WHOLE call on missing_scope, so fall
+    back to public-only rather than breaking the dropdown. */
 export async function listSlackChannels(
   token: string,
 ): Promise<Array<{ id: string; name: string }>> {
-  const res = await fetch('https://slack.com/api/conversations.list', {
-    method: 'POST',
-    body: new URLSearchParams({
-      token,
-      types: 'public_channel,private_channel',
-      exclude_archived: 'true',
-      limit: '200',
-    }),
-  });
-  const json = (await res.json()) as {
-    ok: boolean;
-    error?: string;
-    channels?: Array<{ id: string; name: string }>;
+  const query = async (types: string) => {
+    const res = await fetch('https://slack.com/api/conversations.list', {
+      method: 'POST',
+      body: new URLSearchParams({ token, types, exclude_archived: 'true', limit: '200' }),
+    });
+    return (await res.json()) as {
+      ok: boolean;
+      error?: string;
+      channels?: Array<{ id: string; name: string }>;
+    };
   };
+  let json = await query('public_channel,private_channel');
+  if (!json.ok && json.error === 'missing_scope') json = await query('public_channel');
   if (!json.ok) throw new Error(json.error ?? 'slack error');
-  return (json.channels ?? []).map((c) => ({ id: c.id, name: c.name }));
+  return (json.channels ?? [])
+    .map((c) => ({ id: c.id, name: c.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

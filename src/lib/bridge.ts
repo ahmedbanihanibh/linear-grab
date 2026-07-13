@@ -2,7 +2,8 @@ import { getSettings } from './storage';
 
 /**
  * Client for the local Claude Code bridge (`npx linear-grab-bridge`), which
- * spawns headless `claude -p` sessions in the repo and reports their status.
+ * runs interactive headless `claude -p` sessions in the repo: live status,
+ * mid-run messages, model switching, usage telemetry, resumable sessions.
  */
 
 export const DEFAULT_BRIDGE_URL = 'http://localhost:4577';
@@ -14,6 +15,12 @@ export interface BridgeHealth {
   active: number;
 }
 
+export interface BridgeUsage {
+  contextTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+}
+
 export interface BridgeTask {
   id: string;
   title: string;
@@ -22,7 +29,16 @@ export interface BridgeTask {
   endedAt: number | null;
   lastText: string;
   result: string | null;
-  tail?: Array<{ at: number; text: string }>;
+  sessionId: string | null;
+  model: string | null;
+  pendingModel: string | null;
+  /** Process still attached — messages go straight to stdin. Dead + sessionId
+      = resumable (a message respawns via --resume). */
+  alive: boolean;
+  usage: BridgeUsage | null;
+  subagents: number;
+  permissionMode: string;
+  tail?: Array<{ at: number; kind: string; text: string }>;
 }
 
 async function bridgeUrl(): Promise<string> {
@@ -56,10 +72,41 @@ export function fetchBridgeTask(id: string): Promise<BridgeTask> {
   return call<BridgeTask>(`/tasks/${id}`);
 }
 
-export function createBridgeTask(title: string, prompt: string): Promise<BridgeTask> {
-  return call<BridgeTask>('/tasks', { method: 'POST', body: JSON.stringify({ title, prompt }) });
+export function createBridgeTask(
+  title: string,
+  prompt: string,
+  opts?: { model?: string; env?: Record<string, string>; permissionMode?: string },
+): Promise<BridgeTask> {
+  return call<BridgeTask>('/tasks', {
+    method: 'POST',
+    body: JSON.stringify({ title, prompt, ...opts }),
+  });
 }
 
+/** Send a follow-up — mid-run it queues into the live session; after finish
+    it resumes the session (also how a pending model switch takes effect). */
+export function sendBridgeMessage(id: string, text: string): Promise<BridgeTask> {
+  return call<BridgeTask>(`/tasks/${id}/message`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+}
+
+/** Model change applies on the NEXT message (resume respawn) — never kills an
+    in-flight turn. Empty string clears the override. */
+export function setBridgeModel(id: string, model: string): Promise<BridgeTask> {
+  return call<BridgeTask>(`/tasks/${id}/model`, {
+    method: 'POST',
+    body: JSON.stringify({ model: model || null }),
+  });
+}
+
+/** Interrupt: kills the process; the session stays resumable via --resume. */
 export function stopBridgeTask(id: string): Promise<void> {
   return call<{ ok: boolean }>(`/tasks/${id}/stop`, { method: 'POST' }).then(() => undefined);
+}
+
+/** The exact command to continue this session in a terminal. */
+export function resumeCommand(task: BridgeTask): string {
+  return `claude --dangerously-skip-permissions --resume ${task.sessionId ?? '<session-id>'}`;
 }

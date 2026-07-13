@@ -4,15 +4,29 @@ import {
   fetchBridgeHealth,
   fetchBridgeTask,
   listBridgeTasks,
+  sendBridgeMessage,
+  setBridgeModel,
   stopBridgeTask,
+  resumeCommand,
   type BridgeTask,
 } from '@/lib/bridge';
-import { Button, Badge, EmptyState, Spinner, timeAgo } from '../components/ui';
+import { Button, Badge, EmptyState, Select, Spinner, Textarea, timeAgo } from '../components/ui';
+
+const MODEL_OPTIONS = [
+  { id: '', label: 'Default model' },
+  { id: 'opus', label: 'Opus' },
+  { id: 'sonnet', label: 'Sonnet' },
+  { id: 'haiku', label: 'Haiku' },
+];
+
+const fmtTokens = (n?: number) =>
+  n == null ? '–' : n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n);
 
 /**
- * Local tab — delegate to and monitor LOCAL Claude Code sessions via the
- * bridge (`npx linear-grab-bridge` in the repo). Runs alongside cloud agents:
- * same drafts, different executor.
+ * Local tab — interactive workspace for LOCAL Claude Code sessions via the
+ * bridge: live conversation, mid-run messages, model switching, usage
+ * telemetry, resumable session ids, persistent history. Cloud agents live in
+ * Activity; this is their local twin — same issues, same tracker.
  */
 export default function LocalView() {
   const queryClient = useQueryClient();
@@ -36,14 +50,44 @@ export default function LocalView() {
   const detail = createQuery(() => ({
     queryKey: ['bridge-task', expandedId()],
     queryFn: () => fetchBridgeTask(expandedId()!),
-    refetchInterval: 2_000,
+    refetchInterval: 1_500,
     enabled: !!expandedId() && !!health.data?.ok,
   }));
 
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['bridge-tasks'] });
+    void queryClient.invalidateQueries({ queryKey: ['bridge-task', expandedId()] });
+  };
+
   const stopMut = createMutation(() => ({
     mutationFn: (id: string) => stopBridgeTask(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['bridge-tasks'] }),
+    onSuccess: invalidate,
   }));
+
+  const [message, setMessage] = createSignal('');
+  const sendMut = createMutation(() => ({
+    mutationFn: (args: { id: string; text: string }) => sendBridgeMessage(args.id, args.text),
+    onSuccess: () => {
+      setMessage('');
+      invalidate();
+    },
+  }));
+
+  const modelMut = createMutation(() => ({
+    mutationFn: (args: { id: string; model: string }) => setBridgeModel(args.id, args.model),
+    onSuccess: invalidate,
+  }));
+
+  const [copiedResume, setCopiedResume] = createSignal<string | null>(null);
+  const copyResume = async (task: BridgeTask) => {
+    try {
+      await navigator.clipboard.writeText(resumeCommand(task));
+      setCopiedResume(task.id);
+      setTimeout(() => setCopiedResume(null), 1800);
+    } catch {
+      /* blocked */
+    }
+  };
 
   const statusColor = (s: BridgeTask['status']) =>
     s === 'running'
@@ -54,16 +98,29 @@ export default function LocalView() {
           ? 'var(--color-warn)'
           : 'var(--color-danger)';
 
+  const tailColor = (kind: string) =>
+    kind === 'user'
+      ? 'text-accent'
+      : kind === 'assistant'
+        ? 'text-text'
+        : kind === 'result'
+          ? 'text-success'
+          : kind === 'subagent'
+            ? 'text-warn'
+            : kind === 'stderr'
+              ? 'text-danger'
+              : 'text-text-dim';
+
   return (
     <div class="flex h-full flex-col">
       {/* Bridge status bar */}
       <div class="border-border flex shrink-0 items-center justify-between border-b px-3 py-2">
         <span class="text-text text-[12px] font-semibold">Local Claude Code</span>
-        <Show
-          when={health.data?.ok}
-          fallback={<Badge class="text-danger">bridge offline</Badge>}
-        >
-          <span class="text-text-faint max-w-[55%] truncate text-[10.5px] tabular-nums" title={health.data?.cwd}>
+        <Show when={health.data?.ok} fallback={<Badge class="text-danger">bridge offline</Badge>}>
+          <span
+            class="text-text-faint max-w-[55%] truncate text-[10.5px] tabular-nums"
+            title={health.data?.cwd}
+          >
             {health.data!.active} running · {health.data!.cwd.split('/').slice(-2).join('/')}
           </span>
         </Show>
@@ -79,9 +136,9 @@ export default function LocalView() {
                 npx linear-grab-bridge
               </span>
               Then delegate from the Draft tab ("Local Claude Code") or watch
-              tasks here. The bridge spawns headless <code>claude -p</code>{' '}
-              sessions in the repo — your interactive terminal session stays
-              untouched.
+              tasks here. Sessions stay interactive — send follow-ups, switch
+              models, interrupt, resume in your terminal. History persists
+              across restarts.
             </EmptyState>
           }
         >
@@ -90,7 +147,7 @@ export default function LocalView() {
             fallback={
               <EmptyState title="No local tasks yet">
                 Create an issue in Draft with "Delegate to → Local Claude Code",
-                and it appears here with live status.
+                and it appears here with live status and a conversation view.
               </EmptyState>
             }
           >
@@ -98,6 +155,7 @@ export default function LocalView() {
               <For each={tasks.data}>
                 {(task) => (
                   <div class="bg-surface border-border flex flex-col gap-1.5 rounded-lg border p-2.5">
+                    {/* Title row */}
                     <div class="flex min-w-0 items-center gap-1.5">
                       <Show
                         when={task.status === 'running'}
@@ -124,15 +182,74 @@ export default function LocalView() {
                       {task.lastText}
                     </p>
 
-                    <div class="flex items-center gap-1.5">
+                    {/* Telemetry: status · model · subagents · tokens · cost */}
+                    <div class="flex flex-wrap items-center gap-1.5">
                       <Badge color={statusColor(task.status)}>{task.status}</Badge>
+                      <Show when={task.model}>
+                        <Badge>{task.model}</Badge>
+                      </Show>
+                      <Show when={task.pendingModel}>
+                        <Badge class="text-warn">→ {task.pendingModel} next msg</Badge>
+                      </Show>
+                      <Show when={task.subagents > 0}>
+                        <Badge class="text-warn">⛓ {task.subagents} subagents</Badge>
+                      </Show>
+                      <Show when={task.usage}>
+                        <span class="text-text-faint text-[10.5px] tabular-nums">
+                          ctx {fmtTokens(task.usage!.contextTokens)} · out{' '}
+                          {fmtTokens(task.usage!.outputTokens)}
+                          {task.usage!.costUsd ? ` · $${task.usage!.costUsd.toFixed(2)}` : ''}
+                        </span>
+                      </Show>
+                    </div>
+
+                    {/* Session id + resume */}
+                    <Show when={task.sessionId}>
+                      <div class="flex min-w-0 items-center gap-1.5">
+                        <span class="font-mono text-text-faint min-w-0 truncate text-[10.5px]">
+                          session {task.sessionId}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          class="ml-auto h-6 shrink-0 px-2 text-[11px]"
+                          title={`Copy: ${resumeCommand(task)}`}
+                          onClick={() => void copyResume(task)}
+                        >
+                          <span class="inline-block min-w-[9ch] text-center">
+                            {copiedResume() === task.id ? 'Copied ✓' : 'Copy resume'}
+                          </span>
+                        </Button>
+                      </div>
+                    </Show>
+
+                    {/* Actions */}
+                    <div class="flex items-center gap-1.5">
+                      <Select
+                        class="h-6 w-auto min-w-0 flex-1 text-[11px]"
+                        value={task.pendingModel ?? task.model ?? ''}
+                        onChange={(e) =>
+                          modelMut.mutate({ id: task.id, model: e.currentTarget.value })
+                        }
+                        title="Model — applies from the next message (never kills the current turn)"
+                      >
+                        <For each={MODEL_OPTIONS}>
+                          {(m) => (
+                            <option
+                              value={m.id}
+                              selected={(task.pendingModel ?? task.model ?? '') === m.id}
+                            >
+                              {m.label}
+                            </option>
+                          )}
+                        </For>
+                      </Select>
                       <Button
                         variant="ghost"
-                        class="ml-auto h-6 px-2 text-[11px]"
+                        class="h-6 px-2 text-[11px]"
                         onClick={() => setExpandedId(expandedId() === task.id ? null : task.id)}
                       >
                         <span class="inline-block min-w-[4ch] text-center">
-                          {expandedId() === task.id ? 'Hide' : 'Log'}
+                          {expandedId() === task.id ? 'Hide' : 'Chat'}
                         </span>
                       </Button>
                       <Show when={task.status === 'running'}>
@@ -140,28 +257,58 @@ export default function LocalView() {
                           variant="danger"
                           class="h-6 px-2 text-[11px]"
                           loading={stopMut.isPending}
+                          title="Interrupt — the session stays resumable"
                           onClick={() => stopMut.mutate(task.id)}
                         >
-                          Stop
+                          Interrupt
                         </Button>
                       </Show>
                     </div>
 
-                    {/* Expanded transcript tail */}
+                    {/* Conversation + composer */}
                     <Show when={expandedId() === task.id}>
-                      <div class="border-border bg-bg max-h-56 overflow-y-auto rounded-md border py-1.5 pl-2 pr-3">
+                      <div class="border-border bg-bg max-h-64 overflow-y-auto rounded-md border py-1.5 pl-2 pr-3">
                         <Show
                           when={(detail.data?.tail ?? []).length > 0}
                           fallback={<p class="text-text-faint text-[11px]">Waiting for output…</p>}
                         >
                           <For each={detail.data!.tail}>
                             {(line) => (
-                              <p class="text-text-dim font-mono text-[10.5px] leading-relaxed break-words whitespace-pre-wrap">
+                              <p
+                                class={`font-mono text-[10.5px] leading-relaxed break-words whitespace-pre-wrap ${tailColor(line.kind)}`}
+                              >
+                                {line.kind === 'user' ? '❯ ' : ''}
                                 {line.text}
                               </p>
                             )}
                           </For>
                         </Show>
+                      </div>
+                      <div class="flex flex-col gap-1.5">
+                        <Textarea
+                          rows={2}
+                          placeholder={
+                            task.status === 'running'
+                              ? 'Message the working agent — it queues into the live session…'
+                              : 'Follow-up — resumes the session…'
+                          }
+                          value={message()}
+                          onInput={(e) => setMessage(e.currentTarget.value)}
+                        />
+                        <div class="flex items-center justify-between gap-2">
+                          <span class="text-text-faint min-w-0 truncate text-[10.5px]">
+                            {task.alive ? 'live session' : task.sessionId ? 'resumes on send' : 'no session'}
+                          </span>
+                          <Button
+                            variant="primary"
+                            class="shrink-0"
+                            loading={sendMut.isPending}
+                            disabled={!message().trim() || (!task.alive && !task.sessionId)}
+                            onClick={() => sendMut.mutate({ id: task.id, text: message().trim() })}
+                          >
+                            <span class="inline-block min-w-[4ch] text-center">Send</span>
+                          </Button>
+                        </div>
                       </div>
                     </Show>
                   </div>

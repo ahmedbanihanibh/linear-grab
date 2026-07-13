@@ -17,7 +17,7 @@ import {
   discardRecording,
   markRecordingUploaded,
 } from '@/lib/recorder';
-import { fetchTeams, createIssue } from '@/lib/linear/api';
+import { fetchTeams, createIssue, createComment } from '@/lib/linear/api';
 import { uploadAsset } from '@/lib/assetUpload';
 import { createBridgeTask } from '@/lib/bridge';
 import { announceIssue } from '@/lib/notify';
@@ -94,6 +94,8 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [repo, setRepo] = createSignal(settings().defaultRepo ?? '');
   /** Who executes the issue: Cursor cloud agent, local Claude Code, or nobody. */
   const [target, setTarget] = createSignal<'cursor' | 'local' | 'none'>('none');
+  /** Claude Code model for local delegation ('' = its default). */
+  const [localModel, setLocalModel] = createSignal('');
   const [note, setNote] = createSignal('');
   const [tier, setTier] = createSignal<AiTier>('fast');
   const [includeLogs, setIncludeLogs] = createSignal(true);
@@ -304,15 +306,39 @@ export default function DraftView(props: { onCreated: () => void }) {
         delegateId: target() === 'cursor' ? settings().cursorAgentId : undefined,
       });
       // Local delegation: hand the composed issue to the running Claude Code
-      // bridge — the Linear issue stays the single registry either way.
+      // bridge — the Linear issue stays the single registry either way. The
+      // task runs with bypassPermissions + your Linear key in env, so the
+      // agent closes the SAME loop as the cloud one: test → PR → update the
+      // ticket → move it to review.
       let localTask = false;
       if (target() === 'local') {
         try {
-          await createBridgeTask(
-            `${issue.identifier} — ${title()}`,
-            `You are delegated Linear issue ${issue.identifier} (${issue.url}).\n\n${body}\n\nWork in this repository until the issue is resolved, following the Agent instructions above.`,
-          );
+          const closeout = [
+            `You are delegated Linear issue ${issue.identifier} (${issue.url}).`,
+            '',
+            body,
+            '',
+            '## Closeout — do ALL of this autonomously when the fix is verified (permissions are granted):',
+            `1. Create a branch (e.g. fix/${issue.identifier.toLowerCase()}-short-slug), commit, push.`,
+            `2. Open a PR: \`gh pr create\` — reference ${issue.identifier} and ${issue.url} in the body so Linear links it.`,
+            '3. Update the Linear issue via its GraphQL API (https://api.linear.app/graphql) using the LINEAR_API_KEY env var as the Authorization header:',
+            `   - commentCreate on issue ${issue.identifier}: one-line fix summary + root cause + the PR link.`,
+            "   - Move it to review: query the team's workflowStates, then issueUpdate with the review/'In Review' stateId.",
+            '4. If Slack/Telegram tokens appear in the instructions above, announce there too.',
+          ].join('\n');
+          await createBridgeTask(`${issue.identifier} — ${title()}`, closeout, {
+            model: localModel() || undefined,
+            permissionMode: 'bypassPermissions',
+            env: settings().linearApiKey
+              ? { LINEAR_API_KEY: settings().linearApiKey! }
+              : undefined,
+          });
           localTask = true;
+          // Make the delegation visible in Activity immediately.
+          await createComment(
+            issue.id,
+            `🖥️ Delegated to **local Claude Code** on this machine (Linear Grab bridge). Live status, conversation, and steering in the panel's Local tab. The agent will post its fix summary + PR here and move this issue to review when done.`,
+          ).catch(() => {});
         } catch {
           setCreateWarning(
             'Issue created, but the local bridge is unreachable — run `npx linear-grab-bridge` in the repo and re-delegate from the Local tab.',
@@ -678,6 +704,18 @@ export default function DraftView(props: { onCreated: () => void }) {
             </option>
           </Select>
         </Field>
+
+        {/* Local model pick — changeable later per-task in the Local tab */}
+        <Show when={target() === 'local'}>
+          <Field label="Local model" hint="Switchable while running from the Local tab.">
+            <Select value={localModel()} onChange={(e) => setLocalModel(e.currentTarget.value)}>
+              <option value="" selected={localModel() === ''}>Claude Code default</option>
+              <option value="opus" selected={localModel() === 'opus'}>Opus</option>
+              <option value="sonnet" selected={localModel() === 'sonnet'}>Sonnet</option>
+              <option value="haiku" selected={localModel() === 'haiku'}>Haiku</option>
+            </Select>
+          </Field>
+        </Show>
 
         {/* Dev-server logs toggle (only when a log URL is configured) */}
         <Show when={settings().logUrl}>
