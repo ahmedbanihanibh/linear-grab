@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Linear Grab — demo playground</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; background: #0b0c0e; color: #e8e9eb; }
+      .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 120px; }
+      h1 { font-size: 22px; } h1 span { color: #5e6ad2; }
+      p.dim { color: #8b8e98; font-size: 13.5px; line-height: 1.6; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 24px; }
+      .card { background: #141517; border: 1px solid #26282d; border-radius: 10px; padding: 16px; }
+      .card h3 { margin: 0 0 6px; font-size: 14px; }
+      .card p { margin: 0 0 12px; color: #8b8e98; font-size: 12.5px; }
+      button.primary { background: #5e6ad2; color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+      button.ghost { background: #1c1d21; color: #e8e9eb; border: 1px solid #26282d; border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+      .note { margin-top: 28px; padding: 12px 14px; border: 1px solid #26282d; border-radius: 8px; background: #141517; font-size: 12.5px; color: #8b8e98; }
+      code { background: #1c1d21; border: 1px solid #26282d; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- React DEV build so fiber debug internals exist for the picker. -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script>
+      const e = React.createElement;
+      function DemoCard({ title, body, cta, kind }) {
+        return e('div', { className: 'card' },
+          e('h3', null, title),
+          e('p', null, body),
+          e('button', { className: kind, onClick: () => alert(title) }, cta),
+        );
+      }
+      function App() {
+        const [count, setCount] = React.useState(0);
+        return e('div', { className: 'wrap' },
+          e('h1', null, 'Linear ', e('span', null, 'Grab'), ' — demo playground'),
+          e('p', { className: 'dim' },
+            'A tiny React (dev build) page for testing the panel: open the launcher pill (bottom right), connect Linear in Settings, pick elements, record a GIF, draft and delegate.'),
+          e('button', { className: 'primary', onClick: () => setCount(count + 1) }, `Clicked ${count} times`),
+          e('div', { className: 'grid' },
+            e(DemoCard, { title: 'Broken button', body: 'Pretend this button has the wrong color. Pick it and file the issue.', cta: 'I look wrong', kind: 'ghost' }),
+            e(DemoCard, { title: 'Laggy list', body: 'Pretend scrolling here stutters. Record a GIF of it.', cta: 'Scroll me', kind: 'primary' }),
+            e(DemoCard, { title: 'Misaligned card', body: 'Pretend this card overflows on mobile. Multi-pick with Shift+click.', cta: 'Pick me too', kind: 'ghost' }),
+          ),
+          e('div', { className: 'note' },
+            'Notes: this page uses React’s CDN dev build without a bundler, so picks resolve the component tree but not file:line source (that needs a real dev server with the JSX dev transform — your own app has it). The local Claude Code bridge only works when this page and the bridge are on the same machine.'),
+        );
+      }
+      ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+    </script>
+
+    <!-- Linear Grab from the feature branch -->
+    <script
+      crossorigin="anonymous"
+      src="https://cdn.jsdelivr.net/gh/ahmedbanihanibh/linear-grab@local-claude-bridge/dist/index.global.js"
+    ></script>
+  </body>
+</html>
