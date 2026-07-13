@@ -1,4 +1,5 @@
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
+import { callWorker, postWorker } from './workerClient';
 
 /**
  * Screen-interaction recorder → animated GIF.
@@ -74,7 +75,9 @@ let videoEl: HTMLVideoElement | null = null;
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
+/** Main-thread encoder — only used when the worker is unavailable (CSP). */
 let encoder: ReturnType<typeof GIFEncoder> | null = null;
+let usingWorker = false;
 let frameCount = 0;
 let firstFrame = true;
 
@@ -134,13 +137,19 @@ export async function startRecording(): Promise<void> {
     return;
   }
 
-  encoder = GIFEncoder();
+  // Encode in the worker when possible — per-frame quantization is the jank
+  // source. Main-thread cost drops to drawImage + getImageData (~1-3ms).
+  usingWorker = await callWorker({ type: 'gif-init' }).then(
+    () => true,
+    () => false,
+  );
+  encoder = usingWorker ? null : GIFEncoder();
   frameCount = 0;
   firstFrame = true;
   setSnapshot({ phase: 'recording', startedAt: Date.now(), error: null, result: null });
 
   tickTimer = setInterval(() => {
-    if (!ctx || !videoEl || !encoder || !canvas) return;
+    if (!ctx || !videoEl || !canvas) return;
     const started = snapshot.startedAt ?? Date.now();
     if (Date.now() - started >= MAX_DURATION_MS) {
       void stopRecording();
@@ -149,16 +158,30 @@ export async function startRecording(): Promise<void> {
     try {
       ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
       const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      // rgb565: fastest quantization path, plenty for UI captures.
-      const palette = quantize(data, 256, { format: 'rgb565' });
-      const index = applyPalette(data, palette, 'rgb565');
-      encoder.writeFrame(index, canvas.width, canvas.height, {
-        palette,
-        delay: FRAME_DELAY_MS,
-        first: firstFrame,
-        repeat: 0, // loop forever
-      });
-      firstFrame = false;
+      if (usingWorker) {
+        // Transfer the frame buffer — zero-copy handoff to the worker.
+        postWorker(
+          {
+            type: 'gif-frame',
+            buffer: data.buffer,
+            width: canvas.width,
+            height: canvas.height,
+            delay: FRAME_DELAY_MS,
+          },
+          [data.buffer],
+        );
+      } else if (encoder) {
+        // rgb565: fastest quantization path, plenty for UI captures.
+        const palette = quantize(data, 256, { format: 'rgb565' });
+        const index = applyPalette(data, palette, 'rgb565');
+        encoder.writeFrame(index, canvas.width, canvas.height, {
+          palette,
+          delay: FRAME_DELAY_MS,
+          first: firstFrame,
+          repeat: 0, // loop forever
+        });
+        firstFrame = false;
+      }
       frameCount++;
     } catch {
       // Skip a bad frame rather than killing the recording.
@@ -180,17 +203,25 @@ export async function stopRecording(): Promise<void> {
   const height = canvas?.height ?? 0;
   const frames = frameCount;
   const enc = encoder;
+  const viaWorker = usingWorker;
   encoder = null;
+  usingWorker = false;
   cleanupCapture();
 
-  if (!enc || frames === 0) {
+  if ((!enc && !viaWorker) || frames === 0) {
     setSnapshot({ phase: 'error', error: 'Nothing was captured.' });
     return;
   }
 
   try {
-    enc.finish();
-    const bytes = enc.bytes();
+    let bytes: Uint8Array;
+    if (viaWorker) {
+      const res = await callWorker<{ buffer: ArrayBuffer }>({ type: 'gif-finish' });
+      bytes = new Uint8Array(res.buffer);
+    } else {
+      enc!.finish();
+      bytes = enc!.bytes();
+    }
     const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'image/gif' });
     const result: RecordingResult = {
       blob,
@@ -216,6 +247,8 @@ export function discardRecording(): void {
     clearInterval(tickTimer);
     tickTimer = null;
   }
+  if (usingWorker) postWorker({ type: 'gif-abort' });
+  usingWorker = false;
   encoder = null;
   frameCount = 0;
   setSnapshot({ phase: 'idle', startedAt: null, result: null, error: null, attachOnCreate: true });

@@ -1,4 +1,5 @@
 import { toCanvas, getFontEmbedCSS } from 'html-to-image';
+import { callWorker } from './workerClient';
 
 /**
  * Screenshot of a picked element for the issue: captures the element's nearest
@@ -19,8 +20,9 @@ function cachedFontCss(node: HTMLElement): Promise<string> {
   return fontCssPromise;
 }
 
-/** Skip container context when the subtree is huge — serialization would lag. */
-const MAX_NODES = 2_500;
+/** Skip container context when the subtree is huge — serialization would lag.
+    (The DOM clone is the one part that CANNOT leave the main thread.) */
+const MAX_NODES = 1_500;
 
 export async function captureElementShot(target: Element): Promise<string | null> {
   try {
@@ -53,10 +55,25 @@ export async function captureElementShot(target: Element): Promise<string | null
       },
     });
     if (container !== target) drawHighlight(canvas, container, target);
-    return canvasToDataUrl(canvas);
+    return await encodeCanvas(canvas);
   } catch {
     return null; // Screenshot is best-effort — never block the grab itself.
   }
+}
+
+/** PNG encode OFF the main thread (worker + OffscreenCanvas); synchronous
+    toDataURL only as the CSP/old-browser fallback. */
+async function encodeCanvas(canvas: HTMLCanvasElement): Promise<string> {
+  try {
+    if (typeof createImageBitmap === 'function' && typeof OffscreenCanvas !== 'undefined') {
+      const bitmap = await createImageBitmap(canvas);
+      const res = await callWorker<{ dataUrl: string }>({ type: 'encode-png', bitmap }, [bitmap]);
+      return res.dataUrl;
+    }
+  } catch {
+    /* fall back to main-thread encode */
+  }
+  return canvasToDataUrl(canvas);
 }
 
 /**
