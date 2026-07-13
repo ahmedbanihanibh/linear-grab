@@ -407,6 +407,34 @@ export default function SettingsView() {
             </span>
           </Field>
 
+          {/* Dev server logs */}
+          <Field
+            label="Dev server log URL"
+            hint={'Tail of your dev-server log attached to issues (and fed to AI drafts). Serve the log over HTTP: "dev:http": "next dev 2>&1 | tee public/dev-server.log" (gitignore it), then use /dev-server.log here. Empty = disabled.'}
+          >
+            <Input
+              placeholder="/dev-server.log"
+              value={s().logUrl ?? ''}
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                void update({ logUrl: v || undefined });
+              }}
+            />
+          </Field>
+          <Field label="Log lines to attach" hint="Trailing lines included in the issue (10–500).">
+            <Input
+              type="number"
+              min="10"
+              max="500"
+              placeholder="100"
+              value={s().logLines ?? ''}
+              onBlur={(e) => {
+                const n = Number(e.currentTarget.value);
+                void update({ logLines: Number.isFinite(n) && n > 0 ? Math.min(500, Math.max(10, Math.round(n))) : undefined });
+              }}
+            />
+          </Field>
+
           {/* Skills & memory pointers for the agent */}
           <Field
             label="Skills & memory paths"

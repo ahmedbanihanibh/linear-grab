@@ -19,6 +19,7 @@ import {
 } from '@/lib/recorder';
 import { fetchTeams, createIssue } from '@/lib/linear/api';
 import { uploadAsset } from '@/lib/assetUpload';
+import { fetchDevLogTail } from '@/lib/logs';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
 import { composeIssueBody, buildAgentInstructions } from '@/lib/ai/prompt';
@@ -92,6 +93,7 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [delegateOn, setDelegateOn] = createSignal(!!settings().cursorAgentId);
   const [note, setNote] = createSignal('');
   const [tier, setTier] = createSignal<AiTier>('fast');
+  const [includeLogs, setIncludeLogs] = createSignal(true);
 
   // When settings load, initialise defaults (runs exactly once on first real data).
   let defaultsApplied = false;
@@ -154,12 +156,18 @@ export default function DraftView(props: { onCreated: () => void }) {
     if (d.priority !== undefined) setPriority(d.priority);
   };
 
-  const startDraft = () => {
+  const startDraft = async () => {
     if (!provider()) return;
     setDrafting(true);
     setDraftError(null);
     setFellBack(null);
     stopDraft();
+
+    // Ground the draft's Analysis/Notes in recent server logs when configured.
+    const logs =
+      settings().logUrl && includeLogs()
+        ? await fetchDevLogTail({ logUrl: settings().logUrl, logLines: 40 }).catch(() => undefined)
+        : undefined;
 
     // Host-agnostic: extension routes through the worker port; page mode
     // (Safari/Firefox/any browser) streams in-process.
@@ -170,6 +178,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         teamName: selectedTeamName(),
         tier: tier(),
         template: buildAgentInstructions(settings()),
+        logs: logs ?? undefined,
       },
       {
         onPartial: applyDraft,
@@ -255,6 +264,18 @@ export default function DraftView(props: { onCreated: () => void }) {
           body += `\n\n### Element location\n![Highlighted element in context](${url})`;
         } catch {
           failed.push('screenshot');
+        }
+      }
+      // Dev-server log tail — full debug context for the agent.
+      if (settings().logUrl && includeLogs()) {
+        try {
+          const tail = await fetchDevLogTail(settings());
+          if (tail) {
+            const n = Math.min(500, Math.max(10, settings().logLines ?? 100));
+            body += `\n\n### Dev server logs (last ${n} lines)\n\`\`\`\n${tail}\n\`\`\``;
+          }
+        } catch {
+          failed.push('server logs');
         }
       }
       if (failed.length) {
@@ -602,6 +623,24 @@ export default function DraftView(props: { onCreated: () => void }) {
             </span>
           </Show>
         </div>
+
+        {/* Dev-server logs toggle (only when a log URL is configured) */}
+        <Show when={settings().logUrl}>
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeLogs()}
+              onChange={(e) => setIncludeLogs(e.currentTarget.checked)}
+              class="rounded accent-accent"
+            />
+            <span class="text-[12px] text-text">
+              Attach dev server logs{' '}
+              <span class="text-text-dim tabular-nums">
+                (last {Math.min(500, Math.max(10, settings().logLines ?? 100))} lines)
+              </span>
+            </span>
+          </label>
+        </Show>
       </Section>
 
       {/* ---- Create button + result — sticky so the primary action is always

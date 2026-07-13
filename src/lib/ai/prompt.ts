@@ -98,6 +98,11 @@ export function buildDraftPrompt(input: DraftInput): string {
       `Standing agent instructions the team appends to every issue (context only — do NOT repeat them in your description, they are added automatically):\n${input.template.trim()}`,
     );
   }
+  if (input.logs?.trim()) {
+    parts.push(
+      `Recent dev server logs (tail — use for Analysis/Notes when relevant, do not paste wholesale):\n\`\`\`\n${input.logs.trim()}\n\`\`\``,
+    );
+  }
   parts.push('Draft the issue now.');
   return parts.join('\n\n');
 }

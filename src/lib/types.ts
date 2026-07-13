@@ -78,6 +78,11 @@ export interface Settings {
       can render the images. */
   githubToken?: string;
   githubAssetsRepo?: string;
+  /** Dev-server log tail attached to issues. URL the log is served at (e.g.
+      "/dev-server.log" via `next dev 2>&1 | tee public/dev-server.log`). */
+  logUrl?: string;
+  /** How many trailing log lines to attach (default 100). */
+  logLines?: number;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page
@@ -200,6 +205,8 @@ export interface DraftInput {
   tier: AiTier;
   /** Standing agent instructions (settings.issueTemplate) — context for the AI. */
   template?: string;
+  /** Recent dev-server log tail — lets the AI ground its root-cause analysis. */
+  logs?: string;
 }
 
 export type DraftPortClientMessage = { type: 'start'; input: DraftInput };
