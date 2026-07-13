@@ -19,7 +19,8 @@ import {
   findAgentThreadRoots,
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
-import { requestedIssueId, consumeNavRequest } from '../nav';
+import { listBridgeTasks, type BridgeTask } from '@/lib/bridge';
+import { requestedIssueId, consumeNavRequest, openPanelTo } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
   Button,
@@ -30,6 +31,7 @@ import {
   EmptyState,
   ErrorNote,
   ExtLink,
+  Spinner,
   timeAgo,
 } from '../components/ui';
 
@@ -241,6 +243,29 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     queryFn: getSettings,
   }));
 
+  // Live LOCAL session for this issue — the bridge twin of Linear's Cursor
+  // session cards. Hidden when the bridge is offline or no task matches.
+  const bridgeTasks = createQuery(() => ({
+    queryKey: ['bridge-tasks'],
+    queryFn: listBridgeTasks,
+    refetchInterval: 5_000,
+    retry: 0,
+  }));
+  const localTask = createMemo<BridgeTask | undefined>(() => {
+    const identifier = detailQuery.data?.identifier;
+    return identifier
+      ? bridgeTasks.data?.find((t) => t.title.startsWith(identifier))
+      : undefined;
+  });
+  const localStatus = (t: BridgeTask) =>
+    t.status === 'running'
+      ? { word: 'Working…', cls: 'text-accent' }
+      : t.status === 'done'
+        ? { word: 'Finished', cls: 'text-success' }
+        : t.status === 'stopped'
+          ? { word: 'Stopped', cls: 'text-warn' }
+          : { word: 'Error', cls: 'text-danger' };
+
   const [body, setBody] = createSignal('');
   const [sendError, setSendError] = createSignal<string | null>(null);
 
@@ -333,6 +358,46 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
 
       {/* Scrollable body */}
       <div class="min-h-0 flex-1 overflow-y-auto pl-3 pr-4 py-3 flex flex-col gap-3">
+        {/* LOCAL Claude Code session — live card, like Linear's Cursor cards */}
+        <Show when={localTask()}>
+          {(t) => {
+            const st = () => localStatus(t());
+            return (
+              <div class="bg-surface border-border overflow-clip rounded-lg border">
+                <div class="border-border flex h-9 min-w-0 items-center justify-between gap-2 border-b px-3">
+                  <div class="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium">
+                    <span aria-hidden>🖥</span>
+                    <span class="text-text shrink-0">Local Claude Code</span>
+                    <span class="text-text-dim shrink-0">started by you</span>
+                    <span class="text-text-faint shrink-0 tabular-nums">
+                      · {timeAgo(t().startedAt)}
+                    </span>
+                  </div>
+                  <Badge>{t().model ?? 'default'}</Badge>
+                </div>
+                <button
+                  class="hover:bg-surface-2 flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 px-3 text-left transition-colors"
+                  title="Open the live thread in the Local tab"
+                  onClick={() => openPanelTo('local')}
+                >
+                  <Show when={t().status === 'running'}>
+                    <Spinner size={12} />
+                  </Show>
+                  <span class={`shrink-0 text-[11.5px] font-medium ${st().cls}`}>
+                    {st().word}
+                  </span>
+                  <span class="text-text-faint min-w-0 flex-1 truncate text-[11.5px]">
+                    {t().status === 'done' ? (t().result ?? t().lastText) : t().lastText}
+                  </span>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden class="text-text-dim shrink-0">
+                    <path d="m6 3.5 4.5 4.5L6 12.5" />
+                  </svg>
+                </button>
+              </div>
+            );
+          }}
+        </Show>
+
         {/* Agent sessions */}
         <Show when={sessions().length > 0}>
           <div class="flex flex-col gap-2">
