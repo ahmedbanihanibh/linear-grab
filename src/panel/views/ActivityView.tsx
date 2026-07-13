@@ -29,7 +29,7 @@ import {
   stopRecording,
 } from '@/lib/recorder';
 import { buildCaptureBlock } from '@/lib/captureShare';
-import { fetchPrStatuses, listBridgeTasks, mergePr, type BridgeTask } from '@/lib/bridge';
+import { fetchPrStatuses, listBridgeTasks, mergePr, sendBridgeMessage, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
@@ -409,6 +409,7 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
   );
 
   const [target, setTarget] = createSignal<string>('comment');
+  let userSetTarget = false;
   // Default once data is in: steer the newest agent thread when one exists.
   let targetInitialised = false;
   createEffect(() => {
@@ -418,6 +419,12 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     if (threads.length) setTarget(`thread:${threads[0].id}`);
     else if (detailQuery.data.delegate && settingsQuery.data.cursorAgentId) setTarget('new');
   });
+  // Upgrade to the local session once the bridge task is known (unless the
+  // user already chose a target themselves).
+  createEffect(() => {
+    if (userSetTarget) return;
+    if (localTask() && (target() === 'comment' || target() === 'new')) setTarget('local');
+  });
 
   const sendMutation = createMutation(() => ({
     mutationFn: async () => {
@@ -425,7 +432,13 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
       if (!text) throw new Error('Message is empty');
       const settings = settingsQuery.data ?? {};
       const t = target();
-      if (t.startsWith('thread:')) {
+      if (t === 'local') {
+        const task = localTask();
+        if (!task) throw new Error('Local session not found — is the bridge running?');
+        await sendBridgeMessage(task.id, text);
+        // Mirror into the Linear thread so the issue stays the full record.
+        await createComment(props.issueId, `🖥️ **→ local agent:** ${text}`).catch(() => {});
+      } else if (t.startsWith('thread:')) {
         // In-thread reply — reaches the RUNNING agent, no mention needed.
         await createComment(props.issueId, text, t.slice('thread:'.length));
       } else if (t === 'new' && settings.cursorAgentId) {
@@ -655,8 +668,16 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
           <Select
             class="min-w-0 flex-1"
             value={target()}
-            onChange={(e) => setTarget(e.currentTarget.value)}
+            onChange={(e) => {
+              userSetTarget = true;
+              setTarget(e.currentTarget.value);
+            }}
           >
+            <Show when={localTask()}>
+              <option value="local" selected={target() === 'local'}>
+                Message local Claude Code session
+              </option>
+            </Show>
             <For each={agentThreads()}>
               {(thread, i) => (
                 <option value={`thread:${thread.id}`} selected={target() === `thread:${thread.id}`}>
