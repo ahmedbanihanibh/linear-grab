@@ -57,7 +57,7 @@ export default function App(props: {
   const handleGrab = () => {
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
     // Composer picks stay on Activity — the ref lands in the reply text.
-    if (grabSink() !== 'composer') setTab('capture');
+    if (grabSink() === 'capture') setTab('capture');
     props.onGrab?.();
   };
 

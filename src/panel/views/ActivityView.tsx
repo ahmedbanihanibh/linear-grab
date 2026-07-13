@@ -20,6 +20,7 @@ import {
 } from '@/lib/linear/api';
 import { refreshRunningAgents } from '@/lib/agentWatch';
 import { activatePicker } from '@/lib/picker';
+import { buildCaptureBlock } from '@/lib/captureShare';
 import { listBridgeTasks, mergePr, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
@@ -278,6 +279,17 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
     queryFn: getLastGrab,
     enabled: grabSink() === 'composer',
   }));
+  const [attachBusy, setAttachBusy] = createSignal(false);
+  const attachCaptures = async () => {
+    setAttachBusy(true);
+    try {
+      const block = await buildCaptureBlock();
+      if (block) setBody((prev) => `${prev ? `${prev}\n` : ''}${block}\n`);
+    } finally {
+      setAttachBusy(false);
+    }
+  };
+
   const pickForReply = () => {
     setPickStartedAt(Date.now());
     setGrabSink('composer');
@@ -598,6 +610,18 @@ function IssueDetailScreen(props: { issueId: string; onBack: () => void }) {
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
               <circle cx="8" cy="8" r="2.2" />
               <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
+            </svg>
+          </Button>
+          <Button
+            variant="ghost"
+            class="size-7 shrink-0 px-0"
+            loading={attachBusy()}
+            title="Attach captures — element refs, screenshots, region shots, recording GIF"
+            aria-label="Attach captures"
+            onClick={() => void attachCaptures()}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+              <path d="M13 7.5 8.2 12.3a3.2 3.2 0 0 1-4.5-4.5L8.9 2.6a2.1 2.1 0 0 1 3 3L7.1 10.4a1 1 0 0 1-1.5-1.5l4.3-4.3" />
             </svg>
           </Button>
           <Button

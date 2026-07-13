@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Index, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Index, Show } from 'solid-js';
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query';
 import {
   fetchBridgeHealth,
@@ -13,7 +13,10 @@ import {
   type BridgeTask,
 } from '@/lib/bridge';
 import { fetchMyIssues } from '@/lib/linear/api';
-import { openPanelTo } from '../nav';
+import { getLastGrab } from '@/lib/storage';
+import { activatePicker } from '@/lib/picker';
+import { buildCaptureBlock } from '@/lib/captureShare';
+import { openPanelTo, grabSink, setGrabSink } from '../nav';
 import { Button, Badge, EmptyState, ExtLink, Select, Spinner, Textarea, timeAgo } from '../components/ui';
 import { renderMarkdown } from '../components/markdown';
 
@@ -90,6 +93,46 @@ export default function LocalView() {
   }));
 
   const [message, setMessage] = createSignal('');
+  const [attachBusy, setAttachBusy] = createSignal(false);
+
+  // Pick elements straight into the follow-up message (grab-sink 'local').
+  const [pickStartedAt, setPickStartedAt] = createSignal(0);
+  const grabQuery = createQuery(() => ({
+    queryKey: ['grab'],
+    queryFn: getLastGrab,
+    enabled: grabSink() === 'local',
+  }));
+  const pickForMessage = () => {
+    setPickStartedAt(Date.now());
+    setGrabSink('local');
+    void activatePicker().catch(() => setGrabSink('capture'));
+  };
+  createEffect(() => {
+    if (grabSink() !== 'local') return;
+    const fresh = (grabQuery.data ?? []).filter((g) => g.grabbedAt >= pickStartedAt());
+    if (!fresh.length) return;
+    const refs = fresh
+      .map((g) => {
+        const loc = g.source?.filePath
+          ? ` — \`${g.source.filePath}${g.source.lineNumber != null ? `:${g.source.lineNumber}` : ''}\``
+          : '';
+        return `- \`<${g.componentName ?? g.tagName ?? 'element'}>\`${loc}`;
+      })
+      .join('\n');
+    setMessage((prev) => `${prev ? `${prev}\n` : ''}${refs}\n`);
+    setGrabSink('capture');
+  });
+
+  // Attach EVERYTHING captured (refs + screenshots + recording GIF) to the message.
+  const attachCaptures = async () => {
+    setAttachBusy(true);
+    try {
+      const block = await buildCaptureBlock();
+      if (block) setMessage((prev) => `${prev ? `${prev}\n` : ''}${block}\n`);
+    } finally {
+      setAttachBusy(false);
+    }
+  };
   const sendMut = createMutation(() => ({
     mutationFn: (args: { id: string; text: string }) => sendBridgeMessage(args.id, args.text),
     onSuccess: () => {
@@ -149,13 +192,17 @@ export default function LocalView() {
       compact mono rows for tool calls / subagents / stderr. */
   const ChatLine = (props: { line: { kind: string; text: string } }) => {
     const k = props.line.kind;
+    // Memoized render: the 1.5s poll delivers NEW objects with identical text —
+    // re-assigning equal innerHTML re-parses the DOM and flickers. The memo's
+    // string equality gates the assignment entirely.
+    const html = createMemo(() => renderMarkdown(props.line.text));
     if (k === 'user') {
       return (
         <div class="border-accent/40 bg-accent-soft self-end rounded-lg border px-2.5 py-1.5">
           <p class="text-accent mb-0.5 text-[9.5px] font-semibold tracking-wide uppercase">You</p>
           <div
             class="lg-md text-text text-[11.5px] leading-relaxed break-words"
-            innerHTML={renderMarkdown(props.line.text)}
+            innerHTML={html()}
           />
         </div>
       );
@@ -176,7 +223,7 @@ export default function LocalView() {
           </p>
           <div
             class="lg-md text-text text-[11.5px] leading-relaxed break-words"
-            innerHTML={renderMarkdown(props.line.text)}
+            innerHTML={html()}
           />
         </div>
       );
@@ -492,10 +539,46 @@ export default function LocalView() {
                           value={message()}
                           onInput={(e) => setMessage(e.currentTarget.value)}
                         />
-                        <div class="flex items-center justify-between gap-2">
-                          <span class="text-text-faint min-w-0 truncate text-[10.5px]">
+                        <div class="flex items-center gap-1">
+                          <span class="text-text-faint min-w-0 flex-1 truncate text-[10.5px]">
                             {task.alive ? 'live session' : task.sessionId ? 'resumes on send' : 'no session'}
                           </span>
+                          <Button
+                            variant="ghost"
+                            class="size-7 shrink-0 px-0"
+                            title="Pick elements on the page — refs drop into this message"
+                            aria-label="Pick element"
+                            onClick={pickForMessage}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                              <circle cx="8" cy="8" r="2.2" />
+                              <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
+                            </svg>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            class="size-7 shrink-0 px-0"
+                            loading={attachBusy()}
+                            title="Attach captures — element refs, screenshots, region shots, recording GIF"
+                            aria-label="Attach captures"
+                            onClick={() => void attachCaptures()}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                              <path d="M13 7.5 8.2 12.3a3.2 3.2 0 0 1-4.5-4.5L8.9 2.6a2.1 2.1 0 0 1 3 3L7.1 10.4a1 1 0 0 1-1.5-1.5l4.3-4.3" />
+                            </svg>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            class="size-7 shrink-0 px-0"
+                            disabled={!task.alive && !task.sessionId}
+                            title="Compact the session — frees context (sends /compact)"
+                            aria-label="Compact session"
+                            onClick={() => sendMut.mutate({ id: task.id, text: '/compact' })}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                              <path d="M8 2v4M8 10v4M2 8h4M10 8h4M4.5 4.5 6 6M11.5 11.5 10 10M11.5 4.5 10 6M4.5 11.5 6 10" />
+                            </svg>
+                          </Button>
                           <Button
                             variant="primary"
                             class="shrink-0"

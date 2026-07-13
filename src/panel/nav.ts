@@ -25,8 +25,8 @@ export function consumeNavRequest(): void {
 
 /** Where the NEXT grab lands: the Capture tab (default) or the Activity
     composer (picked refs get appended to the reply text). */
-const [grabSink, setGrabSinkSignal] = createSignal<'capture' | 'composer'>('capture');
+const [grabSink, setGrabSinkSignal] = createSignal<'capture' | 'composer' | 'local'>('capture');
 export { grabSink };
-export function setGrabSink(sink: 'capture' | 'composer'): void {
+export function setGrabSink(sink: 'capture' | 'composer' | 'local'): void {
   setGrabSinkSignal(sink);
 }
