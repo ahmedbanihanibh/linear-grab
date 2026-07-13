@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, onMount, Match, Switch, For, Show } from 'solid-js';
+import { createSignal, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
 import DraftView from './views/DraftView';
 import CaptureView from './views/CaptureView';
@@ -136,27 +136,28 @@ export default function App(props: {
             </button>
           </Show>
         </header>
+        {/* All tabs stay MOUNTED (hidden via CSS): switching tabs never wipes
+            in-progress state — your draft note, form fields, scroll positions,
+            even a streaming AI draft survive the hop. */}
         <main class="min-h-0 flex-1">
-          <Switch>
-            <Match when={tab() === 'draft'}>
-              <DraftView onCreated={() => setTab('activity')} />
-            </Match>
-            <Match when={tab() === 'capture'}>
-              <CaptureView />
-            </Match>
-            <Match when={tab() === 'activity'}>
-              <ActivityView />
-            </Match>
-            <Match when={tab() === 'local'}>
-              <LocalView />
-            </Match>
-            <Match when={tab() === 'prs'}>
-              <PrsView onOpenIssue={() => setTab('activity')} />
-            </Match>
-            <Match when={tab() === 'settings'}>
-              <SettingsView />
-            </Match>
-          </Switch>
+          <div class="h-full" classList={{ hidden: tab() !== 'draft' }}>
+            <DraftView onCreated={() => setTab('activity')} />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'capture' }}>
+            <CaptureView />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'activity' }}>
+            <ActivityView />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'local' }}>
+            <LocalView />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'prs' }}>
+            <PrsView onOpenIssue={() => setTab('activity')} />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'settings' }}>
+            <SettingsView />
+          </div>
         </main>
       </div>
     </QueryClientProvider>
