@@ -10,6 +10,8 @@ import {
   resumeCommand,
   type BridgeTask,
 } from '@/lib/bridge';
+import { fetchMyIssues } from '@/lib/linear/api';
+import { openPanelTo } from '../nav';
 import { Button, Badge, EmptyState, Select, Spinner, Textarea, timeAgo } from '../components/ui';
 import { renderMarkdown } from '../components/markdown';
 
@@ -47,6 +49,18 @@ export default function LocalView() {
   }));
 
   const [expandedId, setExpandedId] = createSignal<string | null>(null);
+
+  // Cross-reference bridge tasks (titled "TES-55 — …") with the Linear issues
+  // so every card links back to its ticket. Shares Activity's query cache.
+  const issues = createQuery(() => ({
+    queryKey: ['my-issues'],
+    queryFn: fetchMyIssues,
+    staleTime: 15_000,
+  }));
+  const issueFor = (task: BridgeTask) => {
+    const identifier = task.title.match(/^([A-Z][A-Z0-9]*-\d+)/)?.[1];
+    return identifier ? issues.data?.find((i) => i.identifier === identifier) : undefined;
+  };
 
   const detail = createQuery(() => ({
     queryKey: ['bridge-task', expandedId()],
@@ -237,6 +251,31 @@ export default function LocalView() {
                         </span>
                       </Show>
                     </div>
+
+                    {/* Linked Linear issue */}
+                    <Show when={issueFor(task)}>
+                      {(issue) => (
+                        <div class="flex items-center gap-1.5">
+                          <Badge>{issue().state.name}</Badge>
+                          <a
+                            href={issue().url}
+                            target="_blank"
+                            rel="noreferrer"
+                            class="text-accent text-[11px] hover:underline"
+                          >
+                            Open in Linear ↗
+                          </a>
+                          <Button
+                            variant="ghost"
+                            class="ml-auto h-6 px-2 text-[11px]"
+                            title="Open the issue's Activity thread"
+                            onClick={() => openPanelTo('activity', issue().id)}
+                          >
+                            Issue
+                          </Button>
+                        </div>
+                      )}
+                    </Show>
 
                     {/* Session id + resume */}
                     <Show when={task.sessionId}>
