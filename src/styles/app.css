@@ -1,0 +1,60 @@
+@import 'tailwindcss';
+
+/* ---- Linear Grab design tokens ----
+   Dark, Linear-inspired palette. All component styling MUST go through these
+   tokens — no raw hex values in components. */
+@theme {
+  --color-bg: #0b0c0e;
+  --color-surface: #141517;
+  --color-surface-2: #1c1d21;
+  --color-surface-3: #24262b;
+  --color-border: #26282d;
+  --color-border-strong: #34363d;
+
+  --color-text: #e8e9eb;
+  --color-text-dim: #8b8e98;
+  --color-text-faint: #5c5f6a;
+
+  --color-accent: #5e6ad2;
+  --color-accent-hover: #6e79e0;
+  --color-accent-soft: #5e6ad226;
+
+  --color-success: #4cb782;
+  --color-warn: #f2c94c;
+  --color-danger: #eb5757;
+  --color-danger-soft: #eb575726;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-bg text-text font-sans text-[13px] antialiased;
+  margin: 0;
+  min-width: 320px;
+}
+
+/* Slim scrollbars that match the surface palette. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
