@@ -160,6 +160,14 @@ export async function fetchPrStatuses(urls: string[]): Promise<PrStatusInfo> {
   return { statuses: data.statuses ?? {}, previews: data.previews ?? {} };
 }
 
+/** Merge the PR's branch into the staging branch (deploys the staging preview). */
+export function stagePr(url: string, base: string): Promise<{ ok: boolean; base?: string }> {
+  return call<{ ok: boolean; base?: string }>('/pr/stage', {
+    method: 'POST',
+    body: JSON.stringify({ url, base }),
+  });
+}
+
 /** One-click squash-merge via the bridge's gh. */
 export function mergePr(url: string): Promise<{ ok: boolean; output?: string }> {
   return call<{ ok: boolean; output?: string }>('/pr/merge', {

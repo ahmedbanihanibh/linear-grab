@@ -59,6 +59,8 @@ export interface Settings {
   /** Auto-assigned on every created issue. */
   defaultProjectId?: string;
   defaultLabelIds?: string[];
+  /** Branch that deploys the staging preview domain; Stage buttons merge into it. */
+  stagingBranch?: string;
   /** App-user UUID of the Cursor agent in the workspace. */
   cursorAgentId?: string;
   cursorAgentName?: string;

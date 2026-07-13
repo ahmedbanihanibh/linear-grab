@@ -30,7 +30,7 @@ import {
   stopRecording,
 } from '@/lib/recorder';
 import { buildCaptureBlock } from '@/lib/captureShare';
-import { fetchPrStatuses, listBridgeTasks, mergePr, resumeCommand, sendBridgeMessage, setBridgeModel, stopBridgeTask, type BridgeTask } from '@/lib/bridge';
+import { fetchPrStatuses, listBridgeTasks, mergePr, resumeCommand, sendBridgeMessage, setBridgeModel, stagePr, stopBridgeTask, type BridgeTask } from '@/lib/bridge';
 import { requestedIssueId, consumeNavRequest, openPanelTo, grabSink, setGrabSink } from '../nav';
 import { renderMarkdown } from '../components/markdown';
 import {
@@ -499,6 +499,20 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
 
   // Fast-merge: reviewed the demo → one click ships the PR (bridge gh).
   const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
+  const stagingBranch = () => settingsQuery.data?.stagingBranch?.trim() || 'staging';
+  const [stageBusy, setStageBusy] = createSignal<string | null>(null);
+  const [stagedUrls, setStagedUrls] = createSignal<Set<string>>(new Set());
+  const doStage = async (url: string) => {
+    setStageBusy(url);
+    try {
+      await stagePr(url, stagingBranch());
+      setStagedUrls((prev) => new Set(prev).add(url));
+    } catch {
+      /* tooltip state remains unstaged */
+    } finally {
+      setStageBusy(null);
+    }
+  };
   const [mergedUrls, setMergedUrls] = createSignal<Set<string>>(new Set());
   const [mergeError, setMergeError] = createSignal<string | null>(null);
   const doMerge = async (url: string) => {
@@ -818,8 +832,27 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
                       </Show>
                       <Show when={isPr && (!prState(att.url) || prState(att.url) === 'OPEN')}>
                         <Button
+                          variant="ghost"
+                          class="ml-auto size-6 shrink-0 px-0"
+                          loading={stageBusy() === att.url}
+                          title={
+                            stagedUrls().has(att.url)
+                              ? `On ${stagingBranch()} — staging preview deploying`
+                              : `Merge into ${stagingBranch()} — deploys the staging preview domain`
+                          }
+                          aria-label="Merge to staging"
+                          onClick={() => void doStage(att.url)}
+                        >
+                          <Show when={stagedUrls().has(att.url)} fallback={<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                            <path d="M8 2 14 5.5 8 9 2 5.5 8 2Z" />
+                            <path d="M2 10.5 8 14l6-3.5" />
+                          </svg>}>
+                            <span class="text-success text-[11px]">✓</span>
+                          </Show>
+                        </Button>
+                        <Button
                           variant="primary"
-                          class="ml-auto h-6 shrink-0 px-2 text-[11px]"
+                          class="h-6 shrink-0 px-2 text-[11px]"
                           loading={mergeBusy() === att.url}
                           title={
                             prStatuses.isError

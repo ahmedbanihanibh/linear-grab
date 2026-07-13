@@ -1,7 +1,8 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import { createQuery } from '@tanstack/solid-query';
 import { fetchMyIssues } from '@/lib/linear/api';
-import { fetchPrStatuses, listBridgeTasks, mergePr } from '@/lib/bridge';
+import { fetchPrStatuses, listBridgeTasks, mergePr, stagePr } from '@/lib/bridge';
+import { getSettings } from '@/lib/storage';
 import { openPanelTo } from '../nav';
 import { Badge, Button, CloudIcon, EmptyState, ExtLink, Input, MonitorIcon, StateDot, timeAgo } from '../components/ui';
 import type { LinearAttachment, LinearIssueSummary } from '@/lib/types';
@@ -86,6 +87,24 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
       return true;
     });
   });
+
+  const settingsQ = createQuery<import('@/lib/types').Settings>(() => ({ queryKey: ['settings'], queryFn: getSettings }));
+  const stagingBranch = () => settingsQ.data?.stagingBranch?.trim() || 'staging';
+  const [stageBusy, setStageBusy] = createSignal<string | null>(null);
+  const [staged, setStaged] = createSignal<Set<string>>(new Set());
+  const [stageError, setStageError] = createSignal<string | null>(null);
+  const doStage = async (url: string) => {
+    setStageBusy(url);
+    setStageError(null);
+    try {
+      await stagePr(url, stagingBranch());
+      setStaged((prev) => new Set(prev).add(url));
+    } catch (err) {
+      setStageError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStageBusy(null);
+    }
+  };
 
   const [copiedId, setCopiedId] = createSignal<string | null>(null);
   const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
@@ -227,6 +246,25 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
                           {prState(row) === 'MERGED' ? '✓ merged' : 'closed'}
                         </Badge>
                       </Show>
+                      <Button
+                        variant="ghost"
+                        class="size-7 shrink-0 px-0"
+                        loading={stageBusy() === row.attachment.url}
+                        title={
+                          staged().has(row.attachment.url)
+                            ? `On ${stagingBranch()} — staging preview deploying`
+                            : `Merge into ${stagingBranch()} — deploys the staging preview domain`
+                        }
+                        aria-label="Merge to staging"
+                        onClick={() => void doStage(row.attachment.url)}
+                      >
+                        <Show when={staged().has(row.attachment.url)} fallback={<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                            <path d="M8 2 14 5.5 8 9 2 5.5 8 2Z" />
+                            <path d="M2 10.5 8 14l6-3.5" />
+                          </svg>}>
+                          <span class="text-success text-[11px]">✓</span>
+                        </Show>
+                      </Button>
                       <Button
                         variant="primary"
                         class="size-7 px-0"

@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.18.0';
+const VERSION = '0.19.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -619,6 +619,35 @@ createServer(async (req, res) => {
         }),
       );
       return json(res, 200, { statuses, previews });
+    }
+    // Merge a PR's branch into a staging branch (creating it from the default
+    // branch if missing) — Vercel then deploys it to the staging domain.
+    if (req.method === 'POST' && url.pathname === '/pr/stage') {
+      const body = await readBody(req);
+      const prUrl = String(body.url ?? '');
+      const base = String(body.base || 'staging').replace(/[^\w./-]/g, '');
+      const m = prUrl.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/\d+$/);
+      if (!m) return json(res, 400, { error: 'invalid PR url' });
+      const repo = `${m[1]}/${m[2]}`;
+      let head = null;
+      try {
+        head = JSON.parse((await run('gh', ['pr', 'view', prUrl, '--json', 'headRefName'])) ?? '').headRefName;
+      } catch {
+        /* fallthrough */
+      }
+      if (!head) return json(res, 500, { error: 'could not resolve the PR head branch (is gh authenticated?)' });
+      const baseExists = await run('gh', ['api', `repos/${repo}/branches/${base}`]);
+      if (baseExists == null) {
+        const def = ((await run('gh', ['api', `repos/${repo}`, '-q', '.default_branch'])) ?? 'main').trim();
+        const sha = ((await run('gh', ['api', `repos/${repo}/git/ref/heads/${def}`, '-q', '.object.sha'])) ?? '').trim();
+        if (!sha) return json(res, 500, { error: `staging branch missing and could not read ${def}` });
+        const created = await run('gh', ['api', '-X', 'POST', `repos/${repo}/git/refs`, '-f', `ref=refs/heads/${base}`, '-f', `sha=${sha}`]);
+        if (created == null) return json(res, 500, { error: `could not create branch ${base}` });
+      }
+      const out = await run('gh', ['api', '-X', 'POST', `repos/${repo}/merges`, '-f', `base=${base}`, '-f', `head=${head}`]);
+      if (out == null)
+        return json(res, 409, { error: `merge of ${head} into ${base} failed — likely a conflict; resolve manually` });
+      return json(res, 200, { ok: true, base, head });
     }
     // Fast-merge: after reviewing the demo, one click merges the PR via gh.
     if (req.method === 'POST' && url.pathname === '/pr/merge') {

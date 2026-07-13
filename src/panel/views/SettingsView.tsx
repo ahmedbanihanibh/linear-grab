@@ -425,6 +425,17 @@ export default function SettingsView() {
             </span>
           </label>
 
+          <Field
+            label="Staging branch"
+            hint="Stage buttons on PRs merge the PR branch here — point your staging domain (e.g. preview.ahmedbanihani.com) at this branch in Vercel."
+          >
+            <Input
+              value={s().stagingBranch ?? ''}
+              placeholder="staging"
+              onChange={(e) => void update({ stagingBranch: e.currentTarget.value.trim() || undefined })}
+            />
+          </Field>
+
           {/* Cursor agent */}
           <Field
             label="Cursor agent"
