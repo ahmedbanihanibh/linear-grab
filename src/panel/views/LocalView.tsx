@@ -3,6 +3,7 @@ import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-que
 import {
   fetchBridgeHealth,
   fetchBridgeTask,
+  fetchBridgeDiff,
   listBridgeTasks,
   sendBridgeMessage,
   setBridgeModel,
@@ -66,6 +67,13 @@ export default function LocalView() {
     queryKey: ['bridge-task', expandedId()],
     queryFn: () => fetchBridgeTask(expandedId()!),
     refetchInterval: 1_500,
+    enabled: !!expandedId() && !!health.data?.ok,
+  }));
+
+  const diff = createQuery(() => ({
+    queryKey: ['bridge-diff', expandedId()],
+    queryFn: () => fetchBridgeDiff(expandedId()!),
+    refetchInterval: 6_000,
     enabled: !!expandedId() && !!health.data?.ok,
   }));
 
@@ -341,6 +349,66 @@ export default function LocalView() {
 
                     {/* Conversation + composer */}
                     <Show when={expandedId() === task.id}>
+                      {/* Changes — what this task touched, like the cloud agent's card */}
+                      <Show when={diff.data && (diff.data.files.length || diff.data.untracked.length || diff.data.prs.length)}>
+                        <div class="border-border bg-bg flex flex-col gap-1 rounded-md border p-2">
+                          <div class="flex min-w-0 items-center gap-1.5">
+                            <span class="text-text-dim text-[10.5px] font-semibold tracking-wide uppercase">
+                              Changes
+                            </span>
+                            <Show when={diff.data!.branch}>
+                              <span class="font-mono text-text-faint min-w-0 truncate text-[10.5px]">
+                                {diff.data!.branch}
+                              </span>
+                            </Show>
+                            <span class="ml-auto shrink-0 text-[10.5px] tabular-nums">
+                              <span class="text-success">+{diff.data!.totalAdded}</span>{' '}
+                              <span class="text-danger">−{diff.data!.totalDeleted}</span>
+                            </span>
+                          </div>
+                          <For each={diff.data!.files}>
+                            {(f) => (
+                              <div class="flex min-w-0 items-center gap-1.5">
+                                <span class="font-mono text-text-dim min-w-0 flex-1 truncate text-[10.5px]" title={f.path}>
+                                  {f.path}
+                                </span>
+                                <span class="shrink-0 text-[10px] tabular-nums">
+                                  <Show when={!f.binary} fallback={<span class="text-text-faint">bin</span>}>
+                                    <span class="text-success">+{f.added}</span>{' '}
+                                    <span class="text-danger">−{f.deleted}</span>
+                                  </Show>
+                                </span>
+                              </div>
+                            )}
+                          </For>
+                          <For each={diff.data!.untracked}>
+                            {(path) => (
+                              <div class="flex min-w-0 items-center gap-1.5">
+                                <span class="font-mono text-text-dim min-w-0 flex-1 truncate text-[10.5px]" title={path}>
+                                  {path}
+                                </span>
+                                <span class="text-success shrink-0 text-[10px]">new</span>
+                              </div>
+                            )}
+                          </For>
+                          <For each={diff.data!.prs}>
+                            {(pr) => (
+                              <div class="flex min-w-0 items-center gap-1.5 pt-0.5">
+                                <Badge class="text-accent">PR · {pr.state.toLowerCase()}</Badge>
+                                <a
+                                  href={pr.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  class="text-accent min-w-0 truncate text-[11px] hover:underline"
+                                  title={pr.title}
+                                >
+                                  {pr.title}
+                                </a>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
                       <div class="border-border bg-bg flex max-h-80 flex-col gap-1.5 overflow-y-auto rounded-md border py-2 pl-2 pr-3">
                         <Show
                           when={(detail.data?.tail ?? []).length > 0}

@@ -13,7 +13,7 @@
  * Binds 127.0.0.1 only — never exposed to the network.
  */
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -28,7 +28,16 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.9.0';
+const VERSION = '0.10.0';
+
+/** Best-effort command runner (git/gh introspection). Never throws. */
+function run(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { cwd: DIR, timeout: 8_000, maxBuffer: 2_000_000 }, (err, stdout) =>
+      resolve(err ? null : stdout.toString()),
+    );
+  });
+}
 const MAX_TAIL = 300;
 const IDLE_KILL_MS = 30 * 60_000; // free an idle interactive session after 30min (resumable)
 
@@ -76,6 +85,8 @@ function saveHistory() {
           sessionId: t.sessionId ?? null,
           model: t.model ?? null,
           usage: t.usage ?? null,
+          startCommit: t.startCommit ?? null,
+          subagents: t.subagents ?? 0,
           tail: (t.tail ?? []).slice(-60),
         }));
       writeFileSync(HISTORY_FILE, JSON.stringify(items));
@@ -314,8 +325,64 @@ function startTask({ title, prompt, model, env, permissionMode }) {
   };
   tasks.set(id, task);
   pushTail(task, 'user', String(prompt ?? '').slice(0, 2000));
+  // Snapshot HEAD so the Changes view can attribute work to this task.
+  void run('git', ['rev-parse', 'HEAD']).then((out) => {
+    task.startCommit = out?.trim() || null;
+  });
   startProcess(task, { initialText: String(prompt ?? '') });
   return task;
+}
+
+/** What this task changed: files (+/−), branch, untracked, matching PRs. */
+async function computeDiff(task) {
+  const branch = (await run('git', ['branch', '--show-current']))?.trim() ?? '';
+  const base = task.startCommit;
+  const numstat = (await run('git', ['diff', '--numstat', ...(base ? [base] : [])])) ?? '';
+  const files = numstat
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [a, d, ...path] = line.split('\t');
+      return {
+        path: path.join('\t'),
+        added: a === '-' ? 0 : Number(a),
+        deleted: d === '-' ? 0 : Number(d),
+        binary: a === '-',
+      };
+    })
+    .filter((f) => f.path);
+  const untracked = ((await run('git', ['status', '--porcelain'])) ?? '')
+    .split('\n')
+    .filter((l) => l.startsWith('??'))
+    .map((l) => l.slice(3).trim())
+    .filter(Boolean)
+    .slice(0, 40);
+
+  // PRs: by current head branch AND by the issue identifier in the title.
+  const prs = new Map();
+  const ident = task.title.match(/^([A-Z][A-Z0-9]*-\d+)/)?.[1];
+  for (const args of [
+    branch ? ['pr', 'list', '--head', branch, '--state', 'all', '--json', 'url,title,state', '--limit', '3'] : null,
+    ident ? ['pr', 'list', '--search', ident, '--state', 'all', '--json', 'url,title,state', '--limit', '3'] : null,
+  ]) {
+    if (!args) continue;
+    try {
+      const out = await run('gh', args);
+      for (const pr of JSON.parse(out ?? '[]')) prs.set(pr.url, pr);
+    } catch {
+      /* gh missing or not a repo with remote */
+    }
+  }
+
+  return {
+    branch,
+    baseCommit: base ?? null,
+    files: files.slice(0, 60),
+    untracked,
+    totalAdded: files.reduce((n, f) => n + f.added, 0),
+    totalDeleted: files.reduce((n, f) => n + f.deleted, 0),
+    prs: [...prs.values()],
+  };
 }
 
 /** Send a follow-up. Respawns via --resume when the process is gone or a model
@@ -373,6 +440,12 @@ createServer(async (req, res) => {
       return t
         ? json(res, 200, { ...summary(t), tail: (t.tail ?? []).slice(-120) })
         : json(res, 404, { error: 'not found' });
+    }
+    const diff = url.pathname.match(/^\/tasks\/([\w-]+)\/diff$/);
+    if (req.method === 'GET' && diff) {
+      const t = tasks.get(diff[1]);
+      if (!t) return json(res, 404, { error: 'not found' });
+      return json(res, 200, await computeDiff(t));
     }
     const stop = url.pathname.match(/^\/tasks\/([\w-]+)\/stop$/);
     if (req.method === 'POST' && stop) {

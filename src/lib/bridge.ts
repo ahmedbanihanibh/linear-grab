@@ -106,6 +106,21 @@ export function stopBridgeTask(id: string): Promise<void> {
   return call<{ ok: boolean }>(`/tasks/${id}/stop`, { method: 'POST' }).then(() => undefined);
 }
 
+export interface BridgeDiff {
+  branch: string;
+  baseCommit: string | null;
+  files: Array<{ path: string; added: number; deleted: number; binary: boolean }>;
+  untracked: string[];
+  totalAdded: number;
+  totalDeleted: number;
+  prs: Array<{ url: string; title: string; state: string }>;
+}
+
+/** What the task changed in the repo (diffed against its start commit) + PRs. */
+export function fetchBridgeDiff(id: string): Promise<BridgeDiff> {
+  return call<BridgeDiff>(`/tasks/${id}/diff`);
+}
+
 /** The exact command to continue this session in a terminal. */
 export function resumeCommand(task: BridgeTask): string {
   return `claude --dangerously-skip-permissions --resume ${task.sessionId ?? '<session-id>'}`;
