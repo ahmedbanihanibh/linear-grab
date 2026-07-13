@@ -17,7 +17,13 @@ import {
   discardRecording,
   markRecordingUploaded,
 } from '@/lib/recorder';
-import { fetchTeams, createIssue, createComment } from '@/lib/linear/api';
+import {
+  fetchTeams,
+  createIssue,
+  createComment,
+  fetchTeamStates,
+  updateIssueState,
+} from '@/lib/linear/api';
 import { uploadAsset } from '@/lib/assetUpload';
 import { createBridgeTask } from '@/lib/bridge';
 import { announceIssue } from '@/lib/notify';
@@ -96,6 +102,8 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [target, setTarget] = createSignal<'cursor' | 'local' | 'none'>('none');
   /** Claude Code model for local delegation ('' = its default). */
   const [localModel, setLocalModel] = createSignal('');
+  /** Per-draft Cursor cloud model override → [model=…] ('' = Settings default). */
+  const [cloudModel, setCloudModel] = createSignal('');
   const [note, setNote] = createSignal('');
   const [tier, setTier] = createSignal<AiTier>('fast');
   const [includeLogs, setIncludeLogs] = createSignal(true);
@@ -245,7 +253,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         suggestedNextSteps: nextSteps(),
         grabs: grabQuery.data ?? [],
         repo: repo(),
-        model: settings().cursorModel,
+        model: cloudModel().trim() || settings().cursorModel,
         agentInstructions: buildAgentInstructions(settings()),
       });
       // Attach GIF + element screenshot automatically — BOTH best-effort:
@@ -334,6 +342,17 @@ export default function DraftView(props: { onCreated: () => void }) {
               : undefined,
           });
           localTask = true;
+          // Mirror what Cursor does on delegation: move the issue to the
+          // team's started state so it's In Progress while the agent works.
+          try {
+            const states = await fetchTeamStates(teamId());
+            const started = states
+              .filter((st) => st.type === 'started')
+              .sort((a, b) => a.position - b.position)[0];
+            if (started) await updateIssueState(issue.id, started.id);
+          } catch {
+            /* non-fatal — the agent's closeout still moves it later */
+          }
           // Make the delegation visible in Activity immediately.
           await createComment(
             issue.id,
@@ -704,6 +723,20 @@ export default function DraftView(props: { onCreated: () => void }) {
             </option>
           </Select>
         </Field>
+
+        {/* Cursor cloud model for THIS issue — [model=…] tag */}
+        <Show when={target() === 'cursor'}>
+          <Field
+            label="Cloud model"
+            hint={`Sent as [model=…]. Empty = ${settings().cursorModel ? `your default (${settings().cursorModel})` : "Cursor's default"}.`}
+          >
+            <Input
+              placeholder={settings().cursorModel || "Cursor's default — e.g. claude-opus-4-8, composer"}
+              value={cloudModel()}
+              onInput={(e) => setCloudModel(e.currentTarget.value)}
+            />
+          </Field>
+        </Show>
 
         {/* Local model pick — changeable later per-task in the Local tab */}
         <Show when={target() === 'local'}>

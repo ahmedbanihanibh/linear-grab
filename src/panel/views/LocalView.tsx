@@ -11,6 +11,7 @@ import {
   type BridgeTask,
 } from '@/lib/bridge';
 import { Button, Badge, EmptyState, Select, Spinner, Textarea, timeAgo } from '../components/ui';
+import { renderMarkdown } from '../components/markdown';
 
 const MODEL_OPTIONS = [
   { id: '', label: 'Default model' },
@@ -98,18 +99,52 @@ export default function LocalView() {
           ? 'var(--color-warn)'
           : 'var(--color-danger)';
 
-  const tailColor = (kind: string) =>
-    kind === 'user'
-      ? 'text-accent'
-      : kind === 'assistant'
-        ? 'text-text'
-        : kind === 'result'
-          ? 'text-success'
-          : kind === 'subagent'
-            ? 'text-warn'
-            : kind === 'stderr'
-              ? 'text-danger'
-              : 'text-text-dim';
+  /** Chat-style rendering: prose bubbles for user/assistant/result (markdown),
+      compact mono rows for tool calls / subagents / stderr. */
+  const ChatLine = (props: { line: { kind: string; text: string } }) => {
+    const k = props.line.kind;
+    if (k === 'user') {
+      return (
+        <div class="border-accent/40 bg-accent-soft self-end rounded-lg border px-2.5 py-1.5">
+          <p class="text-accent mb-0.5 text-[9.5px] font-semibold tracking-wide uppercase">You</p>
+          <div
+            class="lg-md text-text text-[11.5px] leading-relaxed break-words"
+            innerHTML={renderMarkdown(props.line.text)}
+          />
+        </div>
+      );
+    }
+    if (k === 'assistant' || k === 'result') {
+      return (
+        <div
+          class={`bg-surface rounded-lg border px-2.5 py-1.5 ${
+            k === 'result' ? 'border-success/40' : 'border-border'
+          }`}
+        >
+          <p
+            class={`mb-0.5 text-[9.5px] font-semibold tracking-wide uppercase ${
+              k === 'result' ? 'text-success' : 'text-text-faint'
+            }`}
+          >
+            {k === 'result' ? 'Result' : 'Claude'}
+          </p>
+          <div
+            class="lg-md text-text text-[11.5px] leading-relaxed break-words"
+            innerHTML={renderMarkdown(props.line.text)}
+          />
+        </div>
+      );
+    }
+    return (
+      <p
+        class={`font-mono px-1 text-[10px] leading-relaxed break-words ${
+          k === 'subagent' ? 'text-warn' : k === 'stderr' ? 'text-danger' : 'text-text-faint'
+        }`}
+      >
+        {props.line.text}
+      </p>
+    );
+  };
 
   return (
     <div class="flex h-full flex-col">
@@ -267,21 +302,12 @@ export default function LocalView() {
 
                     {/* Conversation + composer */}
                     <Show when={expandedId() === task.id}>
-                      <div class="border-border bg-bg max-h-64 overflow-y-auto rounded-md border py-1.5 pl-2 pr-3">
+                      <div class="border-border bg-bg flex max-h-80 flex-col gap-1.5 overflow-y-auto rounded-md border py-2 pl-2 pr-3">
                         <Show
                           when={(detail.data?.tail ?? []).length > 0}
                           fallback={<p class="text-text-faint text-[11px]">Waiting for output…</p>}
                         >
-                          <For each={detail.data!.tail}>
-                            {(line) => (
-                              <p
-                                class={`font-mono text-[10.5px] leading-relaxed break-words whitespace-pre-wrap ${tailColor(line.kind)}`}
-                              >
-                                {line.kind === 'user' ? '❯ ' : ''}
-                                {line.text}
-                              </p>
-                            )}
-                          </For>
+                          <For each={detail.data!.tail}>{(line) => <ChatLine line={line} />}</For>
                         </Show>
                       </div>
                       <div class="flex flex-col gap-1.5">

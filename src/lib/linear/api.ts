@@ -128,6 +128,33 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
   }
 }
 
+export interface LinearWorkflowState {
+  id: string;
+  name: string;
+  type: string;
+  position: number;
+}
+
+export async function fetchTeamStates(teamId: string): Promise<LinearWorkflowState[]> {
+  const data = await gql<{ team: { states: { nodes: LinearWorkflowState[] } } }>(
+    `query($teamId: String!) {
+      team(id: $teamId) { states { nodes { id name type position } } }
+    }`,
+    { teamId },
+  );
+  return data.team.states.nodes;
+}
+
+export async function updateIssueState(issueId: string, stateId: string): Promise<void> {
+  const data = await gql<{ issueUpdate: { success: boolean } }>(
+    `mutation($id: String!, $stateId: String!) {
+      issueUpdate(id: $id, input: { stateId: $stateId }) { success }
+    }`,
+    { id: issueId, stateId },
+  );
+  if (!data.issueUpdate.success) throw new Error('Linear rejected the state update');
+}
+
 /** Create an issue; when `delegateId` is the Cursor app user, this triggers its cloud agent. */
 export async function createIssue(input: CreateIssueInput): Promise<CreatedIssue> {
   const data = await gql<{ issueCreate: { success: boolean; issue: CreatedIssue | null } }>(
