@@ -151,7 +151,7 @@ of the other sections.`,hD="- FIRST, self-orient in the repo checkout (skip any 
               appUser { displayName }
               comment { id }
               externalLinks { label url }
-              activities(last: 50) {
+              activities(first: 250) {
               nodes { id createdAt ephemeral content {
                     __typename
                     ... on AgentActivityThoughtContent { body }

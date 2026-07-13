@@ -127,7 +127,7 @@ export async function fetchAgentSessions(issueId: string): Promise<LinearAgentSe
               appUser { displayName }
               comment { id }
               externalLinks { label url }
-              activities(last: 50) {
+              activities(first: 250) {
               nodes { id createdAt ephemeral content {
                     __typename
                     ... on AgentActivityThoughtContent { body }
