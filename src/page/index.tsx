@@ -1,14 +1,13 @@
 import { render } from 'solid-js/web';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import App, { LinearLogo } from '@/panel/App';
-import {
-  activatePicker,
-  ensurePagePicker,
-  CONTEXT_COPIED_EVENT,
-  PICKER_ACTIVATED_EVENT,
-} from '@/lib/picker';
+import { ensurePagePicker, CONTEXT_COPIED_EVENT, PICKER_ACTIVATED_EVENT } from '@/lib/picker';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
-import { subscribeRunningAgents, type RunningAgentIssue } from '@/lib/agentWatch';
+import {
+  subscribeRunningAgents,
+  type AgentWatchSnapshot,
+  type RunningAgentIssue,
+} from '@/lib/agentWatch';
 import { getRecorderSnapshot, subscribeRecorder, stopRecording } from '@/lib/recorder';
 import { openPanelTo } from '@/panel/nav';
 // Compiled Tailwind CSS as a string — injected into the shadow root so the
@@ -100,7 +99,9 @@ function PagePanel(props: { defaultOpen: boolean }) {
     x: Math.max(8, window.innerWidth - PILL_W - 24),
     y: Math.max(8, window.innerHeight - PILL_H - 20),
   });
-  const [running, setRunning] = createSignal<RunningAgentIssue[]>([]);
+  const [watch, setWatch] = createSignal<AgentWatchSnapshot>({ running: [], review: [] });
+  const running = () => watch().running;
+  const review = () => watch().review;
   const [minimapOpen, setMinimapOpen] = createSignal(false);
   const [recPhase, setRecPhase] = createSignal(getRecorderSnapshot().phase);
   const [recElapsed, setRecElapsed] = createSignal(0);
@@ -203,7 +204,7 @@ function PagePanel(props: { defaultOpen: boolean }) {
       window.removeEventListener(CONTEXT_COPIED_EVENT, onCopied);
       window.removeEventListener(PICKER_ACTIVATED_EVENT, onPickerActivated);
     });
-    const unsubAgents = subscribeRunningAgents(setRunning);
+    const unsubAgents = subscribeRunningAgents(setWatch);
 
     // Recording choreography: minimize while capturing so the recording shows
     // the APP (not our panel); the pill becomes the stop control; reopen on
@@ -259,6 +260,12 @@ function PagePanel(props: { defaultOpen: boolean }) {
   };
 
   const showMinimapAbove = () => pos().y > 260;
+
+  const openAgent = (id: string) => {
+    setMinimapOpen(false);
+    openPanelTo('activity', id);
+    setOpen(true);
+  };
 
   // DevTools-style width resize from the panel's inner edge.
   const onResizePointerDown = (e: PointerEvent) => {
@@ -344,23 +351,8 @@ function PagePanel(props: { defaultOpen: boolean }) {
                   >
                     <LinearLogo size={13} />
                   </button>
-                  {/* Single dock: react-grab's own toolbar is hidden — the pick
-                      action lives here instead. */}
-                  <button
-                    onClick={() => {
-                      if (dragMoved) return;
-                      setMinimapOpen(false);
-                      void activatePicker();
-                    }}
-                    title="Pick element"
-                    aria-label="Pick element"
-                    class="text-text-dim hover:text-text hover:bg-surface-2 grid size-7 cursor-pointer place-items-center rounded-full transition-colors"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
-                      <circle cx="8" cy="8" r="2.2" />
-                      <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
-                    </svg>
-                  </button>
+                  {/* Picking lives in react-grab's own toolbar (the fast,
+                      familiar path) — this pill is panel/agents/recording only. */}
                   <span class="bg-border h-4 w-px" aria-hidden />
                   {/* Live agent status — dot pulses while agents run; count is fixed-width. */}
                   <button
@@ -389,6 +381,13 @@ function PagePanel(props: { defaultOpen: boolean }) {
                     >
                       {copiedFlash() ? 'Copied ✓' : `${running().length} run`}
                     </span>
+                    {/* Finished agents awaiting YOUR review — amber, attention-worthy. */}
+                    <Show when={!copiedFlash() && review().length > 0}>
+                      <span aria-hidden class="bg-warn size-2 rounded-full" />
+                      <span class="text-warn min-w-[3.5ch] text-left text-[11px] font-medium tabular-nums">
+                        {review().length} rev
+                      </span>
+                    </Show>
                   </button>
                 </>
               }
@@ -418,6 +417,14 @@ function PagePanel(props: { defaultOpen: boolean }) {
                 showMinimapAbove() ? 'bottom-full mb-2' : 'top-full mt-2'
               } ${pos().x > window.innerWidth - 300 ? 'right-0' : 'left-0'}`}
             >
+              <Show when={review().length > 0}>
+                <p class="text-warn px-1.5 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-wide uppercase">
+                  Needs review
+                </p>
+                <For each={review()}>
+                  {(agent) => <MinimapRow agent={agent} review onOpen={openAgent} />}
+                </For>
+              </Show>
               <p class="text-text-dim px-1.5 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-wide uppercase">
                 Running agents
               </p>
@@ -430,31 +437,7 @@ function PagePanel(props: { defaultOpen: boolean }) {
                 }
               >
                 <For each={running()}>
-                  {(agent) => (
-                    <button
-                      onClick={() => {
-                        setMinimapOpen(false);
-                        openPanelTo('activity', agent.id);
-                        setOpen(true);
-                      }}
-                      class="hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left transition-colors"
-                    >
-                      <span class="flex min-w-0 items-center gap-1.5">
-                        <span
-                          aria-hidden
-                          class="size-1.5 shrink-0 rounded-full"
-                          style={{ background: agent.stateColor }}
-                        />
-                        <span class="font-mono text-text-dim shrink-0 text-[10.5px]">
-                          {agent.identifier}
-                        </span>
-                        <span class="text-text truncate text-[11.5px]">{agent.title}</span>
-                      </span>
-                      <span class="text-text-faint pl-3 text-[10.5px] tabular-nums">
-                        {agent.delegateName} · {agent.stateName} · {timeAgoShort(agent.updatedAt)}
-                      </span>
-                    </button>
-                  )}
+                  {(agent) => <MinimapRow agent={agent} onOpen={openAgent} />}
                 </For>
               </Show>
             </div>
@@ -504,6 +487,36 @@ function PagePanel(props: { defaultOpen: boolean }) {
         </div>
       </Show>
     </>
+  );
+}
+
+/** One agent row in the minimap popover. */
+function MinimapRow(props: {
+  agent: RunningAgentIssue;
+  review?: boolean;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => props.onOpen(props.agent.id)}
+      class="hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left transition-colors"
+    >
+      <span class="flex min-w-0 items-center gap-1.5">
+        <span
+          aria-hidden
+          class="size-1.5 shrink-0 rounded-full"
+          style={{ background: props.review ? 'var(--color-warn)' : props.agent.stateColor }}
+        />
+        <span class="font-mono text-text-dim shrink-0 text-[10.5px]">
+          {props.agent.identifier}
+        </span>
+        <span class="text-text truncate text-[11.5px]">{props.agent.title}</span>
+      </span>
+      <span class="text-text-faint pl-3 text-[10.5px] tabular-nums">
+        {props.review ? 'PR ready · needs review' : props.agent.stateName} ·{' '}
+        {props.agent.delegateName} · {timeAgoShort(props.agent.updatedAt)}
+      </span>
+    </button>
   );
 }
 

@@ -19,6 +19,8 @@ import {
 } from '@/lib/recorder';
 import { fetchTeams, createIssue } from '@/lib/linear/api';
 import { uploadAsset } from '@/lib/assetUpload';
+import { createBridgeTask } from '@/lib/bridge';
+import { announceIssue } from '@/lib/notify';
 import { fetchDevLogTail } from '@/lib/logs';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, MODELS } from '@/lib/ai/providers';
@@ -90,7 +92,8 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [priority, setPriority] = createSignal(0);
   const [teamId, setTeamId] = createSignal(settings().defaultTeamId ?? '');
   const [repo, setRepo] = createSignal(settings().defaultRepo ?? '');
-  const [delegateOn, setDelegateOn] = createSignal(!!settings().cursorAgentId);
+  /** Who executes the issue: Cursor cloud agent, local Claude Code, or nobody. */
+  const [target, setTarget] = createSignal<'cursor' | 'local' | 'none'>('none');
   const [note, setNote] = createSignal('');
   const [tier, setTier] = createSignal<AiTier>('fast');
   const [includeLogs, setIncludeLogs] = createSignal(true);
@@ -103,7 +106,7 @@ export default function DraftView(props: { onCreated: () => void }) {
     defaultsApplied = true;
     setTeamId(s.defaultTeamId ?? '');
     setRepo(s.defaultRepo ?? '');
-    setDelegateOn(!!s.cursorAgentId);
+    setTarget(s.cursorAgentId ? 'cursor' : 'none');
   });
 
   // ---- Teams query ----------------------------------------------------------
@@ -175,6 +178,7 @@ export default function DraftView(props: { onCreated: () => void }) {
       {
         note: note(),
         grabbed: grab() ?? null,
+        grabbedList: grabQuery.data ?? undefined,
         teamName: selectedTeamName(),
         tier: tier(),
         template: buildAgentInstructions(settings()),
@@ -237,7 +241,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         impact: impact(),
         analysisNotes: analysisNotes(),
         suggestedNextSteps: nextSteps(),
-        grabbed: grab(),
+        grabs: grabQuery.data ?? [],
         repo: repo(),
         model: settings().cursorModel,
         agentInstructions: buildAgentInstructions(settings()),
@@ -257,13 +261,17 @@ export default function DraftView(props: { onCreated: () => void }) {
           failed.push('recording');
         }
       }
-      const shot = grab()?.screenshotDataUrl;
-      if (shot) {
+      const shots = (grabQuery.data ?? []).filter((g) => g.screenshotDataUrl).slice(0, 3);
+      for (const [i, g] of shots.entries()) {
         try {
-          const url = await uploadAsset(dataUrlToBlob(shot), `element-${Date.now()}.png`);
-          body += `\n\n### Element location\n![Highlighted element in context](${url})`;
+          const url = await uploadAsset(
+            dataUrlToBlob(g.screenshotDataUrl!),
+            `element-${Date.now()}-${i}.png`,
+          );
+          const label = g.componentName ? `<${g.componentName}>` : (g.tagName ?? 'element');
+          body += `\n\n### Element location${shots.length > 1 ? ` — ${label}` : ''}\n![Highlighted element in context](${url})`;
         } catch {
-          failed.push('screenshot');
+          failed.push(`screenshot${shots.length > 1 ? ` ${i + 1}` : ''}`);
         }
       }
       // Dev-server log tail — full debug context for the agent.
@@ -275,30 +283,67 @@ export default function DraftView(props: { onCreated: () => void }) {
             body += `\n\n### Dev server logs (last ${n} lines)\n\`\`\`\n${tail}\n\`\`\``;
           }
         } catch {
-          failed.push('server logs');
+          failed.push('server logs (fetch failed — is the Log URL serving the file?)');
         }
       }
       if (failed.length) {
+        const uploadsFailed = failed.some((f) => !f.startsWith('server logs'));
         setCreateWarning(
-          `${failed.join(' + ')} upload blocked by the browser — issue created without ${failed.length > 1 ? 'them' : 'it'}. Use "Copy GIF" in Capture and paste into a comment on the issue.`,
+          `Skipped: ${failed.join(', ')} — issue created without ${failed.length > 1 ? 'them' : 'it'}.${
+            uploadsFailed
+              ? ' Real fix for uploads: run `npx linear-grab-bridge` in the repo (uploads relay through it) or set the GitHub fallback in Settings.'
+              : ''
+          }`,
         );
       }
-      return createIssue({
+      const issue = await createIssue({
         teamId: teamId(),
         title: title(),
         description: body,
         priority: priority(),
-        delegateId:
-          delegateOn() && settings().cursorAgentId
-            ? settings().cursorAgentId
-            : undefined,
+        delegateId: target() === 'cursor' ? settings().cursorAgentId : undefined,
       });
+      // Local delegation: hand the composed issue to the running Claude Code
+      // bridge — the Linear issue stays the single registry either way.
+      let localTask = false;
+      if (target() === 'local') {
+        try {
+          await createBridgeTask(
+            `${issue.identifier} — ${title()}`,
+            `You are delegated Linear issue ${issue.identifier} (${issue.url}).\n\n${body}\n\nWork in this repository until the issue is resolved, following the Agent instructions above.`,
+          );
+          localTask = true;
+        } catch {
+          setCreateWarning(
+            'Issue created, but the local bridge is unreachable — run `npx linear-grab-bridge` in the repo and re-delegate from the Local tab.',
+          );
+        }
+      }
+      // Announce to Slack/Telegram (best-effort, when configured): issue link,
+      // summary, executor, and the demo URL when one uploaded.
+      const notifyFailed = await announceIssue(settings(), {
+        identifier: issue.identifier,
+        title: title(),
+        url: issue.url,
+        summary: description(),
+        impact: impact(),
+        repo: repo() || settings().defaultRepo,
+        demoUrl: getRecorderSnapshot().result?.assetUrl,
+        executor: target(),
+      });
+      if (notifyFailed.length) {
+        setCreateWarning(
+          `${notifyFailed.join(' + ')} announcement failed — check the token/channel in Settings.`,
+        );
+      }
+      return { ...issue, localTask };
     },
     onSuccess: (issue) => {
       setCreatedIssue({ identifier: issue.identifier, url: issue.url });
       setCreateError(null);
       setFellBack(null);
       discardRecording();
+      if (issue.localTask) openPanelTo('local');
     },
     onError: (err: Error) => {
       setCreateError(err.message);
@@ -356,6 +401,9 @@ export default function DraftView(props: { onCreated: () => void }) {
                 {rec().attachOnCreate ? ' ✓' : ' (off)'}
               </Badge>
             </Show>
+            <Show when={(grabQuery.data?.length ?? 0) > 1}>
+              <Badge>+{grabQuery.data!.length - 1} more</Badge>
+            </Show>
             <Show when={rec().phase === 'recording'}>
               <Badge class="text-danger">● recording…</Badge>
             </Show>
@@ -363,10 +411,15 @@ export default function DraftView(props: { onCreated: () => void }) {
         </div>
         <Button
           variant="ghost"
-          class="h-6 shrink-0 px-2 text-[11px]"
+          class="size-7 shrink-0 px-0"
+          title="Manage in the Capture tab — elements, screenshots, recording"
+          aria-label="Open Capture tab"
           onClick={() => openPanelTo('capture')}
         >
-          Capture →
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+            <path d="M5.5 3.5 6.6 2h2.8l1.1 1.5H13A1.5 1.5 0 0 1 14.5 5v7A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V5A1.5 1.5 0 0 1 3 3.5h2.5Z" />
+            <circle cx="8" cy="8.2" r="2.4" />
+          </svg>
         </Button>
       </div>
 
@@ -599,30 +652,32 @@ export default function DraftView(props: { onCreated: () => void }) {
           />
         </Field>
 
-        {/* Delegate toggle */}
-        <div class="flex flex-col gap-1">
-          <label class="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={delegateOn()}
-              disabled={!settings().cursorAgentId}
-              onChange={(e) => setDelegateOn(e.currentTarget.checked)}
-              class="rounded accent-accent"
-            />
-            <span class="text-[12px] text-text">
-              Delegate to{' '}
-              <span class="text-text-dim">
-                {settings().cursorAgentName ?? 'Cursor'}
-              </span>{' '}
-              on create
-            </span>
-          </label>
-          <Show when={!settings().cursorAgentId}>
-            <span class="text-text-faint text-[10.5px] leading-snug pl-5">
-              Pick the Cursor agent in Settings
-            </span>
-          </Show>
-        </div>
+        {/* Executor — cloud agent, local Claude Code, or nobody */}
+        <Field
+          label="Delegate to"
+          hint={
+            target() === 'local'
+              ? 'Requires `npx linear-grab-bridge` running in the repo — track it in the Local tab.'
+              : target() === 'cursor' && !settings().cursorAgentId
+                ? 'Pick the Cursor agent in Settings first.'
+                : undefined
+          }
+        >
+          <Select
+            value={target()}
+            onChange={(e) => setTarget(e.currentTarget.value as 'cursor' | 'local' | 'none')}
+          >
+            <option value="cursor" disabled={!settings().cursorAgentId} selected={target() === 'cursor'}>
+              {settings().cursorAgentName ?? 'Cursor'} — cloud agent
+            </option>
+            <option value="local" selected={target() === 'local'}>
+              Local Claude Code (bridge)
+            </option>
+            <option value="none" selected={target() === 'none'}>
+              No one — just create the issue
+            </option>
+          </Select>
+        </Field>
 
         {/* Dev-server logs toggle (only when a log URL is configured) */}
         <Show when={settings().logUrl}>

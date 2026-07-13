@@ -61,7 +61,27 @@ export async function uploadFileToLinear(blob: Blob, filename: string): Promise<
       lastError = err;
     }
   }
+
+  // Bridge escape hatch: the local Node bridge has no CORS constraints — it
+  // relays the PUT to the signed URL. Uploads "just work" when it's running.
+  try {
+    const { bridgeUrl } = await getSettings();
+    const base = (bridgeUrl?.trim() || 'http://localhost:4577').replace(/\/$/, '');
+    const relay = await fetch(`${base}/put`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': blob.type,
+        'x-upload-url': uploadFile.uploadUrl,
+        'x-upload-headers': JSON.stringify({ ...returned, ...(auth ? { Authorization: auth } : {}) }),
+      },
+      body: blob,
+    });
+    if (relay.ok) return uploadFile.assetUrl;
+  } catch {
+    /* bridge not running */
+  }
+
   throw new Error(
-    `Upload to Linear storage failed${lastError instanceof Error ? ` — ${lastError.message}` : ''}. Use "Copy GIF" and paste it into a Linear comment (Linear uploads it itself), or Download.`,
+    `Upload to Linear storage failed${lastError instanceof Error ? ` — ${lastError.message}` : ''}. Run \`npx linear-grab-bridge\` in the repo (uploads relay through it), set the GitHub fallback in Settings, or use "Copy GIF" + paste.`,
   );
 }

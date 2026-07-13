@@ -83,6 +83,21 @@ export interface Settings {
   logUrl?: string;
   /** How many trailing log lines to attach (default 100). */
   logLines?: number;
+  /** Local Claude Code bridge URL (`npx linear-grab-bridge`, default :4577). */
+  bridgeUrl?: string;
+  /** Capture a highlighted screenshot per picked element. OFF by default —
+      the DOM capture costs a beat on huge pages; picking stays instant without it. */
+  captureShots?: boolean;
+  /** Slack announcements: bot token (xoxb-…, scopes chat:write + channels:read
+      + files:write) and the target channel. */
+  slackToken?: string;
+  slackChannelId?: string;
+  slackChannelName?: string;
+  /** Telegram announcements: bot token + chat id. */
+  telegramToken?: string;
+  telegramChatId?: string;
+  /** Announce new issues on create (default true when a service is configured). */
+  notifyOnCreate?: boolean;
   /** Page mode: which edge the panel docks to by default. */
   panelSide?: 'left' | 'right';
   /** Page mode: 'overlay' floats over the app; 'pinned' squeezes the page
@@ -207,6 +222,8 @@ export interface DraftInput {
   template?: string;
   /** Recent dev-server log tail — lets the AI ground its root-cause analysis. */
   logs?: string;
+  /** All captured elements when more than one (grabbed stays the primary). */
+  grabbedList?: GrabbedElement[];
 }
 
 export type DraftPortClientMessage = { type: 'start'; input: DraftInput };

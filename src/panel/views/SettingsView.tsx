@@ -5,6 +5,7 @@ import { isExtensionContext } from '@/lib/env';
 import { fetchViewer, fetchTeams, fetchAgents } from '@/lib/linear/api';
 import { oauthLogin, disconnectLinear } from '@/lib/linear/auth';
 import { MODELS, resolveProvider } from '@/lib/ai/providers';
+import { listSlackChannels } from '@/lib/notify';
 import {
   Button,
   Input,
@@ -135,6 +136,15 @@ export default function SettingsView() {
   // (Safari/Firefox/any browser) uses personal API keys. ──────────────────────
   const redirectUrl = isExtensionContext ? chrome.identity.getRedirectURL() : null;
 
+  // ── Slack channels (for the notifications dropdown) ─────────────────────────
+  const slackChannelsQ = createQuery(() => ({
+    queryKey: ['slack-channels', s().slackToken],
+    queryFn: () => listSlackChannels(s().slackToken!),
+    enabled: !!s().slackToken,
+    retry: 0,
+    staleTime: 60_000,
+  }));
+
   // ── AI provider ──────────────────────────────────────────────────────────────
   const activeProvider = createMemo(() => resolveProvider(s()));
 
@@ -175,6 +185,24 @@ export default function SettingsView() {
           stack, and your skills/memory paths — straight to the clipboard for a local
           Claude Code or Cursor session; the panel stays out of the way. Both share the
           same picker; switch anytime.
+        </span>
+      </Section>
+
+      {/* ── 0.5 CAPTURE ───────────────────────────────────────────────────────── */}
+      <Section title="Capture">
+        <label class="flex cursor-pointer items-center gap-2 select-none">
+          <input
+            type="checkbox"
+            checked={!!s().captureShots}
+            onChange={(e) => void update({ captureShots: e.currentTarget.checked || undefined })}
+            class="accent-accent rounded"
+          />
+          <span class="text-text text-[12px]">Element screenshots</span>
+        </label>
+        <span class="text-text-faint text-[10.5px] leading-snug">
+          Captures a highlighted screenshot of each picked element and attaches it
+          to the issue. Costs a beat on huge pages — with this off, picking is
+          instant (pure react-grab speed).
         </span>
       </Section>
 
@@ -530,6 +558,23 @@ export default function SettingsView() {
         </Section>
       </Show>
 
+      {/* ── 2.4 LOCAL CLAUDE CODE BRIDGE ─────────────────────────────────────── */}
+      <Section title="Local Claude Code">
+        <Field
+          label="Bridge URL"
+          hint={'Run `npx linear-grab-bridge` in your repo\'s terminal (binds localhost only). Enables "Delegate to → Local Claude Code" in Draft, the Local tab, and relays blocked uploads to Linear storage.'}
+        >
+          <Input
+            placeholder="http://localhost:4577"
+            value={s().bridgeUrl ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ bridgeUrl: v || undefined });
+            }}
+          />
+        </Field>
+      </Section>
+
       {/* ── 2.5 ASSET UPLOADS FALLBACK ────────────────────────────────────────── */}
       <Section title="Asset uploads">
         <Field
@@ -559,6 +604,99 @@ export default function SettingsView() {
             }}
           />
         </Field>
+      </Section>
+
+      {/* ── 2.7 NOTIFICATIONS ─────────────────────────────────────────────────── */}
+      <Section title="Notifications">
+        <Field
+          label="Slack bot token"
+          hint="Bot token (xoxb-…) with chat:write + channels:read + files:write. New issues get announced with links + demo, and the AGENT receives the token to post its finished demo video itself."
+        >
+          <Input
+            type="password"
+            placeholder="xoxb-…"
+            value={s().slackToken ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ slackToken: v || undefined });
+            }}
+          />
+        </Field>
+        <Show when={s().slackToken}>
+          <Field label="Slack channel">
+            <Show
+              when={!slackChannelsQ.isError}
+              fallback={<ErrorNote message="Couldn't list channels — check the token scopes (channels:read)." />}
+            >
+              <Select
+                value={s().slackChannelId ?? ''}
+                disabled={slackChannelsQ.isLoading}
+                onChange={(e) => {
+                  const id = e.currentTarget.value;
+                  const ch = slackChannelsQ.data?.find((c) => c.id === id);
+                  void update({
+                    slackChannelId: id || undefined,
+                    slackChannelName: ch?.name,
+                  });
+                }}
+              >
+                <option value="">Select a channel…</option>
+                <For each={slackChannelsQ.data ?? []}>
+                  {(ch) => (
+                    <option value={ch.id} selected={ch.id === s().slackChannelId}>
+                      #{ch.name}
+                    </option>
+                  )}
+                </For>
+              </Select>
+            </Show>
+          </Field>
+        </Show>
+
+        <Field
+          label="Telegram bot token"
+          hint="From @BotFather. The agent also receives it to send the demo video (sendVideo)."
+        >
+          <Input
+            type="password"
+            placeholder="123456:ABC-…"
+            value={s().telegramToken ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ telegramToken: v || undefined });
+            }}
+          />
+        </Field>
+        <Show when={s().telegramToken}>
+          <Field
+            label="Telegram chat ID"
+            hint="Add the bot to your group/channel, send a message, then read the chat id from api.telegram.org/bot<token>/getUpdates."
+          >
+            <Input
+              placeholder="-1001234567890"
+              value={s().telegramChatId ?? ''}
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                void update({ telegramChatId: v || undefined });
+              }}
+            />
+          </Field>
+        </Show>
+
+        <label class="flex cursor-pointer items-center gap-2 select-none">
+          <input
+            type="checkbox"
+            checked={s().notifyOnCreate !== false}
+            onChange={(e) => void update({ notifyOnCreate: e.currentTarget.checked ? undefined : false })}
+            class="accent-accent rounded"
+          />
+          <span class="text-text text-[12px]">Announce new issues on create</span>
+        </label>
+        <span class="text-text-faint text-[10.5px] leading-snug">
+          ⚠️ Tokens are embedded in issue Agent-instructions so agents can post the
+          finished demo — everyone who can read the issue can read them. Use
+          single-channel-scoped bots.
+        </span>
       </Section>
 
       {/* ── 3. AI PROVIDERS ───────────────────────────────────────────────────── */}

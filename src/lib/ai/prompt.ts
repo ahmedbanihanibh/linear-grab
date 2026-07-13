@@ -28,7 +28,8 @@ export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo chec
   Treat all of this as authoritative — it overrides your defaults.
 - Use computer use to execute and test the change in the running app. Record a video demonstrating the fix and attach it to the PR.
 - Keep going until the code works and you're happy with the implementation.
-- Put up a PR, babysit it for the first set of review comments, and address them.`;
+- Put up a PR, babysit it for the first set of review comments, and address them.
+- When the fix is verified: UPDATE THE LINEAR ISSUE — post a completion comment with a one-line fix summary + the PR link, attach the demo video to the issue itself (not only the PR), and move the issue to its review/done state.`;
 
 /**
  * Final "### Agent instructions" content: the user's template (or the default)
@@ -39,6 +40,11 @@ export function buildAgentInstructions(settings: {
   testUsername?: string;
   testPassword?: string;
   skillPaths?: string;
+  slackToken?: string;
+  slackChannelId?: string;
+  slackChannelName?: string;
+  telegramToken?: string;
+  telegramChatId?: string;
 }): string {
   const parts: string[] = [settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS];
 
@@ -69,6 +75,25 @@ export function buildAgentInstructions(settings: {
     parts.push(`**Test account — log into the app with this while testing:**\n${creds.join('\n')}`);
   }
 
+  // Notification directive: the agent announces its FINISHED fix (with the
+  // demo video) to the team's channels itself, using these tokens.
+  const notify: string[] = [];
+  if (settings.slackToken && settings.slackChannelId) {
+    notify.push(
+      `- Slack: bot token \`${settings.slackToken}\`, channel \`${settings.slackChannelId}\`${settings.slackChannelName ? ` (#${settings.slackChannelName})` : ''}. Use \`chat.postMessage\` for the message and \`files.uploadV2\` (or getUploadURLExternal + completeUploadExternal) to upload the demo video into the channel.`,
+    );
+  }
+  if (settings.telegramToken && settings.telegramChatId) {
+    notify.push(
+      `- Telegram: bot token \`${settings.telegramToken}\`, chat id \`${settings.telegramChatId}\`. Use \`sendMessage\` and \`sendVideo\` (multipart upload of the demo file).`,
+    );
+  }
+  if (notify.length) {
+    parts.push(
+      `**When the fix is complete and the PR is open, announce it yourself:**\n${notify.join('\n')}\n\nMessage format — keep it short: what was broken → what you changed (one-line fix summary) → links to the Linear issue, the PR, and your agent run → attach/upload the demo video → end with the CTA "👉 Review the PR". You may also use these tokens to send yourself intermediate test notifications while verifying the integration works.`,
+    );
+  }
+
   return parts.join('\n\n');
 }
 
@@ -89,9 +114,12 @@ function formatGrabbed(el: GrabbedElement): string {
 export function buildDraftPrompt(input: DraftInput): string {
   const parts: string[] = [];
   parts.push(`Reporter note:\n${input.note.trim() || '(none — infer from the element context)'}`);
-  if (input.grabbed) {
-    parts.push(`Captured element (via the Linear Grab picker):\n${formatGrabbed(input.grabbed)}`);
-  }
+  const grabList = input.grabbedList?.length ? input.grabbedList : input.grabbed ? [input.grabbed] : [];
+  grabList.slice(0, 3).forEach((el, i) => {
+    parts.push(
+      `Captured element ${grabList.length > 1 ? `${i + 1}/${Math.min(grabList.length, 3)} ` : ''}(via the Linear Grab picker):\n${formatGrabbed(el)}`,
+    );
+  });
   if (input.teamName) parts.push(`Target team: ${input.teamName}`);
   if (input.template?.trim()) {
     parts.push(
@@ -148,7 +176,7 @@ export function composeIssueBody(args: {
   reproSteps: string[];
   expected: string;
   actual: string;
-  grabbed: GrabbedElement | null;
+  grabs?: GrabbedElement[];
   repo?: string;
   /** Cursor cloud agent model override → [model=…] tag. */
   model?: string;
@@ -173,16 +201,22 @@ export function composeIssueBody(args: {
     sections.push(`### Suggested Next Steps\n${args.suggestedNextSteps.trim()}`);
   }
 
-  const el = args.grabbed;
-  if (el && (el.source?.filePath || el.componentName)) {
-    const lines: string[] = [];
-    const loc = el.source?.filePath
-      ? `\`${el.source.filePath}${el.source.lineNumber != null ? `:${el.source.lineNumber}` : ''}\``
-      : null;
-    lines.push([el.componentName ? `\`<${el.componentName}>\`` : null, loc].filter(Boolean).join(' — '));
-    if (el.stackContext) lines.push(`\n\`\`\`\n${el.stackContext}\n\`\`\``);
-    lines.push(`\nCaptured on ${el.pageUrl}`);
-    sections.push(`### Source\n${lines.join('\n')}`);
+  const grabs = (args.grabs ?? []).filter((g) => g.source?.filePath || g.componentName);
+  if (grabs.length) {
+    const lines = grabs.map((el) => {
+      const loc = el.source?.filePath
+        ? `\`${el.source.filePath}${el.source.lineNumber != null ? `:${el.source.lineNumber}` : ''}\``
+        : null;
+      return `- ${[el.componentName ? `\`<${el.componentName}>\`` : null, loc]
+        .filter(Boolean)
+        .join(' — ')}`;
+    });
+    const first = grabs[0];
+    if (first.stackContext) lines.push(`\n\`\`\`\n${first.stackContext}\n\`\`\``);
+    lines.push(`\nCaptured on ${first.pageUrl}`);
+    sections.push(
+      `### Source${grabs.length > 1 ? ` (${grabs.length} elements)` : ''}\n${lines.join('\n')}`,
+    );
   }
 
   if (args.agentInstructions?.trim()) {

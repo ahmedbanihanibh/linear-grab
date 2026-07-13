@@ -96,7 +96,7 @@ function IssueListScreen(props: { onSelect: (id: string) => void }) {
             </span>
           </Show>
           <Button
-            class="min-w-[32px]"
+            class="size-7 px-0"
             loading={query.isFetching}
             onClick={() => void query.refetch()}
             title="Refresh"
@@ -195,6 +195,16 @@ function IssueRow(props: { issue: LinearIssueSummary; onSelect: (id: string) => 
         <Badge>{props.issue.state.name}</Badge>
         <Show when={props.issue.delegate}>
           <Badge class="text-accent">⟠ {props.issue.delegate!.displayName}</Badge>
+        </Show>
+        {/* Agent finished (PR linked) but the issue is still open — your turn. */}
+        <Show
+          when={
+            props.issue.state.type === 'started' &&
+            props.issue.delegate &&
+            props.issue.attachments?.some((a) => /github\.com\/[^/]+\/[^/]+\/pull\/\d+/i.test(a.url))
+          }
+        >
+          <Badge color="var(--color-warn)">needs review</Badge>
         </Show>
         <span class="ml-auto tabular-nums text-[10.5px] text-text-faint">
           {timeAgo(props.issue.updatedAt)}

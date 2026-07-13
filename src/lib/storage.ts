@@ -62,6 +62,46 @@ export async function setLastGrab(elements: GrabbedElement[]): Promise<void> {
   }
 }
 
+/**
+ * Multi-element capture: MERGE new grabs into the existing list instead of
+ * replacing it. Same grabbedAt updates in place (screenshot/source passes);
+ * same source file:line replaces the older pick; capped at 8 elements.
+ */
+export async function mergeGrabs(els: GrabbedElement[]): Promise<void> {
+  const current = (await getLastGrab()) ?? [];
+  const merged = [...current];
+  for (const el of els) {
+    const byId = merged.findIndex((m) => m.grabbedAt === el.grabbedAt);
+    if (byId >= 0) {
+      merged[byId] = {
+        ...merged[byId],
+        ...el,
+        screenshotDataUrl: el.screenshotDataUrl ?? merged[byId].screenshotDataUrl,
+        source: el.source ?? merged[byId].source,
+      };
+      continue;
+    }
+    if (el.source?.filePath) {
+      const bySource = merged.findIndex(
+        (m) =>
+          m.source?.filePath === el.source!.filePath &&
+          m.source?.lineNumber === el.source!.lineNumber,
+      );
+      if (bySource >= 0) {
+        merged[bySource] = { ...merged[bySource], ...el };
+        continue;
+      }
+    }
+    merged.push(el);
+  }
+  await setLastGrab(merged.slice(-8));
+}
+
+export async function removeGrab(grabbedAt: number): Promise<void> {
+  const current = (await getLastGrab()) ?? [];
+  await setLastGrab(current.filter((g) => g.grabbedAt !== grabbedAt));
+}
+
 export async function clearLastGrab(): Promise<void> {
   if (isExtensionContext) {
     await chrome.storage.session.remove(LAST_GRAB_KEY);
