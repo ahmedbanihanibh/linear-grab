@@ -5,8 +5,12 @@ import {
   extractGenome,
   genomeToSpec,
   pickElementForExtraction,
+  stopGenomeCapture,
+  subscribeGenomeCapture,
   type Genome,
+  type GenomeCaptureSnapshot,
 } from '@/lib/genome';
+import { onCleanup } from 'solid-js';
 import { PICKER_ACTIVATED_EVENT, PICKER_FINISHED_EVENT } from '@/lib/picker';
 import { openPanelTo } from '../nav';
 
@@ -44,6 +48,8 @@ export default function DesignView() {
   const [countdown, setCountdown] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [copiedId, setCopiedId] = createSignal<number | null>(null);
+  const [cap, setCap] = createSignal<GenomeCaptureSnapshot>({ active: false, msLeft: 0, total: 0, byTrigger: {} });
+  onCleanup(subscribeGenomeCapture(setCap));
 
   const update = (list: SavedGenome[]) => {
     setSaved(list);
@@ -244,19 +250,39 @@ export default function DesignView() {
                           </Show>
                         </div>
                         <div class="flex items-center gap-1">
-                          <Button
-                            class="size-7 px-0"
-                            variant="ghost"
-                            loading={busy() === item.id}
-                            title="Capture states — records hover/focus/open styles for 8s while you interact; the pill shows the timer and Stop"
-                            aria-label="Capture interaction states"
-                            onClick={() => void captureStates(item)}
+                          <Show
+                            when={busy() === item.id && cap().active}
+                            fallback={
+                              <Button
+                                class="size-7 px-0"
+                                variant="ghost"
+                                loading={busy() === item.id}
+                                title="Capture states — records hover/focus/open styles for 8s while you interact; the pill shows the timer and Stop"
+                                aria-label="Capture interaction states"
+                                onClick={() => void captureStates(item)}
+                              >
+                                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                                  <circle cx="8" cy="8" r="6" />
+                                  <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+                                </svg>
+                              </Button>
+                            }
                           >
-                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
-                              <circle cx="8" cy="8" r="6" />
-                              <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
-                            </svg>
-                          </Button>
+                            <Button
+                              class="text-danger size-7 px-0"
+                              variant="ghost"
+                              title={`Stop recording — ${Math.ceil(cap().msLeft / 1000)}s left · ${cap().total} captured`}
+                              aria-label="Stop recording states"
+                              onClick={() => stopGenomeCapture()}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+                                <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="currentColor" />
+                              </svg>
+                            </Button>
+                            <span class="text-warn text-[10.5px] font-medium tabular-nums">
+                              {Math.ceil(cap().msLeft / 1000)}s · {cap().total} states
+                            </span>
+                          </Show>
                           <Button
                             class="size-7 px-0"
                             variant="ghost"
