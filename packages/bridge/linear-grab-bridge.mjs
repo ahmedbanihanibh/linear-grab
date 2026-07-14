@@ -16,7 +16,7 @@ import { createServer } from 'node:http';
 import { spawn, execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.22.0';
+const VERSION = '0.23.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -628,6 +628,106 @@ createServer(async (req, res) => {
         }),
       );
       return json(res, 200, { statuses, previews });
+    }
+    // ---- react-scan telemetry -------------------------------------------
+    // Browser pushes render/interaction events; they land in an append-only
+    // NDJSON file agents read directly (.lineargrab/scan.ndjson at the repo).
+    if (req.method === 'POST' && url.pathname === '/scan/events') {
+      const body = await readBody(req);
+      const events = Array.isArray(body.events) ? body.events : [body];
+      const dir = join(DIR, '.lineargrab');
+      try {
+        mkdirSync(dir, { recursive: true });
+        // Self-ignoring: telemetry must never pollute commits.
+        writeFileSync(join(dir, '.gitignore'), '*\n', { flag: 'wx' });
+      } catch {
+        /* exists */
+      }
+      const file = join(dir, 'scan.ndjson');
+      const lines =
+        events
+          .slice(0, 200)
+          .map((e) => JSON.stringify({ at: Date.now(), ...e }))
+          .join('\n') + '\n';
+      try {
+        appendFileSync(file, lines);
+        // Rotation: cap ~2MB by keeping the newest half.
+        const size = statSync(file).size;
+        if (size > 2_000_000) {
+          const keep = readFileSync(file, 'utf8');
+          writeFileSync(file, keep.slice(Math.floor(keep.length / 2)).replace(/^[^\n]*\n/, ''));
+        }
+      } catch {
+        /* disk issues — telemetry must never error the page */
+      }
+      return json(res, 200, { ok: true });
+    }
+    // Aggregated "what's slow right now" — a convenience view over the file.
+    if (req.method === 'GET' && url.pathname === '/scan/report') {
+      const windowMs = Number(url.searchParams.get('window') ?? 120_000);
+      let raw = '';
+      try {
+        raw = readFileSync(join(DIR, '.lineargrab', 'scan.ndjson'), 'utf8');
+      } catch {
+        return json(res, 200, { report: 'No scan telemetry yet — is react-scan running with the bridge enabled?', components: [] });
+      }
+      const cutoff = Date.now() - windowMs;
+      const byComponent = new Map();
+      const interactions = [];
+      for (const line of raw.split('\n')) {
+        if (!line) continue;
+        let e;
+        try {
+          e = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if ((e.at ?? 0) < cutoff) continue;
+        if (e.kind === 'interaction') interactions.push(e);
+        for (const c of e.components ?? []) {
+          const cur = byComponent.get(c.name) ?? {
+            name: c.name,
+            renders: 0,
+            selfTime: 0,
+            source: c.source ?? null,
+            unnecessary: 0,
+            changes: {},
+          };
+          cur.renders += c.renders ?? 1;
+          cur.selfTime += c.selfTime ?? 0;
+          if (c.source) cur.source = c.source;
+          if (c.unnecessary) cur.unnecessary += c.renders ?? 1;
+          for (const ch of c.changes ?? []) cur.changes[ch] = (cur.changes[ch] ?? 0) + 1;
+          byComponent.set(c.name, cur);
+        }
+      }
+      const components = [...byComponent.values()].sort((a, b) => b.selfTime - a.selfTime).slice(0, 25);
+      const md = [
+        `# react-scan report (last ${Math.round(windowMs / 1000)}s)`,
+        '',
+        ...components.map(
+          (c) =>
+            `- **${c.name}** — ${c.renders} renders · ${c.selfTime.toFixed(1)}ms self` +
+            (c.unnecessary ? ` · ${c.unnecessary} unnecessary` : '') +
+            (c.source ? ` · \`${c.source}\`` : '') +
+            (Object.keys(c.changes).length
+              ? ` · causes: ${Object.entries(c.changes)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 3)
+                  .map(([k, v]) => `${k}×${v}`)
+                  .join(', ')}`
+              : ''),
+        ),
+        '',
+        ...interactions
+          .slice(-10)
+          .map(
+            (i) =>
+              `- interaction ${i.type ?? '?'} on ${i.target ?? '?'} — ${Math.round(i.duration ?? 0)}ms` +
+              (i.slow ? ' ⚠ SLOW' : ''),
+          ),
+      ].join('\n');
+      return json(res, 200, { report: md, components, interactions: interactions.slice(-20) });
     }
     // Reset the staging branch: delete + recreate from the default branch.
     if (req.method === 'POST' && url.pathname === '/branch/reset') {

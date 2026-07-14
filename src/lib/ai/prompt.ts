@@ -26,6 +26,7 @@ export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo chec
   2. Skim \`.claude/memory/MEMORY.md\` (the index) to learn what project memory exists; load the specific \`.claude/memory/*.md\` files the map names for the surface you're touching.
   3. Load the matching \`.claude/skills/<name>/SKILL.md\` files before designing, building UI, or animating (if skills are symlinked, follow them into \`.agents/skills/\`).
   Treat all of this as authoritative — it overrides your defaults.
+- Live render telemetry (react-scan → linear-grab bridge): if \`.lineargrab/scan.ndjson\` exists in the repo, it holds the user's REAL interaction slowdowns — component render counts, self-times, change causes (\`prop:x\`/\`state:i\`/\`context:y\`), and interaction latencies, newest last. \`curl -s http://127.0.0.1:4577/scan/report\` returns an aggregated view. For any re-render/performance issue: read it BEFORE fixing (the evidence) and AFTER (the proof), and cite before→after numbers in your closeout.
 - Keep going until the code works and you're happy with the implementation.
 - MANDATORY COMPLETION GATE — the task is NOT complete (and you may not call it complete) until every step below is done, in order. Skipping any step silently is a FAILED task:
   1. RUN the app and TEST your change hands-on (computer use / a real browser against the running app). Code reading alone does not count as verification.
