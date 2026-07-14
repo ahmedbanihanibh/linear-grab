@@ -380,19 +380,36 @@ export default function DesignView() {
             }}
           </For>
         </div>
-        <div class="flex items-center justify-end gap-1.5 px-1">
+        <div class="flex items-center justify-end gap-1 px-1">
           <Button
-            class="h-6 px-2 text-[11px]"
+            class="size-7 px-0"
             variant="ghost"
-            title="Copy every genome as one markdown document"
+            title={copiedAll() ? 'Copied!' : 'Copy all genomes as one markdown document'}
+            aria-label="Copy all genomes"
             onClick={() => void copyAllSpecs()}
           >
-            <span class="inline-block min-w-[8ch] text-center">
-              {copiedAll() ? 'Copied ✓' : 'Copy all'}
-            </span>
+            <Show
+              when={copiedAll()}
+              fallback={
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                  <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+                  <path d="M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" />
+                </svg>
+              }
+            >
+              <span class="text-success text-[12px] leading-none">✓</span>
+            </Show>
           </Button>
-          <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={clearAllGenomes}>
-            Clear all
+          <Button
+            class="text-danger size-7 px-0"
+            variant="ghost"
+            title="Delete all saved genomes"
+            aria-label="Delete all genomes"
+            onClick={clearAllGenomes}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
           </Button>
         </div>
       </Show>
@@ -461,24 +478,55 @@ export default function DesignView() {
               )}
             </For>
           </div>
-          <div class="flex items-center gap-1.5 px-1">
+          <div class="flex items-center gap-1 px-1">
             <Button
-              class="h-6 px-2 text-[11px]"
+              class="size-7 px-0"
               variant="primary"
-              title="Report + fix rules, ready to paste into a Claude Code session"
+              title={copiedPrompt() ? 'Copied!' : 'Copy AI prompt — report + fix rules, ready to paste into a Claude Code session'}
+              aria-label="Copy AI fix prompt"
               onClick={() => void copyPrompt()}
             >
-              <span class="inline-block min-w-[11ch] text-center">
-                {copiedPrompt() ? 'Copied ✓' : 'Copy AI prompt'}
-              </span>
+              <Show
+                when={copiedPrompt()}
+                fallback={
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                    <path d="M8 1.5 9.6 6l4.4 1.6L9.6 9.2 8 13.7 6.4 9.2 2 7.6 6.4 6Z" />
+                    <path d="M13 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z" />
+                  </svg>
+                }
+              >
+                <span class="text-[12px] leading-none">✓</span>
+              </Show>
             </Button>
-            <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={() => void copyReport()}>
-              <span class="inline-block min-w-[10ch] text-center">
-                {copiedReport() ? 'Copied ✓' : 'Copy report'}
-              </span>
+            <Button
+              class="size-7 px-0"
+              variant="ghost"
+              title={copiedReport() ? 'Copied!' : 'Copy report — plain markdown findings'}
+              aria-label="Copy report"
+              onClick={() => void copyReport()}
+            >
+              <Show
+                when={copiedReport()}
+                fallback={
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                    <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+                    <path d="M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" />
+                  </svg>
+                }
+              >
+                <span class="text-success text-[12px] leading-none">✓</span>
+              </Show>
             </Button>
-            <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={clearCssSlowdowns}>
-              Clear all
+            <Button
+              class="text-danger ml-auto size-7 px-0"
+              variant="ghost"
+              title="Clear all findings (live + audit)"
+              aria-label="Clear all findings"
+              onClick={clearCssSlowdowns}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
             </Button>
           </div>
         </Show>
