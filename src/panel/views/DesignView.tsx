@@ -448,6 +448,14 @@ export default function DesignView() {
                     {f.properties.join(', ')}
                     <Show when={f.sinceInputMs != null}> — fired {f.sinceInputMs}ms after input</Show>
                   </span>
+                  <Show when={f.jankProps?.length}>
+                    <span class="text-danger text-[10px] leading-snug">
+                      ⚠ layout/paint transition: {f.jankProps!.join(', ')}
+                    </span>
+                  </Show>
+                  <Show when={f.easing}>
+                    <span class="text-danger text-[10px] leading-snug">⚠ ease-in easing: {f.easing}</span>
+                  </Show>
                   <span class="text-text-faint text-[10px] leading-snug">{f.suggestion}</span>
                 </div>
               )}

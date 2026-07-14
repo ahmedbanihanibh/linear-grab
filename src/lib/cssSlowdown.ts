@@ -39,6 +39,10 @@ export interface CssSlowdownFinding {
   count: number;
   /** The class(es) most likely responsible, for a targeted fix. */
   classHint?: string;
+  /** Timing function, when it violates the easing rules (ease-in on UI). */
+  easing?: string;
+  /** Transitioned properties that reflow/repaint every frame. */
+  jankProps?: string[];
   suggestion: string;
   at: number;
 }
@@ -79,13 +83,54 @@ function classHintFor(el: Element): string | undefined {
   return hits.length ? hits.join(' ') : undefined;
 }
 
-function suggestionFor(properties: string[], durationMs: number, delayMs: number, classHint?: string): string {
+/** Properties that reflow (layout) or repaint every animated frame —
+    the animations skill's "animate transform and opacity ONLY" rule. */
+const LAYOUT_PAINT_PROPS = new Set([
+  'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+  'top', 'left', 'right', 'bottom', 'inset',
+  'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+  'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+  'font-size', 'line-height', 'letter-spacing',
+  'box-shadow', 'filter', 'background-position',
+  'grid-template-columns', 'grid-template-rows', 'flex-basis', 'gap',
+]);
+function jankPropsOf(properties: string[]): string[] {
+  if (properties.includes('all')) return ['all (includes layout/paint props)'];
+  return properties.filter((p) => LAYOUT_PAINT_PROPS.has(p));
+}
+
+/** "Never use ease-in for UI" (Emil) — it delays the start exactly when the
+    user is watching. Flags ease-in and ease-in-shaped cubic-beziers. */
+function easingViolation(timing: string): string | null {
+  const first = timing.split(',')[0].trim();
+  if (first === 'ease-in') return 'ease-in';
+  const m = first.match(/cubic-bezier\(\s*([\d.]+)\s*,\s*(-?[\d.]+)/);
+  if (m && parseFloat(m[1]) >= 0.4 && parseFloat(m[2]) <= 0.1) return first;
+  return null;
+}
+
+function suggestionFor(
+  properties: string[],
+  durationMs: number,
+  delayMs: number,
+  classHint?: string,
+  easing?: string | null,
+  jank?: string[],
+): string {
   const bits: string[] = [];
   if (delayMs > 0) bits.push(`remove the ${Math.round(delayMs)}ms transition-delay`);
   if (classHint?.includes('transition-all') || properties.includes('all')) {
     bits.push("scope 'transition-all' to the intended properties (e.g. transition-colors)");
   }
-  if (durationMs > 100) bits.push(`shorten ${Math.round(durationMs)}ms → ≤100ms`);
+  if (jank?.length) {
+    bits.push(
+      `JANK: transitions LAYOUT/PAINT props (${jank.join(', ')}) — reflow/repaint every frame; animate transform/opacity instead (box-shadow → animate a pseudo-element's opacity)`,
+    );
+  }
+  if (easing) bits.push(`easing '${easing}' starts slow — never ease-in on UI, use ease-out`);
+  if (durationMs > 500) bits.push(`${Math.round(durationMs)}ms is over the 500ms HARD CAP for UI feedback`);
+  else if (durationMs > 300) bits.push(`${Math.round(durationMs)}ms is over the 300ms UI cap`);
+  else if (durationMs > 100) bits.push(`shorten ${Math.round(durationMs)}ms → ≤100ms`);
   bits.push("make PRESS feedback instant: 'active:transition-none' (and data-[state=…]:transition-none for toggles) — animate only hover in/out");
   return bits.join('; ');
 }
@@ -237,6 +282,8 @@ export function startCssSlowdownWatch(): void {
           reported.set(key, now);
           const classHint = classHintFor(el);
           const propList = [...entry.props];
+          const easing = el.isConnected ? easingViolation(getComputedStyle(el).transitionTimingFunction) : null;
+          const jank = jankPropsOf(propList);
           void attribute(el).then(({ component, source }) => {
             addFinding({
               mode: 'live',
@@ -250,7 +297,9 @@ export function startCssSlowdownWatch(): void {
               sinceInputMs: Math.round(entry.since),
               count: 1,
               classHint,
-              suggestion: suggestionFor(propList, entry.duration, entry.delay, classHint),
+              easing: easing ?? undefined,
+              jankProps: jank.length ? jank : undefined,
+              suggestion: suggestionFor(propList, entry.duration, entry.delay, classHint, easing, jank),
               at: now,
             });
           });
@@ -292,6 +341,8 @@ export async function auditTransitions(): Promise<CssSlowdownFinding[]> {
       existing.finding.count += 1;
       continue;
     }
+    const easing = easingViolation(cs.transitionTimingFunction);
+    const jank = jankPropsOf(props);
     groups.set(key, {
       example: el,
       finding: {
@@ -305,7 +356,9 @@ export async function auditTransitions(): Promise<CssSlowdownFinding[]> {
         delayMs: Math.round(Math.max(...delays, 0)),
         count: 1,
         classHint,
-        suggestion: suggestionFor(props, Math.max(...durations, 0), Math.max(...delays, 0), classHint),
+        easing: easing ?? undefined,
+        jankProps: jank.length ? jank : undefined,
+        suggestion: suggestionFor(props, Math.max(...durations, 0), Math.max(...delays, 0), classHint, easing, jank),
         at: Date.now(),
       },
     });
@@ -344,6 +397,11 @@ export function cssSlowdownPrompt(list: CssSlowdownFinding[]): string {
     '   (duration-75 for small controls like tabs and icon buttons).',
     "3. Replace every `transition-all` with the scoped variant (transition-colors /",
     '   transition-transform / transition-opacity — per what actually changes).',
+    '3b. Findings marked ⚠ layout/paint: NEVER transition width/height/top/left/',
+    '   margin/padding/box-shadow — they reflow or repaint every frame. Use',
+    "   transform: translate/scale, and animate a pseudo-element's opacity for shadows.",
+    "3c. Findings marked ⚠ easing: never ease-in on UI — replace with ease-out",
+    '   (house curve: cubic-bezier(.2,0,.1,1)).',
     '4. Where a finding\'s source looks like a generic fallback (one file:line repeated',
     '   for many components), locate the code by the `classes:` line instead.',
     '5. Do NOT touch entry/exit animations of popovers/menus or icon micro-motion',
@@ -372,6 +430,8 @@ export function cssSlowdownReport(list: CssSlowdownFinding[]): string {
     if (f.source) lines.push(`- source: ${f.source}`);
     lines.push(`- transitions: ${f.properties.join(', ')}`);
     if (f.classHint) lines.push(`- classes: \`${f.classHint}\``);
+    if (f.jankProps?.length) lines.push(`- ⚠ layout/paint transition (reflows every frame): ${f.jankProps.join(', ')}`);
+    if (f.easing) lines.push(`- ⚠ easing: ${f.easing} (ease-in starts slow — use ease-out)`);
     if (f.sinceInputMs != null) lines.push(`- fired ${f.sinceInputMs}ms after user input (live capture)`);
     lines.push(`- fix: ${f.suggestion}`, '');
   }
