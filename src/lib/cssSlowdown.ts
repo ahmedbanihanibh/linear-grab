@@ -218,6 +218,33 @@ export function clearCssSlowdowns(): void {
 // Engine 1 — live watcher
 // ---------------------------------------------------------------------------
 
+// Live-capture switch — persisted; default ON. Pausing keeps the listeners
+// installed but drops events, so toggling is instant and free.
+let watchEnabled = true;
+try {
+  watchEnabled = localStorage.getItem('linear-grab:css-watch') !== '0';
+} catch {
+  /* storage blocked */
+}
+const watchSubs = new Set<(on: boolean) => void>();
+export function cssWatchEnabled(): boolean {
+  return watchEnabled;
+}
+export function setCssWatchEnabled(on: boolean): void {
+  watchEnabled = on;
+  try {
+    localStorage.setItem('linear-grab:css-watch', on ? '1' : '0');
+  } catch {
+    /* storage blocked */
+  }
+  for (const cb of watchSubs) cb(on);
+}
+export function subscribeCssWatchEnabled(cb: (on: boolean) => void): () => void {
+  watchSubs.add(cb);
+  cb(watchEnabled);
+  return () => void watchSubs.delete(cb);
+}
+
 let watching = false;
 export function startCssSlowdownWatch(): void {
   if (watching || typeof window === 'undefined') return;
@@ -244,6 +271,7 @@ export function startCssSlowdownWatch(): void {
   window.addEventListener(
     'transitionrun',
     (e: TransitionEvent) => {
+      if (!watchEnabled) return; // paused from the Design tab
       const since = performance.now() - lastInputAt;
       if (since > INPUT_WINDOW_MS) return; // ambient animation, not input feedback
       const el = e.target;

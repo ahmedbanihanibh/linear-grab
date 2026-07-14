@@ -18,7 +18,10 @@ import {
   clearCssSlowdowns,
   cssSlowdownPrompt,
   cssSlowdownReport,
+  cssWatchEnabled,
+  setCssWatchEnabled,
   subscribeCssSlowdowns,
+  subscribeCssWatchEnabled,
   type CssSlowdownFinding,
 } from '@/lib/cssSlowdown';
 
@@ -60,6 +63,8 @@ export default function DesignView() {
   onCleanup(subscribeGenomeCapture(setCap));
   const [slowdowns, setSlowdowns] = createSignal<CssSlowdownFinding[]>([]);
   onCleanup(subscribeCssSlowdowns(setSlowdowns));
+  const [watchOn, setWatchOn] = createSignal(cssWatchEnabled());
+  onCleanup(subscribeCssWatchEnabled(setWatchOn));
   const [auditBusy, setAuditBusy] = createSignal(false);
   const [copiedReport, setCopiedReport] = createSignal(false);
   const runAudit = async () => {
@@ -425,14 +430,44 @@ export default function DesignView() {
               the app; Audit sweeps the whole page.
             </p>
           </div>
-          <Button
-            variant="ghost"
-            class="h-7 shrink-0 px-2.5 text-[11.5px]"
-            loading={auditBusy()}
-            onClick={() => void runAudit()}
-          >
-            <span class="inline-block min-w-[5ch] text-center">Audit</span>
-          </Button>
+          <div class="flex shrink-0 items-center gap-1">
+            <Button
+              class="size-7 px-0"
+              variant="ghost"
+              title={
+                watchOn()
+                  ? 'Live capture ON — recording transitions fired by your input. Click to pause.'
+                  : 'Live capture PAUSED — click to resume recording input-triggered transitions.'
+              }
+              aria-label={watchOn() ? 'Pause live capture' : 'Start live capture'}
+              onClick={() => setCssWatchEnabled(!watchOn())}
+            >
+              <Show
+                when={watchOn()}
+                fallback={
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                    <path d="M4.5 2.5v11l9-5.5z" />
+                  </svg>
+                }
+              >
+                <span class="relative inline-flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                    <rect x="3.5" y="3" width="3.2" height="10" rx="1" />
+                    <rect x="9.3" y="3" width="3.2" height="10" rx="1" />
+                  </svg>
+                  <span class="bg-success absolute -top-0.5 -right-0.5 size-1.5 animate-pulse rounded-full" aria-hidden />
+                </span>
+              </Show>
+            </Button>
+            <Button
+              variant="ghost"
+              class="h-7 px-2.5 text-[11.5px]"
+              loading={auditBusy()}
+              onClick={() => void runAudit()}
+            >
+              <span class="inline-block min-w-[5ch] text-center">Audit</span>
+            </Button>
+          </div>
         </div>
         <Show
           when={slowdowns().length > 0}
