@@ -303,13 +303,13 @@ export async function captureInteractionStates(
     const el = e.target as Element;
     if (el instanceof Element && base.has(el)) {
       // Styles settle after the event dispatches — read on the next frame.
-      requestAnimationFrame(() => record(el, 'hover'));
+      setTimeout(() => record(el, 'hover'), 50);
     }
   };
   const onFocus = (e: Event) => {
     const el = e.target as Element;
     if (el instanceof Element && base.has(el)) {
-      requestAnimationFrame(() => record(el, 'focus'));
+      setTimeout(() => record(el, 'focus'), 50);
     }
   };
   root.addEventListener('pointerover', onOver, true);
@@ -321,7 +321,7 @@ export async function captureInteractionStates(
       const el = m.target;
       const attr = m.attributeName ?? '';
       const value = el.getAttribute(attr) ?? '';
-      requestAnimationFrame(() => record(el, `attr:${attr}=${value || 'true'}`));
+      setTimeout(() => record(el, `attr:${attr}=${value || 'true'}`), 50);
     }
   });
   attrObserver.observe(root, {
@@ -338,7 +338,7 @@ export async function captureInteractionStates(
       for (const added of Array.from(m.addedNodes)) {
         if (!(added instanceof Element) || root.contains(added)) continue;
         if (added.id === 'linear-grab-root' || added.closest?.('#linear-grab-root')) continue;
-        requestAnimationFrame(() => {
+        setTimeout(() => {
           if (!added.isConnected || !isVisible(added)) return;
           const { styles } = stylesFor(added, tokens);
           if (Object.keys(styles).length === 0) return;
@@ -349,7 +349,7 @@ export async function captureInteractionStates(
           const changed: GenomeState['changed'] = {};
           for (const [k, v] of Object.entries(styles)) changed[k] = { from: '(absent)', to: v };
           states.push({ trigger: 'appeared (portal/open)', label, changed });
-        });
+        }, 50);
       }
     }
   });

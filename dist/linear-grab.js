@@ -45812,17 +45812,17 @@ async function t2(e, t, n) {
 		}));
 	}, d = (e) => {
 		let t = e.target;
-		t instanceof Element && s.has(t) && requestAnimationFrame(() => u(t, "hover"));
+		t instanceof Element && s.has(t) && setTimeout(() => u(t, "hover"), 50);
 	}, f = (e) => {
 		let t = e.target;
-		t instanceof Element && s.has(t) && requestAnimationFrame(() => u(t, "focus"));
+		t instanceof Element && s.has(t) && setTimeout(() => u(t, "focus"), 50);
 	};
 	e.addEventListener("pointerover", d, !0), e.addEventListener("focusin", f, !0);
 	let p = new MutationObserver((e) => {
 		for (let t of e) {
 			if (t.type !== "attributes" || !(t.target instanceof Element)) continue;
 			let e = t.target, n = t.attributeName ?? "", r = e.getAttribute(n) ?? "";
-			requestAnimationFrame(() => u(e, `attr:${n}=${r || "true"}`));
+			setTimeout(() => u(e, `attr:${n}=${r || "true"}`), 50);
 		}
 	});
 	p.observe(e, {
@@ -45838,7 +45838,7 @@ async function t2(e, t, n) {
 		]
 	});
 	let m = new MutationObserver((t) => {
-		for (let n of t) for (let t of Array.from(n.addedNodes)) !(t instanceof Element) || e.contains(t) || t.id === "linear-grab-root" || t.closest?.("#linear-grab-root") || requestAnimationFrame(() => {
+		for (let n of t) for (let t of Array.from(n.addedNodes)) !(t instanceof Element) || e.contains(t) || t.id === "linear-grab-root" || t.closest?.("#linear-grab-root") || setTimeout(() => {
 			if (!t.isConnected || !J0(t)) return;
 			let { styles: e } = Q0(t, r);
 			if (Object.keys(e).length === 0) return;
@@ -45855,7 +45855,7 @@ async function t2(e, t, n) {
 				label: n,
 				changed: c
 			});
-		});
+		}, 50);
 	});
 	m.observe(document.body, {
 		childList: !0,
