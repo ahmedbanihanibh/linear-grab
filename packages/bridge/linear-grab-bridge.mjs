@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.24.0';
+const VERSION = '0.24.1';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -742,14 +742,19 @@ createServer(async (req, res) => {
               : ''),
         ),
         '',
-        '## Recent interactions',
-        ...interactions
-          .slice(-10)
-          .map(
-            (i) =>
-              `- ${i.type ?? '?'} on ${i.target ?? '?'}${i.page ? ` (${i.page})` : ''} — ${Math.round(i.duration ?? 0)}ms` +
-              (i.slow ? ' ⚠ SLOW (>150ms INP)' : ''),
-          ),
+        '## Recent interactions (what the user did → what re-rendered because of it)',
+        ...interactions.slice(-10).flatMap((i) => [
+          `- ${i.type ?? '?'} on **${i.target ?? '?'}**${i.page ? ` (${i.page})` : ''} — ${Math.round(i.duration ?? 0)}ms` +
+            (i.slow ? ' ⚠ SLOW (>150ms INP)' : ''),
+          ...(i.components ?? [])
+            .slice(0, 4)
+            .map(
+              (c) =>
+                `    ↳ ${c.name} ×${c.renders} · ${(c.selfTime ?? 0).toFixed(1)}ms` +
+                (c.changes?.length ? ` · ${c.changes.join(', ')}` : '') +
+                (c.source ? ` · \`${c.source}\`` : ''),
+            ),
+        ]),
       ].join('\n');
       return json(res, 200, {
         report: md,
