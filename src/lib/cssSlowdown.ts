@@ -1,0 +1,321 @@
+/**
+ * CSS slowdown detection — the lag react-scan CANNOT see.
+ *
+ * react-scan measures React render time; a `transition-duration: 150ms` (or a
+ * transition-delay) plays AFTER React committed, so an interaction can be
+ * render-fast and still FEEL slow. Two engines:
+ *
+ *  1. Live watcher (always on, event-driven, ~zero cost): `transitionrun`
+ *     fires whenever a transition actually starts. If one starts within
+ *     ~200ms of a pointer/keyboard input, the user's feedback is being
+ *     ANIMATED — that is a CSS slowdown, recorded with component + file:line
+ *     (react-grab fiber source) and pushed to the bridge's scan log
+ *     (`.lineargrab/scan.ndjson`, kind "css-slowdown") for agents.
+ *
+ *  2. Audit sweep (on demand): walk visible interactive elements and flag
+ *     every transition ≥ the threshold before anyone even clicks — the
+ *     "find all 150ms buttons" pass.
+ */
+
+import { bridgeBase } from './bridge';
+
+export interface CssSlowdownFinding {
+  /** 'live' = caught after real input; 'audit' = static sweep. */
+  mode: 'live' | 'audit';
+  page: string;
+  /** tag#id.class selector of the element. */
+  element: string;
+  /** React component display name when resolvable. */
+  component?: string | null;
+  /** file:line of the component (react-grab fiber source). */
+  source?: string | null;
+  /** Properties being transitioned (live: the one that fired). */
+  properties: string[];
+  durationMs: number;
+  delayMs: number;
+  /** live only: ms between the input and the transition starting. */
+  sinceInputMs?: number;
+  /** How many identical elements share this finding (audit grouping). */
+  count: number;
+  /** The class(es) most likely responsible, for a targeted fix. */
+  classHint?: string;
+  suggestion: string;
+  at: number;
+}
+
+/** Anything at/over this is "not instant". User wants instant → 50ms. */
+export const SLOWDOWN_THRESHOLD_MS = 50;
+/** A transition starting this soon after input = input feedback animating. */
+const INPUT_WINDOW_MS = 200;
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+function parseMs(value: string): number[] {
+  return value.split(',').map((v) => {
+    const t = v.trim();
+    if (t.endsWith('ms')) return parseFloat(t) || 0;
+    if (t.endsWith('s')) return (parseFloat(t) || 0) * 1000;
+    return 0;
+  });
+}
+
+function elementSelector(el: Element): string {
+  const id = el.id ? `#${el.id}` : '';
+  const cls =
+    typeof el.className === 'string' && el.className
+      ? `.${el.className.split(/\s+/).filter(Boolean).slice(0, 2).join('.')}`
+      : '';
+  return `${el.tagName.toLowerCase()}${id}${cls}`;
+}
+
+/** The classes worth blaming — transition-* utilities and duration/delay. */
+function classHintFor(el: Element): string | undefined {
+  if (typeof el.className !== 'string') return undefined;
+  const hits = el.className
+    .split(/\s+/)
+    .filter((c) => /^(transition|duration-|delay-|ease-)/.test(c));
+  return hits.length ? hits.join(' ') : undefined;
+}
+
+function suggestionFor(properties: string[], durationMs: number, delayMs: number, classHint?: string): string {
+  const bits: string[] = [];
+  if (delayMs > 0) bits.push(`remove the ${Math.round(delayMs)}ms transition-delay`);
+  if (classHint?.includes('transition-all') || properties.includes('all')) {
+    bits.push("scope 'transition-all' to the intended properties (e.g. transition-colors)");
+  }
+  if (durationMs > 100) bits.push(`shorten ${Math.round(durationMs)}ms → ≤100ms`);
+  bits.push("make PRESS feedback instant: 'active:transition-none' (and data-[state=…]:transition-none for toggles) — animate only hover in/out");
+  return bits.join('; ');
+}
+
+type GrabApi = {
+  getDisplayName?: (el: Element) => string | null;
+  getSource?: (el: Element) => Promise<{ filePath?: string | null; lineNumber?: number | null } | null>;
+};
+async function grabApi(): Promise<GrabApi | null> {
+  try {
+    const rg = await import('react-grab');
+    return (rg.getGlobalApi() as GrabApi | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function attribute(el: Element): Promise<{ component: string | null; source: string | null }> {
+  const api = await grabApi();
+  let component: string | null = null;
+  let source: string | null = null;
+  try {
+    component = api?.getDisplayName?.(el) ?? null;
+  } catch {
+    /* fiber walk mid-render */
+  }
+  try {
+    const s = await api?.getSource?.(el);
+    if (s?.filePath) source = `${s.filePath}${s.lineNumber != null ? `:${s.lineNumber}` : ''}`;
+  } catch {
+    /* no debug source in prod builds */
+  }
+  return { component, source };
+}
+
+// ---------------------------------------------------------------------------
+// Bridge push — same log react-scan writes; agents already read it.
+// ---------------------------------------------------------------------------
+
+let queue: CssSlowdownFinding[] = [];
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+function pushToBridge(finding: CssSlowdownFinding): void {
+  queue.push(finding);
+  flushTimer ??= setTimeout(() => {
+    flushTimer = null;
+    const events = queue.slice(0, 50).map((f) => ({ kind: 'css-slowdown', ...f }));
+    queue = [];
+    void bridgeBase()
+      .then((base) =>
+        fetch(`${base}/scan/events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events }),
+          keepalive: true,
+        }),
+      )
+      .catch(() => {
+        /* bridge offline — panel list still has it */
+      });
+  }, 1500);
+}
+
+// ---------------------------------------------------------------------------
+// Findings store (panel subscribes; capped ring buffer)
+// ---------------------------------------------------------------------------
+
+let findings: CssSlowdownFinding[] = [];
+const subs = new Set<(f: CssSlowdownFinding[]) => void>();
+function addFinding(f: CssSlowdownFinding): void {
+  findings = [f, ...findings].slice(0, 100);
+  for (const cb of subs) cb(findings);
+  pushToBridge(f);
+}
+export function subscribeCssSlowdowns(cb: (f: CssSlowdownFinding[]) => void): () => void {
+  subs.add(cb);
+  cb(findings);
+  return () => void subs.delete(cb);
+}
+export function clearCssSlowdowns(): void {
+  findings = findings.filter((f) => f.mode !== 'audit');
+  for (const cb of subs) cb(findings);
+}
+
+// ---------------------------------------------------------------------------
+// Engine 1 — live watcher
+// ---------------------------------------------------------------------------
+
+let watching = false;
+export function startCssSlowdownWatch(): void {
+  if (watching || typeof window === 'undefined') return;
+  watching = true;
+
+  let lastInputAt = 0;
+  const markInput = () => {
+    lastInputAt = performance.now();
+  };
+  for (const t of ['pointerdown', 'pointerup', 'keydown'] as const) {
+    window.addEventListener(t, markInput, { capture: true, passive: true });
+  }
+
+  // element|property → last report time, so a hover storm doesn't spam.
+  const reported = new Map<string, number>();
+
+  window.addEventListener(
+    'transitionrun',
+    (e: TransitionEvent) => {
+      const since = performance.now() - lastInputAt;
+      if (since > INPUT_WINDOW_MS) return; // ambient animation, not input feedback
+      const el = e.target;
+      if (!(el instanceof Element) || el.closest('#linear-grab-root')) return;
+
+      const cs = getComputedStyle(el);
+      const props = cs.transitionProperty.split(',').map((p) => p.trim());
+      const durations = parseMs(cs.transitionDuration);
+      const delays = parseMs(cs.transitionDelay);
+      const idx = Math.max(0, props.indexOf(e.propertyName));
+      const duration = durations[idx % durations.length] ?? durations[0] ?? 0;
+      const delay = delays[idx % delays.length] ?? delays[0] ?? 0;
+      if (duration + delay < SLOWDOWN_THRESHOLD_MS) return;
+
+      const key = `${elementSelector(el)}|${e.propertyName}`;
+      const now = Date.now();
+      if (now - (reported.get(key) ?? 0) < 5000) return;
+      reported.set(key, now);
+
+      const classHint = classHintFor(el);
+      void attribute(el).then(({ component, source }) => {
+        addFinding({
+          mode: 'live',
+          page: location.pathname,
+          element: elementSelector(el),
+          component,
+          source,
+          properties: [e.propertyName],
+          durationMs: Math.round(duration),
+          delayMs: Math.round(delay),
+          sinceInputMs: Math.round(since),
+          count: 1,
+          classHint,
+          suggestion: suggestionFor([e.propertyName], duration, delay, classHint),
+          at: now,
+        });
+      });
+    },
+    { capture: true, passive: true },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Engine 2 — audit sweep
+// ---------------------------------------------------------------------------
+
+const INTERACTIVE = 'button, a, input, select, textarea, [role], [tabindex], [data-state], [aria-expanded]';
+
+export async function auditTransitions(): Promise<CssSlowdownFinding[]> {
+  const groups = new Map<string, { finding: CssSlowdownFinding; example: Element }>();
+  const els = Array.from(document.querySelectorAll(INTERACTIVE)).slice(0, 3000);
+
+  for (const el of els) {
+    if (el.closest('#linear-grab-root')) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 && r.height < 2) continue;
+    const cs = getComputedStyle(el);
+    if (cs.cursor !== 'pointer' && !el.matches('button, a, input, select, textarea')) continue;
+
+    const durations = parseMs(cs.transitionDuration);
+    const delays = parseMs(cs.transitionDelay);
+    const worst = Math.max(...durations, 0) + Math.max(...delays, 0);
+    if (worst < SLOWDOWN_THRESHOLD_MS) continue;
+    const props = cs.transitionProperty.split(',').map((p) => p.trim());
+
+    const classHint = classHintFor(el);
+    const key = `${el.tagName}|${classHint ?? props.join()}|${Math.round(worst)}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.finding.count += 1;
+      continue;
+    }
+    groups.set(key, {
+      example: el,
+      finding: {
+        mode: 'audit',
+        page: location.pathname,
+        element: elementSelector(el),
+        component: null,
+        source: null,
+        properties: props,
+        durationMs: Math.round(Math.max(...durations, 0)),
+        delayMs: Math.round(Math.max(...delays, 0)),
+        count: 1,
+        classHint,
+        suggestion: suggestionFor(props, Math.max(...durations, 0), Math.max(...delays, 0), classHint),
+        at: Date.now(),
+      },
+    });
+  }
+
+  // Attribute each group's example element (component + file:line).
+  const out: CssSlowdownFinding[] = [];
+  for (const { finding, example } of groups.values()) {
+    const { component, source } = await attribute(example);
+    finding.component = component;
+    finding.source = source;
+    out.push(finding);
+  }
+  out.sort((a, b) => b.durationMs + b.delayMs - (a.durationMs + a.delayMs) || b.count - a.count);
+
+  // Replace previous audit findings; keep live ones.
+  findings = [...out, ...findings.filter((f) => f.mode === 'live')].slice(0, 100);
+  for (const cb of subs) cb(findings);
+  for (const f of out) pushToBridge(f);
+  return out;
+}
+
+/** Markdown report — paste into an issue or a Claude Code session. */
+export function cssSlowdownReport(list: CssSlowdownFinding[]): string {
+  const lines = [
+    `# CSS slowdowns on ${location.host}${location.pathname}`,
+    `Threshold: ${SLOWDOWN_THRESHOLD_MS}ms (interaction feedback should be instant).`,
+    '',
+  ];
+  for (const f of list) {
+    lines.push(
+      `## ${f.component ?? f.element}${f.count > 1 ? ` ×${f.count}` : ''} — ${f.durationMs}ms${f.delayMs ? ` +${f.delayMs}ms delay` : ''}`,
+    );
+    if (f.source) lines.push(`- source: ${f.source}`);
+    lines.push(`- transitions: ${f.properties.join(', ')}`);
+    if (f.classHint) lines.push(`- classes: \`${f.classHint}\``);
+    if (f.sinceInputMs != null) lines.push(`- fired ${f.sinceInputMs}ms after user input (live capture)`);
+    lines.push(`- fix: ${f.suggestion}`, '');
+  }
+  return lines.join('\n');
+}

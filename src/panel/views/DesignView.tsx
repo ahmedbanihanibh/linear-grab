@@ -13,6 +13,13 @@ import {
 import { onCleanup } from 'solid-js';
 import { PICKER_ACTIVATED_EVENT, PICKER_FINISHED_EVENT } from '@/lib/picker';
 import { openPanelTo } from '../nav';
+import {
+  auditTransitions,
+  clearCssSlowdowns,
+  cssSlowdownReport,
+  subscribeCssSlowdowns,
+  type CssSlowdownFinding,
+} from '@/lib/cssSlowdown';
 
 interface SavedGenome {
   id: number;
@@ -50,6 +57,27 @@ export default function DesignView() {
   const [copiedId, setCopiedId] = createSignal<number | null>(null);
   const [cap, setCap] = createSignal<GenomeCaptureSnapshot>({ active: false, msLeft: 0, total: 0, byTrigger: {} });
   onCleanup(subscribeGenomeCapture(setCap));
+  const [slowdowns, setSlowdowns] = createSignal<CssSlowdownFinding[]>([]);
+  onCleanup(subscribeCssSlowdowns(setSlowdowns));
+  const [auditBusy, setAuditBusy] = createSignal(false);
+  const [copiedReport, setCopiedReport] = createSignal(false);
+  const runAudit = async () => {
+    setAuditBusy(true);
+    try {
+      await auditTransitions();
+    } finally {
+      setAuditBusy(false);
+    }
+  };
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(cssSlowdownReport(slowdowns()));
+      setCopiedReport(true);
+      setTimeout(() => setCopiedReport(false), 1600);
+    } catch {
+      setError('Clipboard was blocked — click Copy again.');
+    }
+  };
 
   const update = (list: SavedGenome[]) => {
     setSaved(list);
@@ -323,6 +351,75 @@ export default function DesignView() {
           </For>
         </div>
       </Show>
+
+      {/* ---- CSS slowdowns — the lag react-scan can't see ------------------ */}
+      <div class="border-border mt-1 flex flex-col gap-2 border-t pt-3">
+        <div class="flex items-center justify-between gap-2 px-1">
+          <div class="min-w-0">
+            <p class="text-text text-[12.5px] font-semibold">CSS slowdowns</p>
+            <p class="text-text-faint text-[10.5px] leading-snug">
+              Transitions/delays ≥50ms on interactive elements — feedback that
+              animates instead of being instant. Live hits appear as you use
+              the app; Audit sweeps the whole page.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            class="h-7 shrink-0 px-2.5 text-[11.5px]"
+            loading={auditBusy()}
+            onClick={() => void runAudit()}
+          >
+            <span class="inline-block min-w-[5ch] text-center">Audit</span>
+          </Button>
+        </div>
+        <Show
+          when={slowdowns().length > 0}
+          fallback={
+            <p class="text-text-faint px-1 text-[10.5px]">
+              Nothing caught yet — interact with the app, or run Audit.
+            </p>
+          }
+        >
+          <div class="flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-2">
+            <For each={slowdowns()}>
+              {(f) => (
+                <div class="bg-surface border-border flex flex-col gap-0.5 rounded-lg border p-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-warn shrink-0 text-[10px] font-semibold tracking-wide uppercase">
+                      {f.mode === 'live' ? 'live' : 'audit'}
+                    </span>
+                    <span class="text-accent min-w-0 truncate font-mono text-[11.5px]">
+                      {f.component ?? f.element}
+                      <Show when={f.count > 1}> ×{f.count}</Show>
+                    </span>
+                    <span class="text-text ml-auto shrink-0 text-[11px] font-medium tabular-nums">
+                      {f.durationMs}ms{f.delayMs ? ` +${f.delayMs}` : ''}
+                    </span>
+                  </div>
+                  <Show when={f.source}>
+                    <span class="text-text-dim font-mono text-[10px] break-all">{f.source}</span>
+                  </Show>
+                  <span class="text-text-dim text-[10px] leading-snug">
+                    {f.properties.join(', ')}
+                    <Show when={f.sinceInputMs != null}> — fired {f.sinceInputMs}ms after input</Show>
+                  </span>
+                  <span class="text-text-faint text-[10px] leading-snug">{f.suggestion}</span>
+                </div>
+              )}
+            </For>
+          </div>
+          <div class="flex items-center gap-1.5 px-1">
+            <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={() => void copyReport()}>
+              <span class="inline-block min-w-[10ch] text-center">
+                {copiedReport() ? 'Copied ✓' : 'Copy report'}
+              </span>
+            </Button>
+            <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={clearCssSlowdowns}>
+              Clear audit
+            </Button>
+          </div>
+        </Show>
+      </div>
     </div>
   );
 }
