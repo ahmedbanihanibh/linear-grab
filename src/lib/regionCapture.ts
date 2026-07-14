@@ -65,7 +65,18 @@ export function captureRegionInteractive(): Promise<GrabbedElement | null> {
       const r = currentRect(e);
       cleanup(); // remove BEFORE rasterizing so the overlay isn't captured
       if (r.w < 8 || r.h < 8) return resolve(null);
-      void captureRectShot(r).then((dataUrl) => {
+      // Hang-proof: a stuck sub-step (font harvest, worker, decode) must
+      // still resolve the flow — an unresolved promise stranded the panel.
+      const shotPromise = Promise.race([
+        captureRectShot(r),
+        new Promise<string | null>((res) =>
+          setTimeout(() => {
+            console.warn('[linear-grab] region capture timed out after 15s');
+            res(null);
+          }, 15_000),
+        ),
+      ]);
+      void shotPromise.then((dataUrl) => {
         if (!dataUrl) return resolve(null);
         resolve({
           tagName: 'region',

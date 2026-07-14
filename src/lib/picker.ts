@@ -10,6 +10,10 @@ export const CONTEXT_COPIED_EVENT = 'linear-grab:context-copied';
 /** Fired when the picker activates — the panel minimizes so the page is clear
     for hovering/selecting (same choreography as recording). */
 export const PICKER_ACTIVATED_EVENT = 'linear-grab:picker-activated';
+/** Fired when an interactive capture ENDS (success, cancel, or failure) —
+    the panel reopens on this, so a hung/failed capture can never strand the
+    UI closed. */
+export const PICKER_FINISHED_EVENT = 'linear-grab:picker-finished';
 
 // Local-workflow auto-copy: at most once per grab, preferring the pass that
 // carries source info; falls back to a source-less copy shortly after (prod

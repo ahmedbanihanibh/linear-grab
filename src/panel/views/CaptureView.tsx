@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, For, Show, type ParentProps } fr
 import type { GrabbedElement } from '@/lib/types';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { getSettings, clearLastGrab, getLastGrab, mergeGrabs, removeGrab } from '@/lib/storage';
+import { dataUrlToBlob } from '@/lib/elementShot';
 import { activatePicker, PICKER_ACTIVATED_EVENT } from '@/lib/picker';
 import { captureRegionInteractive } from '@/lib/regionCapture';
 import { isExtensionContext } from '@/lib/env';
@@ -72,6 +73,45 @@ export default function CaptureView() {
     void queryClient.invalidateQueries({ queryKey: ['grab'] });
   };
 
+  // Copy EVERYTHING captured as one plain-text block — paste straight into a
+  // manual Claude Code session. No uploads, no agent-workflow noise.
+  const [copiedAll, setCopiedAll] = createSignal(false);
+  const copyAll = async () => {
+    const lines = (grabs() ?? []).map((g) => {
+      const name = g.componentName ?? g.tagName ?? 'element';
+      const loc = g.source?.filePath
+        ? ` — ${g.source.filePath}${g.source.lineNumber != null ? `:${g.source.lineNumber}` : ''}`
+        : '';
+      const shot = g.screenshotDataUrl ? ' (screenshot captured — use Copy PNG to paste it)' : '';
+      return `- <${name}>${loc}${shot}`;
+    });
+    const text = `Captured on ${grabs()?.[0]?.pageUrl ?? location.href}:\n${lines.join('\n')}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 1800);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+
+  // Copy a capture's PNG to the clipboard — paste into Claude Code, Linear,
+  // Slack, anywhere. Blob is built synchronously, so Safari's gesture-scoped
+  // clipboard access holds.
+  const [copiedPngId, setCopiedPngId] = createSignal<number | null>(null);
+  const copyPng = async (grabbedAt: number, dataUrl: string) => {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': dataUrlToBlob(dataUrl) }),
+      ]);
+      setCopiedPngId(grabbedAt);
+      setTimeout(() => setCopiedPngId(null), 1800);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+
+
   // react-grab workflow: copy an element's context for a LOCAL agent
   // (Claude Code / Cursor chat) — includes the project's skills/memory paths.
   const [copiedId, setCopiedId] = createSignal<number | null>(null);
@@ -106,6 +146,9 @@ export default function CaptureView() {
       }
     } finally {
       setRegionBusy(false);
+      // Hand the panel back unconditionally — a failed capture must never
+      // strand the user with a hidden panel.
+      window.dispatchEvent(new CustomEvent('linear-grab:picker-finished'));
     }
   };
 
@@ -271,6 +314,32 @@ export default function CaptureView() {
                           <span class="text-success text-[12px] leading-none">✓</span>
                         </Show>
                       </Button>
+                      <Show when={el.screenshotDataUrl}>
+                        <Button
+                          class="size-7 px-0"
+                          variant="ghost"
+                          title={
+                            copiedPngId() === el.grabbedAt
+                              ? 'Copied!'
+                              : 'Copy PNG — paste into Claude Code, Linear, Slack…'
+                          }
+                          aria-label="Copy capture as PNG"
+                          onClick={() => void copyPng(el.grabbedAt, el.screenshotDataUrl!)}
+                        >
+                          <Show
+                            when={copiedPngId() === el.grabbedAt}
+                            fallback={
+                              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                                <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+                                <path d="m2 10.5 3.5-3 3 2.5 3-2 2.5 2" />
+                                <circle cx="6" cy="6" r="1" fill="currentColor" stroke="none" />
+                              </svg>
+                            }
+                          >
+                            <span class="text-success text-[12px] leading-none">✓</span>
+                          </Show>
+                        </Button>
+                      </Show>
                       <Button
                         class="size-7 px-0"
                         variant="ghost"
@@ -319,6 +388,16 @@ export default function CaptureView() {
               <span class="text-text-faint min-w-0 text-[10.5px] leading-snug">
                 All elements post into ONE issue. Shift+click / drag selects several at once.
               </span>
+              <Button
+                class="h-6 shrink-0 px-2 text-[11px]"
+                variant="ghost"
+                title="Copy all captures as plain text — paste into a Claude Code session"
+                onClick={() => void copyAll()}
+              >
+                <span class="inline-block min-w-[8ch] text-center">
+                  {copiedAll() ? 'Copied ✓' : 'Copy all'}
+                </span>
+              </Button>
               <Button class="h-6 shrink-0 px-2 text-[11px]" variant="ghost" onClick={clearGrab}>
                 Clear all
               </Button>

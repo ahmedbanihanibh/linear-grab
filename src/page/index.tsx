@@ -237,10 +237,15 @@ function PagePanel(props: { defaultOpen: boolean }) {
       if (!pinned()) setOpen(false);
     };
     window.addEventListener(PICKER_ACTIVATED_EVENT, onPickerActivated);
+    // Region capture / recording must ALWAYS hand the panel back — even when
+    // the capture fails or hangs, this event reopens it.
+    const onPickerFinished = () => setOpen(true);
+    window.addEventListener('linear-grab:picker-finished', onPickerFinished);
 
     onCleanup(() => {
       window.removeEventListener(CONTEXT_COPIED_EVENT, onCopied);
       window.removeEventListener(PICKER_ACTIVATED_EVENT, onPickerActivated);
+      window.removeEventListener('linear-grab:picker-finished', onPickerFinished);
     });
     const unsubAgents = subscribeRunningAgents(setWatch);
 
@@ -292,6 +297,12 @@ function PagePanel(props: { defaultOpen: boolean }) {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       if (dragMoved) void saveSettings({ launcherPos: pos() });
+      // The click event dispatches synchronously after pointerup — let its
+      // guard see the drag, then ALWAYS clear. A stuck-true dragMoved made
+      // the pill permanently unclickable (panel could never reopen).
+      setTimeout(() => {
+        dragMoved = false;
+      }, 0);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);

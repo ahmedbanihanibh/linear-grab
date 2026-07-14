@@ -103,6 +103,26 @@ export async function captureRectShot(rect: {
   w: number;
   h: number;
 }): Promise<string | null> {
+  // Hard deadline: a hung sub-step (font harvest fetch, dead encode worker)
+  // used to leave the promise pending FOREVER — no error, no grab, and the
+  // capture flow stuck. Anything over 15s resolves null with a console note.
+  return Promise.race([
+    captureRectShotInner(rect),
+    new Promise<null>((resolve) =>
+      setTimeout(() => {
+        console.warn('[linear-grab] region capture timed out after 15s');
+        resolve(null);
+      }, 15_000),
+    ),
+  ]);
+}
+
+async function captureRectShotInner(rect: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}): Promise<string | null> {
   try {
     const cx = rect.x + rect.w / 2;
     const cy = rect.y + rect.h / 2;
