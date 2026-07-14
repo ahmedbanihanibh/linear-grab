@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.23.1';
+const VERSION = '0.24.0';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -674,6 +674,9 @@ createServer(async (req, res) => {
       const cutoff = Date.now() - windowMs;
       const byComponent = new Map();
       const interactions = [];
+      let bursts = 0;
+      let worstFps = 60;
+      const pages = new Set();
       for (const line of raw.split('\n')) {
         if (!line) continue;
         let e;
@@ -683,51 +686,79 @@ createServer(async (req, res) => {
           continue;
         }
         if ((e.at ?? 0) < cutoff) continue;
+        if (e.page) pages.add(e.page);
         if (e.kind === 'interaction') interactions.push(e);
+        if (e.kind === 'long-render') {
+          bursts += 1;
+          if (typeof e.fps === 'number' && e.fps > 0) worstFps = Math.min(worstFps, e.fps);
+        }
         for (const c of e.components ?? []) {
           const cur = byComponent.get(c.name) ?? {
             name: c.name,
             renders: 0,
             selfTime: 0,
             source: c.source ?? null,
-            unnecessary: 0,
+            element: c.element ?? null,
+            pages: new Set(),
+            memoizableRenders: 0,
             changes: {},
           };
           cur.renders += c.renders ?? 1;
           cur.selfTime += c.selfTime ?? 0;
-          if (c.source) cur.source = c.source;
-          if (c.unnecessary) cur.unnecessary += c.renders ?? 1;
+          cur.source ??= c.source ?? null;
+          cur.element ??= c.element ?? null;
+          if (e.page) cur.pages.add(e.page);
+          if (c.memoizable) cur.memoizableRenders += c.renders ?? 1;
           for (const ch of c.changes ?? []) cur.changes[ch] = (cur.changes[ch] ?? 0) + 1;
           byComponent.set(c.name, cur);
         }
       }
-      const components = [...byComponent.values()].sort((a, b) => b.selfTime - a.selfTime).slice(0, 25);
+      const components = [...byComponent.values()]
+        .sort((a, b) => b.selfTime - a.selfTime)
+        .slice(0, 25)
+        .map((c) => ({ ...c, pages: [...c.pages] }));
       const md = [
         `# react-scan report (last ${Math.round(windowMs / 1000)}s)`,
         '',
+        `Target 60 FPS — worst observed: ${worstFps} FPS across ${bursts} slow-frame burst(s).` +
+          (pages.size ? ` Pages: ${[...pages].join(', ')}` : ''),
+        '',
+        '## Components (fix top-down; each line = who, where, and WHY it re-rendered)',
         ...components.map(
           (c) =>
             `- **${c.name}** — ${c.renders} renders · ${c.selfTime.toFixed(1)}ms self` +
-            (c.unnecessary ? ` · ${c.unnecessary} unnecessary` : '') +
-            (c.source ? ` · \`${c.source}\`` : '') +
+            (c.memoizableRenders
+              ? ` · ${c.memoizableRenders} renders with ZERO changes (memo() candidate)`
+              : '') +
+            (c.source ? ` · src \`${c.source}\`` : '') +
+            (c.element ? ` · el \`${c.element}\`` : '') +
+            (c.pages.length ? ` · on ${c.pages.join(', ')}` : '') +
             (Object.keys(c.changes).length
               ? ` · causes: ${Object.entries(c.changes)
                   .sort((a, b) => b[1] - a[1])
-                  .slice(0, 3)
+                  .slice(0, 4)
                   .map(([k, v]) => `${k}×${v}`)
-                  .join(', ')}`
+                  .join(', ')} — (fn)=unstable callback→useCallback, (ref)=new identity→useMemo/hoist`
               : ''),
         ),
         '',
+        '## Recent interactions',
         ...interactions
           .slice(-10)
           .map(
             (i) =>
-              `- interaction ${i.type ?? '?'} on ${i.target ?? '?'} — ${Math.round(i.duration ?? 0)}ms` +
-              (i.slow ? ' ⚠ SLOW' : ''),
+              `- ${i.type ?? '?'} on ${i.target ?? '?'}${i.page ? ` (${i.page})` : ''} — ${Math.round(i.duration ?? 0)}ms` +
+              (i.slow ? ' ⚠ SLOW (>150ms INP)' : ''),
           ),
       ].join('\n');
-      return json(res, 200, { report: md, components, interactions: interactions.slice(-20) });
+      return json(res, 200, {
+        report: md,
+        worstFps,
+        bursts,
+        pages: [...pages],
+        components,
+        interactions: interactions.slice(-20),
+      });
     }
     // Reset the staging branch: delete + recreate from the default branch.
     if (req.method === 'POST' && url.pathname === '/branch/reset') {
