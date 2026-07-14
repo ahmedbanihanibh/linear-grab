@@ -225,7 +225,36 @@ export async function activatePicker(): Promise<void> {
   await ensurePagePicker();
   const rg = await import('react-grab');
   window.dispatchEvent(new CustomEvent(PICKER_ACTIVATED_EVENT));
-  rg.getGlobalApi()?.activate();
+  const api = rg.getGlobalApi() as (PickerApi & { activate?: () => void; isActive?: () => boolean }) | null;
+  api?.activate?.();
+  // The panel hid itself on PICKER_ACTIVATED — hand it back the moment the
+  // overlay deactivates, selection or not. A successful pick also reopens via
+  // the grab storage event, but Esc / stray-click / an in-overlay crash used
+  // to end the picker silently and strand the panel closed.
+  if (typeof api?.isActive === 'function') {
+    let sawActive = false;
+    let ticks = 0;
+    const watch = setInterval(() => {
+      ticks += 1;
+      let active = false;
+      try {
+        active = api.isActive!();
+      } catch {
+        /* overlay died — treat as finished */
+      }
+      if (active) {
+        sawActive = true;
+        return;
+      }
+      // Finished = it was active and no longer is, or it never came up at
+      // all within ~2s (activation failed). Either way, return the panel.
+      if (sawActive || ticks >= 8) {
+        clearInterval(watch);
+        window.dispatchEvent(new CustomEvent(PICKER_FINISHED_EVENT));
+      }
+    }, 250);
+    setTimeout(() => clearInterval(watch), 300_000); // never poll forever
+  }
 }
 
 /**

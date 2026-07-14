@@ -384,23 +384,25 @@ export default function CaptureView() {
                 into. Use <b>Capture region</b> for visual pointers there.
               </p>
             </Show>
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-text-faint min-w-0 text-[10.5px] leading-snug">
+            <div class="flex flex-col gap-1.5">
+              <span class="text-text-faint text-[10.5px] leading-snug">
                 All elements post into ONE issue. Shift+click / drag selects several at once.
               </span>
-              <Button
-                class="h-6 shrink-0 px-2 text-[11px]"
-                variant="ghost"
-                title="Copy all captures as plain text — paste into a Claude Code session"
-                onClick={() => void copyAll()}
-              >
-                <span class="inline-block min-w-[8ch] text-center">
-                  {copiedAll() ? 'Copied ✓' : 'Copy all'}
-                </span>
-              </Button>
-              <Button class="h-6 shrink-0 px-2 text-[11px]" variant="ghost" onClick={clearGrab}>
-                Clear all
-              </Button>
+              <div class="flex items-center justify-end gap-1.5">
+                <Button
+                  class="h-6 shrink-0 px-2 text-[11px]"
+                  variant="ghost"
+                  title="Copy all captures as plain text — paste into a Claude Code session"
+                  onClick={() => void copyAll()}
+                >
+                  <span class="inline-block min-w-[8ch] text-center">
+                    {copiedAll() ? 'Copied ✓' : 'Copy all'}
+                  </span>
+                </Button>
+                <Button class="h-6 shrink-0 px-2 text-[11px]" variant="ghost" onClick={clearGrab}>
+                  Clear all
+                </Button>
+              </div>
             </div>
           </div>
         </Show>

@@ -382,6 +382,15 @@ function PagePanel(props: { defaultOpen: boolean }) {
         >
           <div
             onPointerDown={onPointerDown}
+            onClick={() => {
+              // The WHOLE pill opens the panel (the logo alone was a 13px
+              // target — after a capture closed the panel, clicks landed on
+              // the agents zone and "nothing happened"). The agents button
+              // stops propagation; recording keeps the pill as stop control.
+              if (dragMoved || recPhase() === 'recording') return;
+              setMinimapOpen(false);
+              setOpen(true);
+            }}
             class="bg-surface border-border text-text flex h-9 cursor-grab items-center gap-1 rounded-full border py-1 pr-1 pl-2.5 font-sans shadow-lg active:cursor-grabbing"
           >
             <Show
@@ -405,7 +414,8 @@ function PagePanel(props: { defaultOpen: boolean }) {
                   <span class="bg-border h-4 w-px" aria-hidden />
                   {/* Live agent status — dot pulses while agents run; count is fixed-width. */}
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation(); // agents zone toggles the minimap, not the panel
                       if (dragMoved) return;
                       setMinimapOpen((v) => !v);
                     }}
