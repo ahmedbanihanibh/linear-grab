@@ -142,7 +142,9 @@ export default function CaptureView() {
       if (shot) {
         await mergeGrabs([shot]); // reopens the panel on Capture (cloud mode)
       } else {
-        setPickError('Region capture failed — try a smaller area, or it was cancelled. The exact error is in the browser console ([linear-grab]).');
+        setPickError(
+          'Region capture failed or was cancelled. On heavy pages a "share this tab" prompt appears — pick THIS tab to capture. Details in the console ([linear-grab]).',
+        );
       }
     } finally {
       setRegionBusy(false);
