@@ -49,6 +49,12 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
     retry: 0,
     enabled: prs().length > 0,
   }));
+  // Declared BEFORE prState: the `filtered` memo below runs EAGERLY at
+  // component setup, and with the query cache warm (IndexedDB persistence)
+  // it calls prState immediately — reading `merged` from further down the
+  // file threw "Cannot access 'E' before initialization" and killed the
+  // whole panel render (panel simply never appeared).
+  const [merged, setMerged] = createSignal<Set<string>>(new Set());
   const prState = (row: PrRow) =>
     merged().has(row.attachment.url) ? 'MERGED' : prStatuses.data?.statuses[row.attachment.url];
 
@@ -109,7 +115,6 @@ export default function PrsView(props: { onOpenIssue: () => void }) {
 
   const [copiedId, setCopiedId] = createSignal<string | null>(null);
   const [mergeBusy, setMergeBusy] = createSignal<string | null>(null);
-  const [merged, setMerged] = createSignal<Set<string>>(new Set());
   const doMerge = async (url: string) => {
     setMergeBusy(url);
     try {
