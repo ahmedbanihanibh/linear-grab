@@ -28,7 +28,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.23.0';
+const VERSION = '0.23.1';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -880,9 +880,29 @@ createServer(async (req, res) => {
     json(res, 500, { error: err instanceof Error ? err.message : String(err) });
   }
 }).listen(PORT, '127.0.0.1', () => {
-  console.log(`linear-grab bridge v${VERSION}`);
-  console.log(`  repo:   ${DIR}`);
-  console.log(`  listen: http://127.0.0.1:${PORT}  (localhost only)`);
-  console.log(`  tasks run: ${CLAUDE_BIN} -p (interactive stream-json, acceptEdits)`);
+  const B = '\x1b[1m';
+  const D = '\x1b[2m';
+  const C = '\x1b[36m';
+  const G = '\x1b[32m';
+  const R = '\x1b[0m';
+  console.log('');
+  console.log(`${B}◆ linear-grab bridge${R} ${D}v${VERSION}${R}`);
+  console.log(`${D}──────────────────────────────────────────────────${R}`);
+  console.log(`  repo    ${C}${DIR}${R}`);
+  console.log(`  listen  ${C}http://127.0.0.1:${PORT}${R} ${D}(localhost only)${R}`);
+  console.log(`  agent   ${C}${CLAUDE_BIN} -p${R} ${D}(interactive stream-json)${R}`);
+  console.log('');
+  console.log(`${B}react-scan telemetry${R} ${D}(when the app loads react-scan-banihani)${R}`);
+  console.log(`  events  ${G}.lineargrab/scan.ndjson${R} ${D}— newest last, gitignored${R}`);
+  console.log(`  report  ${G}curl -s http://127.0.0.1:${PORT}/scan/report${R}`);
+  console.log('');
+  console.log(`${B}point Claude Code at the render logs${R} — paste one of these:`);
+  console.log(`  ${D}»${R} Check the live render telemetry: read the newest lines of`);
+  console.log(`    .lineargrab/scan.ndjson and summarize the slow components.`);
+  console.log(`  ${D}»${R} curl -s http://127.0.0.1:${PORT}/scan/report ${D}(aggregated view)${R}`);
+  console.log(`  ${D}tip: add a line to your repo's AGENTS.md/CLAUDE.md so agents find it`);
+  console.log(`  on their own: "Live render telemetry: .lineargrab/scan.ndjson`);
+  console.log(`  (react-scan via linear-grab bridge); aggregate: GET /scan/report"${R}`);
+  console.log(`${D}──────────────────────────────────────────────────${R}`);
   loadHistory();
 });
