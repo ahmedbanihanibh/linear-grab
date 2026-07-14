@@ -186,8 +186,15 @@ export function startCssSlowdownWatch(): void {
     window.addEventListener(t, markInput, { capture: true, passive: true });
   }
 
-  // element|property → last report time, so a hover storm doesn't spam.
+  // One finding per ELEMENT per input burst — a single click transitions
+  // color + 4 border sides + background on the same button; six cards for
+  // one press buries the report. Properties accumulate for 300ms, then
+  // flush as one finding. Element-level cooldown stops hover storms.
   const reported = new Map<string, number>();
+  const pending = new Map<
+    Element,
+    { props: Set<string>; duration: number; delay: number; since: number; timer: ReturnType<typeof setTimeout> }
+  >();
 
   window.addEventListener(
     'transitionrun',
@@ -196,6 +203,10 @@ export function startCssSlowdownWatch(): void {
       if (since > INPUT_WINDOW_MS) return; // ambient animation, not input feedback
       const el = e.target;
       if (!(el instanceof Element) || el.closest('#linear-grab-root')) return;
+      // Page-level chrome: the panel's own DevTools-style dock animates a
+      // margin on <html> — never report ourselves (or any root transition).
+      if (el === document.documentElement || el === document.body) return;
+      if (e.propertyName.startsWith('--')) return; // custom-property noise
 
       const cs = getComputedStyle(el);
       const props = cs.transitionProperty.split(',').map((p) => p.trim());
@@ -206,29 +217,46 @@ export function startCssSlowdownWatch(): void {
       const delay = delays[idx % delays.length] ?? delays[0] ?? 0;
       if (duration + delay < SLOWDOWN_THRESHOLD_MS) return;
 
-      const key = `${elementSelector(el)}|${e.propertyName}`;
-      const now = Date.now();
-      if (now - (reported.get(key) ?? 0) < 5000) return;
-      reported.set(key, now);
-
-      const classHint = classHintFor(el);
-      void attribute(el).then(({ component, source }) => {
-        addFinding({
-          mode: 'live',
-          page: location.pathname,
-          element: elementSelector(el),
-          component,
-          source,
-          properties: [e.propertyName],
-          durationMs: Math.round(duration),
-          delayMs: Math.round(delay),
-          sinceInputMs: Math.round(since),
-          count: 1,
-          classHint,
-          suggestion: suggestionFor([e.propertyName], duration, delay, classHint),
-          at: now,
-        });
-      });
+      const existing = pending.get(el);
+      if (existing) {
+        existing.props.add(e.propertyName);
+        existing.duration = Math.max(existing.duration, duration);
+        existing.delay = Math.max(existing.delay, delay);
+        return;
+      }
+      const entry = {
+        props: new Set([e.propertyName]),
+        duration,
+        delay,
+        since,
+        timer: setTimeout(() => {
+          pending.delete(el);
+          const key = elementSelector(el);
+          const now = Date.now();
+          if (now - (reported.get(key) ?? 0) < 5000) return;
+          reported.set(key, now);
+          const classHint = classHintFor(el);
+          const propList = [...entry.props];
+          void attribute(el).then(({ component, source }) => {
+            addFinding({
+              mode: 'live',
+              page: location.pathname,
+              element: key,
+              component,
+              source,
+              properties: propList,
+              durationMs: Math.round(entry.duration),
+              delayMs: Math.round(entry.delay),
+              sinceInputMs: Math.round(entry.since),
+              count: 1,
+              classHint,
+              suggestion: suggestionFor(propList, entry.duration, entry.delay, classHint),
+              at: now,
+            });
+          });
+        }, 300),
+      };
+      pending.set(el, entry);
     },
     { capture: true, passive: true },
   );

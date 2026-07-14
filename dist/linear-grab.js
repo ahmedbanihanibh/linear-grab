@@ -46049,35 +46049,50 @@ function D2() {
 		capture: !0,
 		passive: !0
 	});
-	let n = /* @__PURE__ */ new Map();
+	let n = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Map();
 	window.addEventListener("transitionrun", (t) => {
-		let r = performance.now() - e;
-		if (r > d2) return;
-		let i = t.target;
-		if (!(i instanceof Element) || i.closest("#linear-grab-root")) return;
-		let a = getComputedStyle(i), o = a.transitionProperty.split(",").map((e) => e.trim()), s = f2(a.transitionDuration), c = f2(a.transitionDelay), l = Math.max(0, o.indexOf(t.propertyName)), u = s[l % s.length] ?? s[0] ?? 0, d = c[l % c.length] ?? c[0] ?? 0;
-		if (u + d < 50) return;
-		let f = `${p2(i)}|${t.propertyName}`, p = Date.now();
-		if (p - (n.get(f) ?? 0) < 5e3) return;
-		n.set(f, p);
-		let m = m2(i);
-		_2(i).then(({ component: e, source: n }) => {
-			C2({
-				mode: "live",
-				page: location.pathname,
-				element: p2(i),
-				component: e,
-				source: n,
-				properties: [t.propertyName],
-				durationMs: Math.round(u),
-				delayMs: Math.round(d),
-				sinceInputMs: Math.round(r),
-				count: 1,
-				classHint: m,
-				suggestion: h2([t.propertyName], u, d, m),
-				at: p
-			});
-		});
+		let i = performance.now() - e;
+		if (i > d2) return;
+		let a = t.target;
+		if (!(a instanceof Element) || a.closest("#linear-grab-root") || a === document.documentElement || a === document.body || t.propertyName.startsWith("--")) return;
+		let o = getComputedStyle(a), s = o.transitionProperty.split(",").map((e) => e.trim()), c = f2(o.transitionDuration), l = f2(o.transitionDelay), u = Math.max(0, s.indexOf(t.propertyName)), d = c[u % c.length] ?? c[0] ?? 0, f = l[u % l.length] ?? l[0] ?? 0;
+		if (d + f < 50) return;
+		let p = r.get(a);
+		if (p) {
+			p.props.add(t.propertyName), p.duration = Math.max(p.duration, d), p.delay = Math.max(p.delay, f);
+			return;
+		}
+		let m = {
+			props: /* @__PURE__ */ new Set([t.propertyName]),
+			duration: d,
+			delay: f,
+			since: i,
+			timer: setTimeout(() => {
+				r.delete(a);
+				let e = p2(a), t = Date.now();
+				if (t - (n.get(e) ?? 0) < 5e3) return;
+				n.set(e, t);
+				let i = m2(a), o = [...m.props];
+				_2(a).then(({ component: n, source: r }) => {
+					C2({
+						mode: "live",
+						page: location.pathname,
+						element: e,
+						component: n,
+						source: r,
+						properties: o,
+						durationMs: Math.round(m.duration),
+						delayMs: Math.round(m.delay),
+						sinceInputMs: Math.round(m.since),
+						count: 1,
+						classHint: i,
+						suggestion: h2(o, m.duration, m.delay, i),
+						at: t
+					});
+				});
+			}, 300)
+		};
+		r.set(a, m);
 	}, {
 		capture: !0,
 		passive: !0
