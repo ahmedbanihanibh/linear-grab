@@ -200,7 +200,28 @@ function pushToBridge(finding: CssSlowdownFinding): void {
 let findings: CssSlowdownFinding[] = [];
 const subs = new Set<(f: CssSlowdownFinding[]) => void>();
 function addFinding(f: CssSlowdownFinding): void {
-  findings = [f, ...findings].slice(0, 100);
+  // Identical repeat hits (same element, classes, properties) merge into one
+  // finding with a count — four cards for four keystrokes on the same input
+  // bury the report without adding information. The bridge log still gets
+  // every occurrence (it is a log).
+  const twin =
+    f.mode === 'live'
+      ? findings.find(
+          (x) =>
+            x.mode === 'live' &&
+            x.element === f.element &&
+            (x.classHint ?? '') === (f.classHint ?? '') &&
+            x.properties.join() === f.properties.join(),
+        )
+      : undefined;
+  if (twin) {
+    twin.count += 1;
+    twin.at = f.at;
+    twin.sinceInputMs = f.sinceInputMs;
+    findings = [...findings];
+  } else {
+    findings = [f, ...findings].slice(0, 100);
+  }
   for (const cb of subs) cb(findings);
   pushToBridge(f);
 }

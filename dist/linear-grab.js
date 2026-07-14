@@ -46033,7 +46033,8 @@ function C2(e) {
 }
 var w2 = [], T2 = /* @__PURE__ */ new Set();
 function E2(e) {
-	w2 = [e, ...w2].slice(0, 100);
+	let t = e.mode === "live" ? w2.find((t) => t.mode === "live" && t.element === e.element && (t.classHint ?? "") === (e.classHint ?? "") && t.properties.join() === e.properties.join()) : void 0;
+	t ? (t.count += 1, t.at = e.at, t.sinceInputMs = e.sinceInputMs, w2 = [...w2]) : w2 = [e, ...w2].slice(0, 100);
 	for (let e of T2) e(w2);
 	C2(e);
 }
