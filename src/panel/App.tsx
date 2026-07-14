@@ -7,6 +7,7 @@ import CloudView from './views/CloudView';
 import RunningView from './views/RunningView';
 import LocalView from './views/LocalView';
 import PrsView from './views/PrsView';
+import DesignView from './views/DesignView';
 import SettingsView from './views/SettingsView';
 import { getSettings, saveSettings, subscribeStorage } from '@/lib/storage';
 import { subscribeGrabBroadcast } from '@/lib/picker';
@@ -25,6 +26,7 @@ const TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'cloud', label: 'Cloud' },
   { id: 'local', label: 'Local' },
   { id: 'prs', label: 'PRs' },
+  { id: 'design', label: 'Design' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -233,6 +235,9 @@ export default function App(props: {
           </div>
           <div class="h-full" classList={{ hidden: tab() !== 'prs' }}>
             <PrsView onOpenIssue={() => setTab('activity')} />
+          </div>
+          <div class="h-full" classList={{ hidden: tab() !== 'design' }}>
+            <DesignView />
           </div>
           <div class="h-full" classList={{ hidden: tab() !== 'settings' }}>
             <SettingsView />

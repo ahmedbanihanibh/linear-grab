@@ -13,6 +13,7 @@ export type PanelTab =
   | 'cloud'
   | 'local'
   | 'prs'
+  | 'design'
   | 'settings';
 
 const [requestedTab, setRequestedTab] = createSignal<PanelTab | null>(null);
