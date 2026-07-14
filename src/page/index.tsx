@@ -10,6 +10,7 @@ import {
   type RunningAgentIssue,
 } from '@/lib/agentWatch';
 import { getRecorderSnapshot, subscribeRecorder, stopRecording } from '@/lib/recorder';
+import { subscribeGenomeCapture, stopGenomeCapture, type GenomeCaptureSnapshot } from '@/lib/genome';
 import { openPanelTo } from '@/panel/nav';
 // Compiled Tailwind CSS as a string — injected into the shadow root so the
 // host app's styles and ours never collide.
@@ -142,6 +143,7 @@ function PagePanel(props: { defaultOpen: boolean }) {
   const review = () => watch().review;
   const [minimapOpen, setMinimapOpen] = createSignal(false);
   const [recPhase, setRecPhase] = createSignal(getRecorderSnapshot().phase);
+  const [genCap, setGenCap] = createSignal<GenomeCaptureSnapshot>({ active: false, msLeft: 0, total: 0, byTrigger: {} });
   const [recElapsed, setRecElapsed] = createSignal(0);
 
   // Live elapsed readout in the pill while recording.
@@ -252,6 +254,8 @@ function PagePanel(props: { defaultOpen: boolean }) {
     // Recording choreography: minimize while capturing so the recording shows
     // the APP (not our panel); the pill becomes the stop control; reopen on
     // the Capture tab when the GIF is ready.
+    const unsubGenCap = subscribeGenomeCapture(setGenCap);
+    onCleanup(unsubGenCap);
     let prevPhase = getRecorderSnapshot().phase;
     const unsubRec = subscribeRecorder((snap) => {
       setRecPhase(snap.phase);
@@ -387,14 +391,14 @@ function PagePanel(props: { defaultOpen: boolean }) {
               // target — after a capture closed the panel, clicks landed on
               // the agents zone and "nothing happened"). The agents button
               // stops propagation; recording keeps the pill as stop control.
-              if (dragMoved || recPhase() === 'recording') return;
+              if (dragMoved || recPhase() === 'recording' || genCap().active) return;
               setMinimapOpen(false);
               setOpen(true);
             }}
             class="bg-surface border-border text-text flex h-9 cursor-grab items-center gap-1 rounded-full border py-1 pr-1 pl-2.5 font-sans shadow-lg active:cursor-grabbing"
           >
             <Show
-              when={recPhase() === 'recording'}
+              when={recPhase() === 'recording' || genCap().active}
               fallback={
                 <>
                   <button
@@ -451,21 +455,53 @@ function PagePanel(props: { defaultOpen: boolean }) {
                 </>
               }
             >
-              {/* Recording mode: the panel is minimized so the capture shows the
-                  app — the pill is the stop control with a live clock. */}
-              <span aria-hidden class="bg-danger size-2 shrink-0 animate-pulse rounded-full" />
-              <span class="text-text min-w-[5ch] text-[11px] font-medium tabular-nums">
-                {fmtElapsed(recElapsed())}
-              </span>
-              <button
-                onClick={() => {
-                  if (dragMoved) return;
-                  void stopRecording();
-                }}
-                class="bg-accent hover:bg-accent-hover h-7 cursor-pointer rounded-full px-2.5 text-[11px] font-medium text-white transition-colors"
+              {/* Recording / genome-capture mode: the panel is minimized so the
+                  page is interactive — the pill is the live status + stop control. */}
+              <Show
+                when={recPhase() === 'recording'}
+                fallback={
+                  <>
+                    <span aria-hidden class="bg-accent size-2 shrink-0 animate-pulse rounded-full" />
+                    <span class="text-text min-w-[3ch] text-[11px] font-medium tabular-nums">
+                      {Math.ceil(genCap().msLeft / 1000)}s
+                    </span>
+                    <span
+                      class="text-text-dim min-w-[7ch] text-[11px] tabular-nums"
+                      title={
+                        Object.entries(genCap().byTrigger)
+                          .map(([k, v]) => `${v} ${k}`)
+                          .join(' · ') || 'hover / open the component to record its states'
+                      }
+                    >
+                      {genCap().total} states
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (dragMoved) return;
+                        stopGenomeCapture();
+                      }}
+                      class="bg-accent hover:bg-accent-hover h-7 cursor-pointer rounded-full px-2.5 text-[11px] font-medium text-white transition-colors"
+                    >
+                      <span class="inline-block min-w-[4ch] text-center">Stop</span>
+                    </button>
+                  </>
+                }
               >
-                <span class="inline-block min-w-[4ch] text-center">Stop</span>
-              </button>
+                <span aria-hidden class="bg-danger size-2 shrink-0 animate-pulse rounded-full" />
+                <span class="text-text min-w-[5ch] text-[11px] font-medium tabular-nums">
+                  {fmtElapsed(recElapsed())}
+                </span>
+                <button
+                  onClick={() => {
+                    if (dragMoved) return;
+                    void stopRecording();
+                  }}
+                  class="bg-accent hover:bg-accent-hover h-7 cursor-pointer rounded-full px-2.5 text-[11px] font-medium text-white transition-colors"
+                >
+                  <span class="inline-block min-w-[4ch] text-center">Stop</span>
+                </button>
+              </Show>
             </Show>
           </div>
 

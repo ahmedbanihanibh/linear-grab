@@ -260,6 +260,37 @@ export async function extractGenome(root: Element): Promise<Genome> {
 // elements appearing on document.body (portaled dropdown panels).
 // ---------------------------------------------------------------------------
 
+
+// Live capture status — the launcher pill renders this while the panel is
+// hidden (stop control, countdown, running tally by trigger kind).
+export interface GenomeCaptureSnapshot {
+  active: boolean;
+  msLeft: number;
+  total: number;
+  byTrigger: Record<string, number>;
+}
+let capSnapshot: GenomeCaptureSnapshot = { active: false, msLeft: 0, total: 0, byTrigger: {} };
+const capSubs = new Set<(s: GenomeCaptureSnapshot) => void>();
+function emitCapture(patch: Partial<GenomeCaptureSnapshot>): void {
+  capSnapshot = { ...capSnapshot, ...patch };
+  for (const cb of capSubs) cb(capSnapshot);
+}
+export function subscribeGenomeCapture(cb: (s: GenomeCaptureSnapshot) => void): () => void {
+  capSubs.add(cb);
+  cb(capSnapshot);
+  return () => void capSubs.delete(cb);
+}
+let stopCaptureEarly: (() => void) | null = null;
+/** Ends the running capture window immediately (pill Stop button). */
+export function stopGenomeCapture(): void {
+  stopCaptureEarly?.();
+}
+/** hover | focus | open (attr flips + portaled panels collapse to "open"). */
+function triggerKind(trigger: string): string {
+  if (trigger === 'hover' || trigger === 'focus') return trigger;
+  return 'open';
+}
+
 export async function captureInteractionStates(
   root: Element,
   durationMs: number,
@@ -296,6 +327,11 @@ export async function captureInteractionStates(
     if (seenKeys.has(dedupe)) return;
     seenKeys.add(dedupe);
     states.push({ trigger, label, changed });
+    const kind = triggerKind(trigger);
+    emitCapture({
+      total: capSnapshot.total + 1,
+      byTrigger: { ...capSnapshot.byTrigger, [kind]: (capSnapshot.byTrigger[kind] ?? 0) + 1 },
+    });
   };
 
   // Interaction signals INSIDE the subtree.
@@ -349,18 +385,32 @@ export async function captureInteractionStates(
           const changed: GenomeState['changed'] = {};
           for (const [k, v] of Object.entries(styles)) changed[k] = { from: '(absent)', to: v };
           states.push({ trigger: 'appeared (portal/open)', label, changed });
+          emitCapture({
+            total: capSnapshot.total + 1,
+            byTrigger: { ...capSnapshot.byTrigger, open: (capSnapshot.byTrigger.open ?? 0) + 1 },
+          });
         }, 50);
       }
     }
   });
   bodyObserver.observe(document.body, { childList: true, subtree: false });
 
+  emitCapture({ active: true, msLeft: durationMs, total: 0, byTrigger: {} });
   const tick = setInterval(() => {
     const left = durationMs - (Date.now() - started);
     onProgress?.(Math.max(0, left));
+    emitCapture({ msLeft: Math.max(0, left) });
   }, 250);
   const started = Date.now();
-  await new Promise((res) => setTimeout(res, durationMs));
+  await new Promise<void>((res) => {
+    const t = setTimeout(res, durationMs);
+    stopCaptureEarly = () => {
+      clearTimeout(t);
+      res();
+    };
+  });
+  stopCaptureEarly = null;
+  emitCapture({ active: false, msLeft: 0 });
 
   clearInterval(tick);
   root.removeEventListener('pointerover', onOver, true);

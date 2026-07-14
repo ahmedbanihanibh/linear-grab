@@ -8,6 +8,7 @@ import {
   type Genome,
 } from '@/lib/genome';
 import { PICKER_ACTIVATED_EVENT, PICKER_FINISHED_EVENT } from '@/lib/picker';
+import { openPanelTo } from '../nav';
 
 interface SavedGenome {
   id: number;
@@ -65,6 +66,7 @@ export default function DesignView() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
+      openPanelTo('design'); // panel remounts on reopen — land back on this tab
       window.dispatchEvent(new CustomEvent(PICKER_FINISHED_EVENT));
     }
   };
@@ -99,6 +101,7 @@ export default function DesignView() {
     } finally {
       setBusy(null);
       setCountdown(null);
+      openPanelTo('design');
       window.dispatchEvent(new CustomEvent(PICKER_FINISHED_EVENT));
     }
   };
@@ -138,12 +141,6 @@ export default function DesignView() {
         </Button>
       </div>
 
-      <Show when={countdown() !== null}>
-        <p class="text-warn px-1 text-[11px] font-medium">
-          Recording interactions — hover / open the component now…{' '}
-          <span class="tabular-nums">{countdown()}s</span>
-        </p>
-      </Show>
       <Show when={error()}>
         <ErrorNote message={error()!} />
       </Show>
@@ -246,32 +243,49 @@ export default function DesignView() {
                             </For>
                           </Show>
                         </div>
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex items-center gap-1">
                           <Button
-                            class="h-6 px-2 text-[11px]"
+                            class="size-7 px-0"
                             variant="ghost"
                             loading={busy() === item.id}
-                            title="Record hover/focus/open styles for 8 seconds while you interact"
+                            title="Capture states — records hover/focus/open styles for 8s while you interact; the pill shows the timer and Stop"
+                            aria-label="Capture interaction states"
                             onClick={() => void captureStates(item)}
                           >
-                            Capture states
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                              <circle cx="8" cy="8" r="6" />
+                              <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+                            </svg>
                           </Button>
                           <Button
-                            class="h-6 px-2 text-[11px]"
+                            class="size-7 px-0"
                             variant="ghost"
-                            title="Copy the genome as a markdown spec — paste to an agent or issue"
+                            title={copiedId() === item.id ? 'Copied!' : 'Copy spec — markdown for an agent or issue'}
+                            aria-label="Copy genome spec"
                             onClick={() => void copySpec(item)}
                           >
-                            <span class="inline-block min-w-[8ch] text-center">
-                              {copiedId() === item.id ? 'Copied ✓' : 'Copy spec'}
-                            </span>
+                            <Show
+                              when={copiedId() === item.id}
+                              fallback={
+                                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                                  <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+                                  <path d="M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" />
+                                </svg>
+                              }
+                            >
+                              <span class="text-success text-[12px] leading-none">✓</span>
+                            </Show>
                           </Button>
                           <Button
-                            class="text-danger ml-auto h-6 px-2 text-[11px]"
+                            class="text-danger ml-auto size-7 px-0"
                             variant="ghost"
+                            title="Delete this genome"
+                            aria-label="Delete genome"
                             onClick={() => remove(item.id)}
                           >
-                            Delete
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                              <path d="M4 4l8 8M12 4l-8 8" />
+                            </svg>
                           </Button>
                         </div>
                       </div>
