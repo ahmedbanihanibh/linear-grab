@@ -16,6 +16,7 @@ import { openPanelTo } from '../nav';
 import {
   auditTransitions,
   clearCssSlowdowns,
+  cssSlowdownPrompt,
   cssSlowdownReport,
   subscribeCssSlowdowns,
   type CssSlowdownFinding,
@@ -74,6 +75,16 @@ export default function DesignView() {
       await navigator.clipboard.writeText(cssSlowdownReport(slowdowns()));
       setCopiedReport(true);
       setTimeout(() => setCopiedReport(false), 1600);
+    } catch {
+      setError('Clipboard was blocked — click Copy again.');
+    }
+  };
+  const [copiedPrompt, setCopiedPrompt] = createSignal(false);
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(cssSlowdownPrompt(slowdowns()));
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 1600);
     } catch {
       setError('Clipboard was blocked — click Copy again.');
     }
@@ -153,6 +164,25 @@ export default function DesignView() {
   const remove = (id: number) => {
     liveEls.delete(id);
     update(saved().filter((s) => s.id !== id));
+  };
+
+  const [copiedAll, setCopiedAll] = createSignal(false);
+  const copyAllSpecs = async () => {
+    try {
+      const text = saved()
+        .map((s) => genomeToSpec(s.genome))
+        .join('\n\n---\n\n');
+      await navigator.clipboard.writeText(text);
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 1600);
+    } catch {
+      setError('Clipboard was blocked — click Copy again.');
+    }
+  };
+  const clearAllGenomes = () => {
+    liveEls.clear();
+    update([]);
+    setExpanded(null);
   };
 
   return (
@@ -350,6 +380,21 @@ export default function DesignView() {
             }}
           </For>
         </div>
+        <div class="flex items-center justify-end gap-1.5 px-1">
+          <Button
+            class="h-6 px-2 text-[11px]"
+            variant="ghost"
+            title="Copy every genome as one markdown document"
+            onClick={() => void copyAllSpecs()}
+          >
+            <span class="inline-block min-w-[8ch] text-center">
+              {copiedAll() ? 'Copied ✓' : 'Copy all'}
+            </span>
+          </Button>
+          <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={clearAllGenomes}>
+            Clear all
+          </Button>
+        </div>
       </Show>
 
       {/* ---- CSS slowdowns — the lag react-scan can't see ------------------ */}
@@ -409,13 +454,23 @@ export default function DesignView() {
             </For>
           </div>
           <div class="flex items-center gap-1.5 px-1">
+            <Button
+              class="h-6 px-2 text-[11px]"
+              variant="primary"
+              title="Report + fix rules, ready to paste into a Claude Code session"
+              onClick={() => void copyPrompt()}
+            >
+              <span class="inline-block min-w-[11ch] text-center">
+                {copiedPrompt() ? 'Copied ✓' : 'Copy AI prompt'}
+              </span>
+            </Button>
             <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={() => void copyReport()}>
               <span class="inline-block min-w-[10ch] text-center">
                 {copiedReport() ? 'Copied ✓' : 'Copy report'}
               </span>
             </Button>
             <Button class="h-6 px-2 text-[11px]" variant="ghost" onClick={clearCssSlowdowns}>
-              Clear audit
+              Clear all
             </Button>
           </div>
         </Show>

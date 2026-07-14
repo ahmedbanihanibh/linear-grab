@@ -165,7 +165,7 @@ export function subscribeCssSlowdowns(cb: (f: CssSlowdownFinding[]) => void): ()
   return () => void subs.delete(cb);
 }
 export function clearCssSlowdowns(): void {
-  findings = findings.filter((f) => f.mode !== 'audit');
+  findings = [];
   for (const cb of subs) cb(findings);
 }
 
@@ -326,6 +326,36 @@ export async function auditTransitions(): Promise<CssSlowdownFinding[]> {
   for (const cb of subs) cb(findings);
   for (const f of out) pushToBridge(f);
   return out;
+}
+
+/** The report wrapped in ready-to-paste instructions for a coding agent —
+    fix the variant definitions, keep intentional motion, prove with a re-audit. */
+export function cssSlowdownPrompt(list: CssSlowdownFinding[]): string {
+  return [
+    'Below is a CSS-slowdown report from my running app (live-captured on real input + full-page audit).',
+    'Goal: ALL interaction feedback must be instant. Rules:',
+    '',
+    '1. Most of these come from SHARED design-system variants — fix the VARIANT',
+    "   DEFINITIONS, not the call sites. Grep for the exact class recipes in the",
+    "   findings' `classes:` lines (e.g. `transition-all`, `transition-colors duration-150`).",
+    '2. Press/toggle state changes get NO transition: add `active:transition-none`',
+    '   and `data-[state=on]:transition-none` / `data-[state=open]:transition-none`.',
+    '   Hover in/out may keep a transition but shorten it: duration-150 → duration-100',
+    '   (duration-75 for small controls like tabs and icon buttons).',
+    "3. Replace every `transition-all` with the scoped variant (transition-colors /",
+    '   transition-transform / transition-opacity — per what actually changes).',
+    '4. Where a finding\'s source looks like a generic fallback (one file:line repeated',
+    '   for many components), locate the code by the `classes:` line instead.',
+    '5. Do NOT touch entry/exit animations of popovers/menus or icon micro-motion',
+    '   (chevron rotate etc.) — that is intentional; only input FEEDBACK must be instant.',
+    '6. PROOF REQUIRED: after the change I will re-run the audit — it must show zero',
+    '   interactive elements ≥100ms and clicking must produce no live findings.',
+    '   Do not claim done without stating what you changed per variant.',
+    '',
+    '---',
+    '',
+    cssSlowdownReport(list),
+  ].join('\n');
 }
 
 /** Markdown report — paste into an issue or a Claude Code session. */
