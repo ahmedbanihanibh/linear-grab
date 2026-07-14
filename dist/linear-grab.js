@@ -41904,8 +41904,8 @@ function eQ() {
 			let n = o(t);
 			if (s(), n.w < 8 || n.h < 8) return e(null);
 			(QZ(n).querySelectorAll("*").length > ZZ ? $Z(n) : Promise.race([YA(n), new Promise((e) => setTimeout(() => {
-				console.warn("[linear-grab] region capture timed out after 15s"), e(null);
-			}, 15e3))])).then((t) => {
+				console.warn("[linear-grab] region capture timed out after 4s — trying a tab frame"), e(null);
+			}, 4e3))]).then((e) => e ?? $Z(n))).then((t) => {
 				if (!t) return e(null);
 				e({
 					tagName: "region",

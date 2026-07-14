@@ -150,20 +150,23 @@ export function captureRegionInteractive(): Promise<GrabbedElement | null> {
       // real tab frame while the pointerup gesture still grants
       // getDisplayMedia its transient activation.
       const nodeCount = regionContainer(r).querySelectorAll('*').length;
+      // The DOM deadline must stay INSIDE the ~5s transient-activation window:
+      // when rasterization fails (timeout, tainted canvas from a cross-origin
+      // subresource, worker death) we still get to fall back to a tab frame.
+      const domAttempt = () =>
+        Promise.race([
+          captureRectShot(r),
+          new Promise<string | null>((res) =>
+            setTimeout(() => {
+              console.warn('[linear-grab] region capture timed out after 4s — trying a tab frame');
+              res(null);
+            }, 4_000),
+          ),
+        ]);
       const shotPromise =
         nodeCount > DOM_RASTER_NODE_BUDGET
           ? captureRectViaTabFrame(r)
-          : // Hang-proof: a stuck sub-step (font harvest, worker, decode) must
-            // still resolve the flow — an unresolved promise stranded the panel.
-            Promise.race([
-              captureRectShot(r),
-              new Promise<string | null>((res) =>
-                setTimeout(() => {
-                  console.warn('[linear-grab] region capture timed out after 15s');
-                  res(null);
-                }, 15_000),
-              ),
-            ]);
+          : domAttempt().then((dataUrl) => dataUrl ?? captureRectViaTabFrame(r));
       void shotPromise.then((dataUrl) => {
         if (!dataUrl) return resolve(null);
         resolve({
