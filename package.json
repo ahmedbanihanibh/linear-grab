@@ -1,6 +1,6 @@
 {
   "name": "linear-grab",
-  "version": "0.23.6",
+  "version": "0.24.0",
   "type": "module",
   "description": "Point at any React element in your dev app, draft a Linear issue with AI, delegate it to the Cursor agent, and track it live — in any browser.",
   "exports": {
@@ -23,6 +23,7 @@
     "build:ext": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
+    "test": "vitest run",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -41,8 +42,10 @@
     "@tailwindcss/vite": "^4.0.0",
     "@types/chrome": "^0.0.280",
     "@wxt-dev/module-solid": "latest",
+    "happy-dom": "^20.10.6",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.0",
+    "vitest": "^4.1.10",
     "wxt": "latest"
   }
 }

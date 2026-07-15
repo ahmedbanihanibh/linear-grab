@@ -24,6 +24,8 @@ import {
   subscribeCssWatchEnabled,
   type CssSlowdownFinding,
 } from '@/lib/cssSlowdown';
+import { formatSlopReport, runSlopScan, slopScanPrompt, type SlopFinding } from '@/lib/slopScan';
+import { bridgeBase } from '@/lib/bridge';
 
 interface SavedGenome {
   id: number;
@@ -51,6 +53,50 @@ function persist(list: SavedGenome[]): void {
 /** Live element refs for this page session — lets "Capture states" run on a
     just-extracted genome without re-picking. Reload → re-pick. */
 const liveEls = new Map<number, WeakRef<Element>>();
+
+/** Last slop scan survives panel close/reopen (the panel unmounts when
+    hidden) — per-tab memory only, per spec: no storage. */
+let lastSlopScan: SlopFinding[] = [];
+
+/** Reveal a finding on the page: scroll to it and pulse an outline. */
+function flashFinding(f: SlopFinding): boolean {
+  const el = f.el?.deref();
+  if (!(el instanceof HTMLElement) || !el.isConnected) return false;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const prev = el.style.outline;
+  const prevOffset = el.style.outlineOffset;
+  el.style.outline = '2px solid #e5a13a';
+  el.style.outlineOffset = '2px';
+  setTimeout(() => {
+    el.style.outline = prev;
+    el.style.outlineOffset = prevOffset;
+  }, 1400);
+  return true;
+}
+
+/** Findings ride the same scan log agents already read (kind "slop-scan"). */
+function pushSlopToBridge(list: SlopFinding[]): void {
+  if (list.length === 0) return;
+  const at = Date.now();
+  const events = list.slice(0, 200).map(({ el: _el, ...f }) => ({
+    kind: 'slop-scan',
+    page: location.pathname,
+    at,
+    ...f,
+  }));
+  void bridgeBase()
+    .then((base) =>
+      fetch(`${base}/scan/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events }),
+        keepalive: true,
+      }),
+    )
+    .catch(() => {
+      /* bridge offline — panel list still has it */
+    });
+}
 
 export default function DesignView() {
   const [saved, setSaved] = createSignal<SavedGenome[]>(loadSaved());
@@ -90,6 +136,72 @@ export default function DesignView() {
       await navigator.clipboard.writeText(cssSlowdownPrompt(slowdowns()));
       setCopiedPrompt(true);
       setTimeout(() => setCopiedPrompt(false), 1600);
+    } catch {
+      setError('Clipboard was blocked — click Copy again.');
+    }
+  };
+
+  // ---- Slop scan (design-contract drift) ----------------------------------
+  const [slop, setSlop] = createSignal<SlopFinding[]>(lastSlopScan);
+  const [slopBusy, setSlopBusy] = createSignal(false);
+  const [slopRule, setSlopRule] = createSignal<string | null>(null);
+  const [showErrors, setShowErrors] = createSignal(true);
+  const [showWarns, setShowWarns] = createSignal(true);
+  const [copiedSlopReport, setCopiedSlopReport] = createSignal(false);
+  const [copiedSlopPrompt, setCopiedSlopPrompt] = createSignal(false);
+
+  const runScan = () => {
+    setError(null);
+    setSlopBusy(true);
+    try {
+      const found = runSlopScan(document);
+      lastSlopScan = found;
+      setSlop(found);
+      setSlopRule(null);
+      pushSlopToBridge(found);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSlopBusy(false);
+    }
+  };
+  const clearSlop = () => {
+    lastSlopScan = [];
+    setSlop([]);
+    setSlopRule(null);
+  };
+  const slopVisible = () =>
+    slop().filter((f) => (f.severity === 'error' ? showErrors() : showWarns()));
+  /** Findings grouped per rule, errors first, biggest groups first. */
+  const slopGroups = () => {
+    const map = new Map<string, SlopFinding[]>();
+    for (const f of slopVisible()) {
+      const list = map.get(f.ruleId);
+      if (list) list.push(f);
+      else map.set(f.ruleId, [f]);
+    }
+    return [...map.values()].sort(
+      (a, b) =>
+        Number(b[0].severity === 'error') - Number(a[0].severity === 'error') ||
+        b.length - a.length,
+    );
+  };
+  const slopErrorCount = () => slop().filter((f) => f.severity === 'error').length;
+  const slopWarnCount = () => slop().length - slopErrorCount();
+  const copySlopReport = async () => {
+    try {
+      await navigator.clipboard.writeText(formatSlopReport(slopVisible()));
+      setCopiedSlopReport(true);
+      setTimeout(() => setCopiedSlopReport(false), 1600);
+    } catch {
+      setError('Clipboard was blocked — click Copy again.');
+    }
+  };
+  const copySlopPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(slopScanPrompt(slopVisible()));
+      setCopiedSlopPrompt(true);
+      setTimeout(() => setCopiedSlopPrompt(false), 1600);
     } catch {
       setError('Clipboard was blocked — click Copy again.');
     }
@@ -425,9 +537,9 @@ export default function DesignView() {
           <div class="min-w-0">
             <p class="text-text text-[12.5px] font-semibold">CSS slowdowns</p>
             <p class="text-text-faint text-[10.5px] leading-snug">
-              Transitions/delays ≥50ms on interactive elements — feedback that
-              animates instead of being instant. Live hits appear as you use
-              the app; Audit sweeps the whole page.
+              Transitions/delays over the 100ms house cap (§42) on interactive
+              elements — feedback that animates instead of being instant. Live
+              hits appear as you use the app; Audit sweeps the whole page.
             </p>
           </div>
           <div class="flex shrink-0 items-center gap-1">
@@ -558,6 +670,178 @@ export default function DesignView() {
               title="Clear all findings (live + audit)"
               aria-label="Clear all findings"
               onClick={clearCssSlowdowns}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </Button>
+          </div>
+        </Show>
+      </div>
+
+      {/* ---- Slop scan — design-contract drift ---------------------------- */}
+      <div class="border-border mt-1 flex flex-col gap-2 border-t pt-3">
+        <div class="flex items-center justify-between gap-2 px-1">
+          <div class="min-w-0">
+            <p class="text-text text-[12.5px] font-semibold">Slop scan</p>
+            <p class="text-text-faint text-[10.5px] leading-snug">
+              Design-contract drift — Linear-primitives rules checked against
+              the live DOM. Open menus/popovers first to include them.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            class="h-7 shrink-0 px-2.5 text-[11.5px]"
+            loading={slopBusy()}
+            onClick={runScan}
+          >
+            <span class="inline-block min-w-[4ch] text-center">Scan</span>
+          </Button>
+        </div>
+        <Show
+          when={slop().length > 0}
+          fallback={
+            <p class="text-text-faint px-1 text-[10.5px]">
+              No scan yet — click Scan to audit this page against the contract.
+            </p>
+          }
+        >
+          <div class="flex items-center gap-1 px-1">
+            <button
+              class="border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums"
+              classList={{
+                'text-danger bg-danger/10 border-danger/40': showErrors(),
+                'text-text-faint': !showErrors(),
+              }}
+              aria-pressed={showErrors()}
+              onClick={() => setShowErrors(!showErrors())}
+            >
+              {slopErrorCount()} errors
+            </button>
+            <button
+              class="border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums"
+              classList={{
+                'text-warn bg-warn/10 border-warn/40': showWarns(),
+                'text-text-faint': !showWarns(),
+              }}
+              aria-pressed={showWarns()}
+              onClick={() => setShowWarns(!showWarns())}
+            >
+              {slopWarnCount()} warns
+            </button>
+          </div>
+          <div class="flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-2">
+            <For each={slopGroups()}>
+              {(group) => {
+                const head = group[0];
+                const open = () => slopRule() === head.ruleId;
+                return (
+                  <div class="bg-surface border-border flex flex-col rounded-lg border">
+                    <button
+                      class="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left"
+                      onClick={() => setSlopRule(open() ? null : head.ruleId)}
+                    >
+                      <span
+                        class="size-1.5 shrink-0 rounded-full"
+                        classList={{
+                          'bg-danger': head.severity === 'error',
+                          'bg-warn': head.severity === 'warn',
+                        }}
+                        aria-hidden
+                      />
+                      <span class="text-accent min-w-0 truncate font-mono text-[11.5px]">
+                        {head.ruleId}
+                      </span>
+                      <span class="text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums">
+                        ×{group.length}
+                      </span>
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        class="text-text-faint shrink-0 transition-transform"
+                        classList={{ 'rotate-180': open() }}
+                        aria-hidden
+                      >
+                        <path d="m4 6 4 4 4-4" />
+                      </svg>
+                    </button>
+                    <Show when={open()}>
+                      <div class="border-border flex flex-col gap-1 border-t px-2 py-1.5">
+                        <p class="text-text-dim text-[10px] leading-snug">{head.description}</p>
+                        <For each={group}>
+                          {(f) => (
+                            <button
+                              class="hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded px-1 py-0.5 text-left"
+                              title="Reveal on the page"
+                              onClick={() => {
+                                if (!flashFinding(f)) setError('Element is gone — run Scan again.');
+                              }}
+                            >
+                              <span class="text-text min-w-0 truncate font-mono text-[10.5px]">
+                                {f.selector}
+                              </span>
+                              <span class="text-text-faint font-mono text-[10px] leading-snug break-all">
+                                {f.evidence}
+                              </span>
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
+          <div class="flex items-center gap-1 px-1">
+            <Button
+              class="size-7 px-0"
+              variant="primary"
+              title={copiedSlopPrompt() ? 'Copied!' : 'Copy AI prompt — findings + contract fix rules, ready for a Claude Code session'}
+              aria-label="Copy AI fix prompt"
+              onClick={() => void copySlopPrompt()}
+            >
+              <Show
+                when={copiedSlopPrompt()}
+                fallback={
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden>
+                    <path d="M8 1.5 9.6 6l4.4 1.6L9.6 9.2 8 13.7 6.4 9.2 2 7.6 6.4 6Z" />
+                    <path d="M13 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z" />
+                  </svg>
+                }
+              >
+                <span class="text-[12px] leading-none">✓</span>
+              </Show>
+            </Button>
+            <Button
+              class="size-7 px-0"
+              variant="ghost"
+              title={copiedSlopReport() ? 'Copied!' : 'Copy report — findings grouped by rule, markdown'}
+              aria-label="Copy slop report"
+              onClick={() => void copySlopReport()}
+            >
+              <Show
+                when={copiedSlopReport()}
+                fallback={
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden>
+                    <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+                    <path d="M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" />
+                  </svg>
+                }
+              >
+                <span class="text-success text-[12px] leading-none">✓</span>
+              </Show>
+            </Button>
+            <Button
+              class="text-danger ml-auto size-7 px-0"
+              variant="ghost"
+              title="Clear scan results"
+              aria-label="Clear scan results"
+              onClick={clearSlop}
             >
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden>
                 <path d="M4 4l8 8M12 4l-8 8" />

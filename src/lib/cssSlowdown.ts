@@ -18,6 +18,13 @@
  */
 
 import { bridgeBase } from './bridge';
+import {
+  easingViolation,
+  elementSelector,
+  isIntentionalMotion,
+  jankPropsOf,
+  parseMs,
+} from './cssShared';
 
 export interface CssSlowdownFinding {
   /** 'live' = caught after real input; 'audit' = static sweep. */
@@ -39,7 +46,7 @@ export interface CssSlowdownFinding {
   count: number;
   /** The class(es) most likely responsible, for a targeted fix. */
   classHint?: string;
-  /** Timing function, when it violates the easing rules (ease-in on UI). */
+  /** Timing function, when it violates the easing rules (ease-in / ease-in-out on UI). */
   easing?: string;
   /** Transitioned properties that reflow/repaint every frame. */
   jankProps?: string[];
@@ -47,32 +54,21 @@ export interface CssSlowdownFinding {
   at: number;
 }
 
-/** Anything at/over this is "not instant". User wants instant → 50ms. */
-export const SLOWDOWN_THRESHOLD_MS = 50;
+/**
+ * §42 house default = 100ms ease-out; only ABOVE it is slop. `duration+delay`
+ * that lands exactly on the blessed 100ms control must produce NO finding — so
+ * the flag condition is strictly-greater-than this value (see the `> ` checks
+ * below), and a compliant `transition-*` (which inherits the 100ms default)
+ * never trips. Suggestions still nudge toward `duration-75` for small controls.
+ */
+export const SLOWDOWN_THRESHOLD_MS = 100;
 /** A transition starting this soon after input = input feedback animating. */
 const INPUT_WINDOW_MS = 200;
 
 // ---------------------------------------------------------------------------
-// Shared helpers
+// Shared helpers — parseMs / elementSelector / jankPropsOf / easingViolation /
+// isIntentionalMotion all live in cssShared.ts so slopScan can't drift from us.
 // ---------------------------------------------------------------------------
-
-function parseMs(value: string): number[] {
-  return value.split(',').map((v) => {
-    const t = v.trim();
-    if (t.endsWith('ms')) return parseFloat(t) || 0;
-    if (t.endsWith('s')) return (parseFloat(t) || 0) * 1000;
-    return 0;
-  });
-}
-
-function elementSelector(el: Element): string {
-  const id = el.id ? `#${el.id}` : '';
-  const cls =
-    typeof el.className === 'string' && el.className
-      ? `.${el.className.split(/\s+/).filter(Boolean).slice(0, 2).join('.')}`
-      : '';
-  return `${el.tagName.toLowerCase()}${id}${cls}`;
-}
 
 /** The classes worth blaming — transition-* utilities and duration/delay. */
 function classHintFor(el: Element): string | undefined {
@@ -81,32 +77,6 @@ function classHintFor(el: Element): string | undefined {
     .split(/\s+/)
     .filter((c) => /^(transition|duration-|delay-|ease-)/.test(c));
   return hits.length ? hits.join(' ') : undefined;
-}
-
-/** Properties that reflow (layout) or repaint every animated frame —
-    the animations skill's "animate transform and opacity ONLY" rule. */
-const LAYOUT_PAINT_PROPS = new Set([
-  'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
-  'top', 'left', 'right', 'bottom', 'inset',
-  'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
-  'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-  'font-size', 'line-height', 'letter-spacing',
-  'box-shadow', 'filter', 'background-position',
-  'grid-template-columns', 'grid-template-rows', 'flex-basis', 'gap',
-]);
-function jankPropsOf(properties: string[]): string[] {
-  if (properties.includes('all')) return ['all (includes layout/paint props)'];
-  return properties.filter((p) => LAYOUT_PAINT_PROPS.has(p));
-}
-
-/** "Never use ease-in for UI" (Emil) — it delays the start exactly when the
-    user is watching. Flags ease-in and ease-in-shaped cubic-beziers. */
-function easingViolation(timing: string): string | null {
-  const first = timing.split(',')[0].trim();
-  if (first === 'ease-in') return 'ease-in';
-  const m = first.match(/cubic-bezier\(\s*([\d.]+)\s*,\s*(-?[\d.]+)/);
-  if (m && parseFloat(m[1]) >= 0.4 && parseFloat(m[2]) <= 0.1) return first;
-  return null;
 }
 
 function suggestionFor(
@@ -127,7 +97,7 @@ function suggestionFor(
       `JANK: transitions LAYOUT/PAINT props (${jank.join(', ')}) — reflow/repaint every frame; animate transform/opacity instead (box-shadow → animate a pseudo-element's opacity)`,
     );
   }
-  if (easing) bits.push(`easing '${easing}' starts slow — never ease-in on UI, use ease-out`);
+  if (easing) bits.push(`easing '${easing}' starts slow — §42 bans ease-in/ease-in-out on UI, use ease-out`);
   if (durationMs > 500) bits.push(`${Math.round(durationMs)}ms is over the 500ms HARD CAP for UI feedback`);
   else if (durationMs > 300) bits.push(`${Math.round(durationMs)}ms is over the 300ms UI cap`);
   else if (durationMs > 100) bits.push(`shorten ${Math.round(durationMs)}ms → ≤100ms`);
@@ -304,12 +274,15 @@ export function startCssSlowdownWatch(): void {
 
       const cs = getComputedStyle(el);
       const props = cs.transitionProperty.split(',').map((p) => p.trim());
+      // §42: popover/menu/dialog content, svg micro-motion, and panel size
+      // transitions are INTENTIONAL motion — never a slowdown finding.
+      if (isIntentionalMotion(el, props)) return;
       const durations = parseMs(cs.transitionDuration);
       const delays = parseMs(cs.transitionDelay);
       const idx = Math.max(0, props.indexOf(e.propertyName));
       const duration = durations[idx % durations.length] ?? durations[0] ?? 0;
       const delay = delays[idx % delays.length] ?? delays[0] ?? 0;
-      if (duration + delay < SLOWDOWN_THRESHOLD_MS) return;
+      if (duration + delay <= SLOWDOWN_THRESHOLD_MS) return;
 
       const existing = pending.get(el);
       if (existing) {
@@ -377,11 +350,13 @@ export async function auditTransitions(): Promise<CssSlowdownFinding[]> {
     const cs = getComputedStyle(el);
     if (cs.cursor !== 'pointer' && !el.matches('button, a, input, select, textarea')) continue;
 
+    const props = cs.transitionProperty.split(',').map((p) => p.trim());
+    // §42 intentional-motion exemption (same predicate as the live watcher).
+    if (isIntentionalMotion(el, props)) continue;
     const durations = parseMs(cs.transitionDuration);
     const delays = parseMs(cs.transitionDelay);
     const worst = Math.max(...durations, 0) + Math.max(...delays, 0);
-    if (worst < SLOWDOWN_THRESHOLD_MS) continue;
-    const props = cs.transitionProperty.split(',').map((p) => p.trim());
+    if (worst <= SLOWDOWN_THRESHOLD_MS) continue;
 
     const classHint = classHintFor(el);
     const key = `${el.tagName}|${classHint ?? props.join()}|${Math.round(worst)}`;
@@ -449,8 +424,14 @@ export function cssSlowdownPrompt(list: CssSlowdownFinding[]): string {
     '3b. Findings marked ⚠ layout/paint: NEVER transition width/height/top/left/',
     '   margin/padding/box-shadow — they reflow or repaint every frame. Use',
     "   transform: translate/scale, and animate a pseudo-element's opacity for shadows.",
-    "3c. Findings marked ⚠ easing: never ease-in on UI — replace with ease-out",
-    '   (house curve: cubic-bezier(.2,0,.1,1)).',
+    "3c. Findings marked ⚠ easing: never ease-in OR ease-in-out on UI (§42 bans",
+    '   both) — replace with ease-out (house curve: cubic-bezier(.2,0,.1,1), the',
+    '   theme default).',
+    '3d. Press must be instant GLOBALLY: keep the unlayered §42 rule in globals.css',
+    '   — `button:active, a:active, [role=button/tab/menuitem/option]:active',
+    '   { transition-duration: 0s }` — so pointer-down feedback snaps and only the',
+    '   release animates back. If a control still animates on press, that global',
+    '   rule is missing or overridden.',
     '4. Where a finding\'s source looks like a generic fallback (one file:line repeated',
     '   for many components), locate the code by the `classes:` line instead.',
     '5. Do NOT touch entry/exit animations of popovers/menus or icon micro-motion',
@@ -480,7 +461,7 @@ export function cssSlowdownReport(list: CssSlowdownFinding[]): string {
     lines.push(`- transitions: ${f.properties.join(', ')}`);
     if (f.classHint) lines.push(`- classes: \`${f.classHint}\``);
     if (f.jankProps?.length) lines.push(`- ⚠ layout/paint transition (reflows every frame): ${f.jankProps.join(', ')}`);
-    if (f.easing) lines.push(`- ⚠ easing: ${f.easing} (ease-in starts slow — use ease-out)`);
+    if (f.easing) lines.push(`- ⚠ easing: ${f.easing} (§42 bans ease-in/ease-in-out — use ease-out)`);
     if (f.sinceInputMs != null) lines.push(`- fired ${f.sinceInputMs}ms after user input (live capture)`);
     lines.push(`- fix: ${f.suggestion}`, '');
   }
