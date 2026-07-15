@@ -46838,21 +46838,21 @@ function j4(e = typeof document < "u" ? document : {}) {
 		return n || (n = getComputedStyle(e), t.set(e, n)), n;
 	};
 	r4 = n;
-	let r = Array.from(e.querySelectorAll("*")), i = [];
+	let r = Array.from(e.querySelectorAll("*")), i = [], a = e.documentElement ?? null, o = e.body ?? null;
 	for (let e of r) {
-		if (e.closest("#linear-grab-root")) continue;
+		if (e === a || e === o || e.closest("#linear-grab-root, #claude-agent-glow-border, [id^=\"react-scan\"]")) continue;
 		let t = G2(e);
 		t.width === 0 && t.height === 0 && e.children.length === 0 || i.push(e);
 	}
-	let a = {
+	let s = {
 		root: e,
 		els: i,
 		css: n
-	}, o = [];
+	}, c = [];
 	for (let e of [...E4, ...D4]) try {
-		o.push(...e.check(a));
+		c.push(...e.check(s));
 	} catch {}
-	return r4 = (e) => getComputedStyle(e), o;
+	return r4 = (e) => getComputedStyle(e), c;
 }
 function M4(e) {
 	let t = /* @__PURE__ */ new Map();

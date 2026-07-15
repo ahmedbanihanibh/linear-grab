@@ -1016,8 +1016,14 @@ export function runSlopScan(root: ParentNode = typeof document !== 'undefined' ?
   // Single walk. Skip our own panel subtree and cheaply-invisible elements.
   const all = Array.from(root.querySelectorAll('*'));
   const els: Element[] = [];
+  const docEl = (root as Document).documentElement ?? null;
+  const bodyEl = (root as Document).body ?? null;
   for (const el of all) {
-    if (el.closest('#linear-grab-root')) continue; // never scan our own panel
+    // Page chrome owned by tooling, never by the app: <html>/<body> carry the
+    // panel's own DevTools-dock margin transition (the cssSlowdown v0.23.1
+    // self-report lesson), and browser-agent overlays are not the app either.
+    if (el === docEl || el === bodyEl) continue;
+    if (el.closest('#linear-grab-root, #claude-agent-glow-border, [id^="react-scan"]')) continue; // never scan devtools
     // Performance guard: skip invisible leaf elements early. An element with
     // no box AND no children is inert. Rules that read layout do so via plain
     // property access, so a test's stubbed rect keeps the element in.
