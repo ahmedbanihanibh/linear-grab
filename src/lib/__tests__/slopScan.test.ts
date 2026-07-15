@@ -525,3 +525,47 @@ describe('cssShared.isIntentionalMotion', () => {
     expect(isIntentionalMotion(el, ['background-color'])).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regressions from the first real-app report (v0.25.2)
+// ---------------------------------------------------------------------------
+
+describe('regressions: real-app false positives', () => {
+  it('hardcoded-status-hex: trio color in computed rgb form is exempt', () => {
+    // rgb(80, 227, 194) IS #50E3C2 — the first report flagged it because the
+    // computed branch never compared against the trio.
+    const host = mount(`<span id="s" style="color: rgb(80, 227, 194); font-size: 11px">up</span>`);
+    void host;
+    expect(findRule(runSlopScan(document), 'hardcoded-status-hex')).toHaveLength(0);
+  });
+
+  it('cursor-mismatch: label (and its text) with pointer is interactive by proxy', () => {
+    mount(
+      `<label style="cursor: pointer"><span id="t" style="cursor: pointer">Enable</span><input type="checkbox" /></label>`,
+    );
+    expect(findRule(runSlopScan(document), 'cursor-mismatch')).toHaveLength(0);
+  });
+
+  it('scroll-no-fade: overflowing but non-scrollable elements are not scrollers', () => {
+    const host = mount(`<span id="s" style="overflow: visible">truncated text</span>`);
+    const el = host.querySelector('#s')!;
+    stubMetrics(el, { scrollWidth: 150, clientWidth: 40 });
+    expect(findRule(runSlopScan(document), 'scroll-no-fade')).toHaveLength(0);
+  });
+
+  it('identical findings merge into one with a count', () => {
+    const host = mount(
+      `<div>
+         <div class="inline-flex items-center" style="border-radius: 4px">a</div>
+         <div class="inline-flex items-center" style="border-radius: 4px">b</div>
+         <div class="inline-flex items-center" style="border-radius: 4px">c</div>
+       </div>`,
+    );
+    for (const el of host.querySelectorAll('div[class]')) {
+      stubMetrics(el, { rect: { width: 40, height: 20 } });
+    }
+    const found = findRule(runSlopScan(document), 'radius-vocabulary');
+    expect(found).toHaveLength(1);
+    expect(found[0].count).toBe(3);
+  });
+});

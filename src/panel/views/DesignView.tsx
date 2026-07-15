@@ -771,7 +771,7 @@ export default function DesignView() {
                         {head.ruleId}
                       </span>
                       <span class="text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums">
-                        ×{group.length}
+                        ×{group.reduce((n, x) => n + (x.count ?? 1), 0)}
                       </span>
                       <svg
                         width="10"
@@ -812,6 +812,9 @@ export default function DesignView() {
                                   <span class="text-accent">{f.component} </span>
                                 </Show>
                                 {f.selector}
+                                <Show when={(f.count ?? 1) > 1}>
+                                  <span class="text-text-faint tabular-nums"> ×{f.count}</span>
+                                </Show>
                               </span>
                               <Show when={f.source}>
                                 <span class="text-text-dim font-mono text-[10px] break-all">{f.source}</span>

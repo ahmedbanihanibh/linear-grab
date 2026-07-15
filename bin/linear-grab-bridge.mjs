@@ -37,7 +37,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.25.1';
+const VERSION = '0.25.2';
 
 // ---- audit subcommand dispatch ---------------------------------------------
 // `npx linear-grab-bridge audit` is a headless design gate — it sweeps a
@@ -1549,6 +1549,7 @@ function appendNdjson(file, findings) {
           evidence: f.evidence,
           component: f.component ?? null,
           source: f.source ?? null,
+          count: f.count ?? 1,
           isNew: !!f.isNew,
         }),
       )
@@ -1611,8 +1612,9 @@ function writeReportAndNdjson(findings, { url, routes, themes, outPath, ndjsonPa
       );
       for (const f of list) {
         const where = f.component || f.source ? ` — ${[f.component, f.source].filter(Boolean).join(' @ ')}` : '';
+        const times = (f.count ?? 1) > 1 ? ` ×${f.count}` : '';
         lines.push(
-          `- \`${f.selector}\` — ${f.evidence}${where} [${f.themes.join('/')}]${f.isNew ? ' **NEW**' : ''}`,
+          `- \`${f.selector}\`${times} — ${f.evidence}${where} [${f.themes.join('/')}]${f.isNew ? ' **NEW**' : ''}`,
         );
       }
       lines.push('');

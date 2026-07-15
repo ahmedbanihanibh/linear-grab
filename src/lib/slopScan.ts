@@ -44,6 +44,9 @@ export interface SlopFinding {
   selector: string;
   /** The offending computed value / class — what to look at. */
   evidence: string;
+  /** How many identical elements share this finding (same rule + selector +
+      evidence merged into one — 30 RouteCard rows bury a report). */
+  count?: number;
   /** Pathname the finding was recorded on — set by the panel store when scans
       accumulate across pages; the engine itself leaves it unset. */
   page?: string;
@@ -460,6 +463,11 @@ const scrollNoFade: SlopRule = {
   check(ctx) {
     const out: SlopFinding[] = [];
     for (const el of ctx.els) {
+      // A scroller SCROLLS — truncated spans and overflow-hidden crops are
+      // not this rule's business (they overflow but can never reveal more).
+      const ox = ctx.css(el).overflowX;
+      if (ox !== 'auto' && ox !== 'scroll') continue;
+      if (el.clientWidth < 24) continue; // sub-icon-size "scrollers" are noise
       if (el.scrollWidth <= el.clientWidth + 8) continue; // not horizontally overflowing
       const cls = typeof el.className === 'string' ? el.className : '';
       if (/scroll-fade-x(-js)?/.test(cls)) continue;
@@ -567,6 +575,44 @@ const hardcodedStatusHex: SlopRule = {
     'Part 5: raw hex only for the status trio (#50E3C2/#EE0000/#F5A623) — a saturated non-token color on small UI text.',
   check(ctx) {
     const out: SlopFinding[] = [];
+    // Colors that are LEGITIMATE despite being saturated: the status trio,
+    // and every color a :root custom property resolves to — a computed color
+    // that equals a token value came FROM the token (provenance is erased,
+    // so value-equality is the only test we have; text-primary must not flag).
+    const allowed = new Set<string>();
+    for (const hx of STATUS_TRIO) {
+      const t = rgbTuple(
+        `rgb(${parseInt(hx.slice(1, 3), 16)}, ${parseInt(hx.slice(3, 5), 16)}, ${parseInt(hx.slice(5, 7), 16)})`,
+      );
+      if (t) allowed.add(t);
+    }
+    try {
+      const doc = ctx.root as Document;
+      const rootEl = doc.documentElement;
+      if (rootEl && doc.body) {
+        const rootCss = ctx.css(rootEl);
+        // Token values are hex/oklch — normalize through a probe element so
+        // they compare against computed rgb() colors (the genome trick).
+        const probe = doc.createElement('span');
+        probe.style.display = 'none';
+        doc.body.appendChild(probe);
+        // Chrome enumerates custom properties in computed style iteration.
+        for (let i = 0; i < rootCss.length; i++) {
+          const prop = rootCss[i];
+          if (!prop.startsWith('--')) continue;
+          const value = rootCss.getPropertyValue(prop).trim();
+          if (!value || value.length > 40) continue;
+          probe.style.color = '';
+          probe.style.color = value;
+          if (!probe.style.color) continue; // not a color value
+          const t = rgbTuple(getComputedStyle(probe).color);
+          if (t) allowed.add(t);
+        }
+        probe.remove();
+      }
+    } catch {
+      /* no :root — trio-only allowlist */
+    }
     for (const el of ctx.els) {
       if (!hasDirectText(el)) continue;
       const inline = el.getAttribute('style') ?? '';
@@ -580,9 +626,10 @@ const hardcodedStatusHex: SlopRule = {
           out.push(finding(this, el, `hardcoded ${hx} (not the brand status trio)`));
         }
       }
-      // Computed color: only flag clearly saturated, non-neutral colors.
+      // Computed color: only flag clearly saturated colors that match NO
+      // known token value and are not the trio.
       const tuple = rgbTuple(cs.color);
-      if (tuple && hexInInline.length === 0) {
+      if (tuple && hexInInline.length === 0 && !allowed.has(tuple)) {
         const [r, g, b] = tuple.split(',').map((n) => parseFloat(n));
         if (Number.isFinite(r) && isSaturated(r, g, b)) {
           out.push(finding(this, el, `saturated non-token color ${cs.color} on small UI text`));
@@ -778,8 +825,10 @@ const cursorMismatch: SlopRule = {
         continue;
       }
       // (b) static text carrying pointer with NO interactive ancestor.
-      if (cursor === 'pointer' && el.matches('p, h1, h2, h3, h4, h5, h6, span, label')) {
-        if (el.closest('button, a, [role="button"], [onclick]')) continue; // legit — clickable ancestor
+      // <label> is interactive by proxy (clicking focuses its control) —
+      // pointer on labels and their text is correct semantics, never slop.
+      if (cursor === 'pointer' && el.matches('p, h1, h2, h3, h4, h5, h6, span')) {
+        if (el.closest('button, a, [role="button"], [onclick], label')) continue; // legit — clickable ancestor
         if (el.matches('button, a, [role="button"]')) continue;
         out.push(finding(this, el, `static ${el.tagName.toLowerCase()} with cursor:pointer and no interactive ancestor`));
       }
@@ -1026,20 +1075,25 @@ export function runSlopScan(root: ParentNode = typeof document !== 'undefined' ?
   const els: Element[] = [];
   const docEl = (root as Document).documentElement ?? null;
   const bodyEl = (root as Document).body ?? null;
+  // Layout-engine probe: happy-dom returns all-zero rects, so visibility
+  // filtering there would drop every test fixture — gate it on a real layout.
+  const hasLayout = (docEl?.getBoundingClientRect().width ?? 0) > 0;
   for (const el of all) {
     // Page chrome owned by tooling, never by the app: <html>/<body> carry the
     // panel's own DevTools-dock margin transition (the cssSlowdown v0.23.1
     // self-report lesson), and browser-agent overlays are not the app either.
     if (el === docEl || el === bodyEl) continue;
     if (el.closest('#linear-grab-root, #claude-agent-glow-border, [id^="react-scan"]')) continue; // never scan devtools
-    // Performance guard: skip invisible leaf elements early. An element with
-    // no box AND no children is inert. Rules that read layout do so via plain
-    // property access, so a test's stubbed rect keeps the element in.
     const r = rectOf(el);
-    if (r.width === 0 && r.height === 0 && el.children.length === 0) {
-      // Keep it only if a rule needs it despite zero rect — but leaves with no
-      // box and no children never carry a finding, so dropping is safe.
-      // (Elements WITH children are kept: menus/scrollers may be stubbed.)
+    if (hasLayout) {
+      // Invisible UI is ungradable AND misleading: hidden KeepAlive tab
+      // panels flood the report with off-screen duplicates, sr-only text is
+      // 1×1 by design, and the radius full-round check needs real
+      // dimensions. Anything smaller than 2×2 px has no visual contract.
+      if (r.width < 2 || r.height < 2) continue;
+    } else if (r.width === 0 && r.height === 0 && el.children.length === 0) {
+      // Test/SSR path (no layout engine): only drop inert leaves so stubbed
+      // fixtures with children (menus/scrollers) stay in.
       continue;
     }
     els.push(el);
@@ -1056,7 +1110,18 @@ export function runSlopScan(root: ParentNode = typeof document !== 'undefined' ?
   }
 
   getComputedStyleCached = (el) => getComputedStyle(el); // reset the module pointer
-  return findings;
+
+  // Merge identical findings (same rule, selector, evidence) into one with a
+  // count — 30 identical RouteCard rows add zero information and bury the
+  // real signal. The WeakRef keeps the first element for click-to-reveal.
+  const merged = new Map<string, SlopFinding>();
+  for (const f of findings) {
+    const key = `${f.ruleId}|${f.selector}|${f.evidence}`;
+    const twin = merged.get(key);
+    if (twin) twin.count = (twin.count ?? 1) + 1;
+    else merged.set(key, f);
+  }
+  return [...merged.values()];
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,11 +1153,13 @@ export function formatSlopReport(findings: SlopFinding[]): string {
   const lines = [`# Slop scan — ${errors} error${errors === 1 ? '' : 's'}, ${total - errors} warn (${total} total)`, ''];
   for (const [ruleId, group] of ordered) {
     const f0 = group[0];
-    lines.push(`## ${ruleId} — ${f0.severity} ×${group.length} [${f0.part}]`);
+    const occurrences = group.reduce((n, f) => n + (f.count ?? 1), 0);
+    lines.push(`## ${ruleId} — ${f0.severity} ×${occurrences} [${f0.part}]`);
     lines.push(f0.description);
     for (const f of group) {
       const where = f.component || f.source ? ` — ${[f.component, f.source].filter(Boolean).join(' @ ')}` : '';
-      lines.push(`- ${multiPage && f.page ? `\`${f.page}\` ` : ''}\`${f.selector}\` — ${f.evidence}${where}`);
+      const times = (f.count ?? 1) > 1 ? ` ×${f.count}` : '';
+      lines.push(`- ${multiPage && f.page ? `\`${f.page}\` ` : ''}\`${f.selector}\`${times} — ${f.evidence}${where}`);
     }
     lines.push('');
   }
