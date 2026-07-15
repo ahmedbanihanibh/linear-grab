@@ -12,6 +12,7 @@ import {
 import { getRecorderSnapshot, subscribeRecorder, stopRecording } from '@/lib/recorder';
 import { subscribeGenomeCapture, stopGenomeCapture, type GenomeCaptureSnapshot } from '@/lib/genome';
 import { startCssSlowdownWatch } from '@/lib/cssSlowdown';
+import { startSlopLiveWatch } from '@/lib/slopScanStore';
 import { openPanelTo } from '@/panel/nav';
 // Compiled Tailwind CSS as a string — injected into the shadow root so the
 // host app's styles and ours never collide.
@@ -47,6 +48,7 @@ export function init(options: InitOptions = {}): void {
   const mount = () => {
     installConsoleCapture(); // start collecting client errors immediately
     startCssSlowdownWatch(); // catch input feedback being animated (transitionrun)
+    startSlopLiveWatch(); // auto slop-scan on route change while live mode is on
     void ensurePagePicker();
 
     const host = document.createElement('div');

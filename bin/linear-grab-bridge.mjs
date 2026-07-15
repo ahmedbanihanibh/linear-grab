@@ -13,11 +13,20 @@
  * Binds 127.0.0.1 only — never exposed to the network.
  */
 import { createServer } from 'node:http';
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir, platform, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const argv = process.argv.slice(2);
@@ -28,7 +37,16 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.24.1';
+const VERSION = '0.25.0';
+
+// ---- audit subcommand dispatch ---------------------------------------------
+// `npx linear-grab-bridge audit` is a headless design gate — it sweeps a
+// running dev app route-by-route in Chromium (driven over raw CDP), runs the
+// slop-scan design-contract scan, writes a report, and exits nonzero when new
+// violations exceed the baseline. It must NEVER start the HTTP server below.
+// Guarded here, dispatched at the very bottom (after every const/fn is
+// initialized) so audit mode short-circuits the entire server module body.
+const AUDIT_MODE = argv[0] === 'audit';
 
 /** Best-effort command runner (git/gh introspection). Never throws. */
 function run(cmd, args, cwd = DIR) {
@@ -456,7 +474,7 @@ function sendMessage(task, text) {
 
 // ---- HTTP ------------------------------------------------------------------
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   try {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, CORS);
@@ -608,8 +626,8 @@ createServer(async (req, res) => {
             if (cached.preview) previews[prUrl] = cached.preview;
             return;
           }
-          // comments carry the Vercel bot's preview link; statusCheckRollup
-          // has it too but comments survive check re-runs.
+          // comments carry the Vercel bot's preview link; the PR body often
+          // has it too (agents embed it per the completion gate).
           const out = await run('gh', ['pr', 'view', prUrl, '--json', 'state,comments,body']);
           try {
             const parsed = JSON.parse(out ?? '');
@@ -915,7 +933,9 @@ createServer(async (req, res) => {
   } catch (err) {
     json(res, 500, { error: err instanceof Error ? err.message : String(err) });
   }
-}).listen(PORT, '127.0.0.1', () => {
+});
+if (!AUDIT_MODE)
+  server.listen(PORT, '127.0.0.1', () => {
   const B = '\x1b[1m';
   const D = '\x1b[2m';
   const C = '\x1b[36m';
@@ -942,3 +962,663 @@ createServer(async (req, res) => {
   console.log(`${D}──────────────────────────────────────────────────${R}`);
   loadHistory();
 });
+
+// ============================================================================
+// audit — headless, CI-able design gate (raw CDP, zero deps)
+// ============================================================================
+
+// Colored console helpers, matching the bridge banner style.
+const A = {
+  B: '\x1b[1m',
+  D: '\x1b[2m',
+  C: '\x1b[36m',
+  G: '\x1b[32m',
+  Y: '\x1b[33m',
+  Rd: '\x1b[31m',
+  R: '\x1b[0m',
+};
+const alog = (s) => console.log(s);
+const die = (msg) => {
+  console.error(`${A.Rd}audit: ${msg}${A.R}`);
+  process.exit(2);
+};
+
+/** Locate a Chromium-family browser. --chrome wins; else probe known paths. */
+function findBrowser() {
+  const explicit = flag('--chrome', null);
+  if (explicit) {
+    if (!existsSync(explicit)) die(`--chrome path does not exist: ${explicit}`);
+    return explicit;
+  }
+  const probed = [];
+  const os = platform();
+  if (os === 'darwin') {
+    const apps = [
+      'Google Chrome.app/Contents/MacOS/Google Chrome',
+      'Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
+      'Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+      'Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      'Brave Browser.app/Contents/MacOS/Brave Browser',
+      'Chromium.app/Contents/MacOS/Chromium',
+    ];
+    for (const app of apps) {
+      for (const root of ['/Applications', join(homedir(), 'Applications')]) {
+        const p = join(root, app);
+        probed.push(p);
+        if (existsSync(p)) return p;
+      }
+    }
+  } else if (os === 'linux') {
+    for (const name of ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge']) {
+      probed.push(name);
+      const out = whichSync(name);
+      if (out) return out;
+    }
+  } else if (os === 'win32') {
+    const pf = process.env['PROGRAMFILES'] ?? 'C:\\Program Files';
+    const pf86 = process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)';
+    const cands = [
+      join(pf, 'Google/Chrome/Application/chrome.exe'),
+      join(pf86, 'Google/Chrome/Application/chrome.exe'),
+      join(pf, 'Microsoft/Edge/Application/msedge.exe'),
+      join(pf86, 'Microsoft/Edge/Application/msedge.exe'),
+    ];
+    for (const p of cands) {
+      probed.push(p);
+      if (existsSync(p)) return p;
+    }
+  }
+  die(
+    `no Chrome/Edge/Brave/Chromium found. Probed:\n  ${probed.join('\n  ')}\nPass --chrome <path> to point at a browser binary.`,
+  );
+}
+
+/** Resolve a binary via `which` (linux). Synchronous, best-effort. */
+function whichSync(name) {
+  try {
+    return execFileSync('which', [name], { encoding: 'utf8' }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Poll for the CDP DevToolsActivePort file; return ws:// endpoint. */
+async function waitForEndpoint(tmp) {
+  const portFile = join(tmp, 'DevToolsActivePort');
+  for (let i = 0; i < 150; i++) {
+    if (existsSync(portFile)) {
+      const [port, path] = readFileSync(portFile, 'utf8').split('\n');
+      if (port && path) return `ws://127.0.0.1:${port.trim()}${path.trim()}`;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  die('browser did not open a debugging port within 15s (DevToolsActivePort never appeared)');
+}
+
+/** Minimal promise-based CDP client over one WebSocket. */
+function makeCdp(ws) {
+  let nextId = 1;
+  const pending = new Map();
+  // event listeners keyed by sessionId ('' = browser) → Map<method, Set<fn>>
+  const listeners = new Map();
+  ws.addEventListener('message', (ev) => {
+    let msg;
+    try {
+      msg = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (msg.id != null && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      if (msg.error) reject(new Error(msg.error.message ?? JSON.stringify(msg.error)));
+      else resolve(msg.result);
+      return;
+    }
+    if (msg.method) {
+      const sid = msg.sessionId ?? '';
+      const byMethod = listeners.get(sid);
+      const set = byMethod?.get(msg.method);
+      if (set) for (const fn of [...set]) fn(msg.params ?? {});
+    }
+  });
+  const send = (method, params = {}, sessionId) =>
+    new Promise((resolve, reject) => {
+      const id = nextId++;
+      pending.set(id, { resolve, reject });
+      ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
+    });
+  const on = (method, sessionId, fn) => {
+    const sid = sessionId ?? '';
+    if (!listeners.has(sid)) listeners.set(sid, new Map());
+    const byMethod = listeners.get(sid);
+    if (!byMethod.has(method)) byMethod.set(method, new Set());
+    byMethod.get(method).add(fn);
+    return () => byMethod.get(method)?.delete(fn);
+  };
+  /** Resolve on the next matching event, or reject after ms. */
+  const once = (method, sessionId, ms) =>
+    new Promise((resolve, reject) => {
+      const off = on(method, sessionId, (p) => {
+        off();
+        clearTimeout(t);
+        resolve(p);
+      });
+      const t = setTimeout(() => {
+        off();
+        reject(new Error(`timeout waiting for ${method}`));
+      }, ms);
+    });
+  return { send, on, once };
+}
+
+/** Read the slop-scan bundle once: local file next to the bridge, else CDN. */
+async function loadBundleSource() {
+  const local = new URL('./slop-scan.global.js', import.meta.url);
+  try {
+    return readFileSync(local, 'utf8');
+  } catch {
+    /* fall through to CDN */
+  }
+  try {
+    const res = await fetch('https://cdn.jsdelivr.net/npm/linear-grab@latest/dist/slop-scan.global.js');
+    if (!res.ok) throw new Error(`CDN ${res.status}`);
+    return await res.text();
+  } catch (e) {
+    die(
+      `could not load the slop-scan bundle. Looked for ${local.pathname} and the jsDelivr CDN fallback (${e instanceof Error ? e.message : e}).`,
+    );
+  }
+}
+
+/** The audit itself. Returns the process exit code. */
+async function runAudit() {
+  if (typeof WebSocket === 'undefined') {
+    die(`audit needs Node 22+ (built-in WebSocket); you have ${process.version}`);
+  }
+
+  const url = flag('--url', 'http://localhost:3000').replace(/\/+$/, '');
+  const themeFlag = flag('--theme', 'both');
+  const themes = themeFlag === 'both' ? ['light', 'dark'] : [themeFlag];
+  const [vw, vh] = flag('--viewport', '1440x900')
+    .split('x')
+    .map((n) => Number(n) || 0);
+  const settleMs = Number(flag('--wait', '1500'));
+  const pageTimeout = Number(flag('--timeout', '30000'));
+  const failOn = flag('--fail-on', 'error'); // error | warn | none
+  const updateBaseline = argv.includes('--update-baseline');
+  const auditDir = join(DIR, '.lineargrab');
+  const outPath = flag('--out', join(auditDir, 'slop-report.md'));
+  const baselinePath = join(auditDir, 'slop-baseline.json');
+  const ndjsonPath = join(auditDir, 'scan.ndjson');
+
+  // Routes: --routes, else auditRoutes in <DIR>/.lineargrab.json, else ['/'].
+  let routes = flag('--routes', null)
+    ?.split(',')
+    .map((r) => r.trim())
+    .filter(Boolean);
+  if (!routes || !routes.length) {
+    try {
+      const cfg = JSON.parse(readFileSync(join(DIR, '.lineargrab.json'), 'utf8'));
+      if (Array.isArray(cfg.auditRoutes) && cfg.auditRoutes.length) routes = cfg.auditRoutes;
+    } catch {
+      /* no config */
+    }
+  }
+  if (!routes || !routes.length) routes = ['/'];
+
+  const BUNDLE_SOURCE = await loadBundleSource();
+  const bin = findBrowser();
+
+  // Auth: headless Chromium has no session — auth-gated routes would grade
+  // the login page. `audit --login` opens a VISIBLE browser on a persistent
+  // per-repo profile; sign in once, press Enter, and every later audit
+  // reuses that profile (auto-detected). --fresh forces a clean throwaway.
+  const defaultProfile = join(
+    HISTORY_DIR,
+    `audit-profile-${createHash('sha1').update(DIR).digest('hex').slice(0, 8)}`,
+  );
+  const explicitProfile = flag('--profile', null);
+  const loginMode = argv.includes('--login');
+  const fresh = argv.includes('--fresh');
+  const persistentProfile =
+    explicitProfile ?? (!fresh && (loginMode || existsSync(defaultProfile)) ? defaultProfile : null);
+
+  if (loginMode) {
+    const profile = persistentProfile ?? defaultProfile;
+    mkdirSync(profile, { recursive: true });
+    alog('');
+    alog(`${A.B}◆ linear-grab audit --login${A.R}`);
+    alog(`  A browser window is opening on ${A.C}${url}${A.R}.`);
+    alog(`  Sign in there, then come back and press ${A.B}Enter${A.R} to save the session.`);
+    alog(`  ${A.D}profile: ${profile}${A.R}`);
+    const loginChild = spawn(
+      bin,
+      [`--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', url],
+      { stdio: 'ignore', detached: false },
+    );
+    await new Promise((resolve) => process.stdin.once('data', resolve));
+    try {
+      loginChild.kill('SIGTERM');
+    } catch {
+      /* already closed by the user */
+    }
+    alog(`${A.G}✓${A.R} session saved — future ${A.C}audit${A.R} runs use it automatically.`);
+    return 0;
+  }
+
+  alog('');
+  alog(`${A.B}◆ linear-grab audit${A.R} ${A.D}v${VERSION}${A.R}`);
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+  alog(`  url      ${A.C}${url}${A.R}`);
+  alog(`  routes   ${A.C}${routes.length}${A.R} ${A.D}${routes.join(', ')}${A.R}`);
+  alog(`  themes   ${A.C}${themes.join(', ')}${A.R}`);
+  alog(`  browser  ${A.C}${bin}${A.R}`);
+  if (persistentProfile) alog(`  profile  ${A.C}${persistentProfile}${A.R} ${A.D}(signed-in session)${A.R}`);
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+
+  const tmp = persistentProfile ?? mkdtempSync(join(tmpdir(), 'lg-audit-'));
+  let child = null;
+  let ws = null;
+  const cleanup = () => {
+    try {
+      if (child && !child.killed) {
+        child.kill('SIGTERM');
+        const c = child;
+        setTimeout(() => {
+          try {
+            c.kill('SIGKILL');
+          } catch {
+            /* gone */
+          }
+        }, 2000).unref?.();
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      // Ephemeral profiles only — a signed-in persistent profile is the
+      // user's saved session and must survive the run.
+      if (!persistentProfile) rmSync(tmp, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  };
+  const onSigint = () => {
+    cleanup();
+    process.exit(130);
+  };
+  process.on('SIGINT', onSigint);
+
+  /** @type {Array<any>} */
+  const allFindings = [];
+  const failedRoutes = [];
+
+  try {
+    // A reused profile keeps the previous run's DevToolsActivePort — remove
+    // it so waitForEndpoint can't connect to a dead port.
+    try {
+      rmSync(join(tmp, 'DevToolsActivePort'), { force: true });
+    } catch {
+      /* fresh profile */
+    }
+    child = spawn(
+      bin,
+      [
+        '--headless=new',
+        '--remote-debugging-port=0',
+        `--user-data-dir=${tmp}`,
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-extensions',
+        '--hide-scrollbars',
+        'about:blank',
+      ],
+      { stdio: 'ignore' },
+    );
+    child.on('error', (e) => die(`failed to launch browser: ${e.message}`));
+
+    const endpoint = await waitForEndpoint(tmp);
+    ws = new WebSocket(endpoint);
+    await new Promise((resolve, reject) => {
+      ws.addEventListener('open', resolve, { once: true });
+      ws.addEventListener('error', () => reject(new Error('WebSocket error')), { once: true });
+    });
+    const cdp = makeCdp(ws);
+
+    // One reusable page target for the whole sweep.
+    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+    await cdp.send('Page.enable', {}, sessionId);
+    await cdp.send('Runtime.enable', {}, sessionId);
+    await cdp.send(
+      'Emulation.setDeviceMetricsOverride',
+      { width: vw, height: vh, deviceScaleFactor: 1, mobile: false },
+      sessionId,
+    );
+
+    for (const route of routes) {
+      const target = url + route;
+      // Collect per-theme findings so we can dedupe across the two themes.
+      /** @type {Map<string, any>} */
+      const routeMap = new Map();
+
+      for (const theme of themes) {
+        const started = Date.now();
+        await cdp.send(
+          'Emulation.setEmulatedMedia',
+          { features: [{ name: 'prefers-color-scheme', value: theme }] },
+          sessionId,
+        );
+
+        const loaded = cdp.once('Page.loadEventFired', sessionId, pageTimeout).then(
+          () => true,
+          () => false,
+        );
+        await cdp.send('Page.navigate', { url: target }, sessionId);
+        if (!(await loaded)) {
+          failedRoutes.push({ route, theme, reason: `load timeout (>${pageTimeout}ms)` });
+          alog(`  ${A.Rd}✗${A.R} ${padRoute(route)} ${padTheme(theme)} ${A.D}load timeout${A.R}`);
+          continue;
+        }
+        await new Promise((r) => setTimeout(r, settleMs));
+
+        // Inject the scan bundle.
+        const inj = await cdp.send(
+          'Runtime.evaluate',
+          { expression: BUNDLE_SOURCE, returnByValue: false },
+          sessionId,
+        );
+        if (inj.exceptionDetails) {
+          const reason = inj.exceptionDetails.exception?.description ?? 'inject failed';
+          failedRoutes.push({ route, theme, reason });
+          alog(`  ${A.Rd}✗${A.R} ${padRoute(route)} ${padTheme(theme)} ${A.D}${reason.slice(0, 60)}${A.R}`);
+          continue;
+        }
+
+        // Lazy content mounts on scroll (marketing sections, consent banners,
+        // virtualized lists) — sweep to the bottom and back so the DOM we
+        // grade is the DOM users actually see, not a timing accident.
+        await cdp.send(
+          'Runtime.evaluate',
+          {
+            expression: `(async () => {
+              const d = document.scrollingElement || document.documentElement;
+              const step = Math.max(400, innerHeight * 0.8);
+              for (let y = 0; y < d.scrollHeight && y < 20000; y += step) {
+                scrollTo(0, y);
+                await new Promise((r) => setTimeout(r, 120));
+              }
+              scrollTo(0, 0);
+              await new Promise((r) => setTimeout(r, 400));
+            })()`,
+            awaitPromise: true,
+            returnByValue: false,
+          },
+          sessionId,
+        );
+
+        // Run it — until two consecutive scans agree. Dynamic pages settle
+        // over a second or two; a single-shot scan makes the baseline flaky
+        // ("9 new findings" on an unchanged page = the gate crying wolf).
+        let findings = null;
+        let scanFailed = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const evalRes = await cdp.send(
+            'Runtime.evaluate',
+            { expression: '__SLOP_SCAN__.run()', returnByValue: true },
+            sessionId,
+          );
+          if (evalRes.exceptionDetails) {
+            scanFailed = evalRes.exceptionDetails.exception?.description ?? 'scan threw';
+            break;
+          }
+          const next = Array.isArray(evalRes.result?.value) ? evalRes.result.value : [];
+          if (findings && next.length === findings.length) {
+            findings = next;
+            break;
+          }
+          findings = next;
+          await new Promise((r) => setTimeout(r, 600));
+        }
+        if (scanFailed) {
+          failedRoutes.push({ route, theme, reason: scanFailed });
+          alog(`  ${A.Rd}✗${A.R} ${padRoute(route)} ${padTheme(theme)} ${A.D}${scanFailed.slice(0, 60)}${A.R}`);
+          continue;
+        }
+        findings ??= [];
+
+        // Dedupe across themes within this route.
+        for (const f of findings) {
+          const key = `${f.ruleId}|${f.selector}|${f.evidence}`;
+          const existing = routeMap.get(key);
+          if (existing) {
+            if (!existing.themes.includes(theme)) existing.themes.push(theme);
+          } else {
+            routeMap.set(key, { ...f, route, themes: [theme] });
+          }
+        }
+
+        const errs = findings.filter((f) => f.severity === 'error').length;
+        const warns = findings.filter((f) => f.severity === 'warn').length;
+        alog(
+          `  ${A.G}✓${A.R} ${padRoute(route)} ${padTheme(theme)} ` +
+            `${String(errs).padStart(4)} ${A.D}errors${A.R}  ${String(warns).padStart(3)} ${A.D}warns${A.R} ` +
+            `${A.D}${Date.now() - started}ms${A.R}`,
+        );
+      }
+      for (const f of routeMap.values()) allFindings.push(f);
+    }
+  } finally {
+    try {
+      ws?.close();
+    } catch {
+      /* ignore */
+    }
+    process.off('SIGINT', onSigint);
+    cleanup();
+  }
+
+  // ---- baseline ------------------------------------------------------------
+  const bkey = (f) => `${f.ruleId}|${f.route}|${f.selector}`;
+  const currentKeys = [...new Set(allFindings.map(bkey))];
+
+  bootstrapAuditDir(auditDir);
+
+  if (updateBaseline) {
+    writeFileSync(
+      baselinePath,
+      JSON.stringify({ createdAt: new Date().toISOString(), keys: currentKeys }, null, 2),
+    );
+    alog('');
+    alog(`${A.G}✓${A.R} baseline updated — ${A.B}${currentKeys.length}${A.R} keys recorded`);
+    alog(`  ${A.D}${baselinePath}${A.R}`);
+    // Still write the report + ndjson so the artifacts stay in sync.
+    for (const f of allFindings) f.isNew = false;
+    writeReportAndNdjson(allFindings, {
+      url,
+      routes,
+      themes,
+      outPath,
+      ndjsonPath,
+      newCount: 0,
+    });
+    return 0;
+  }
+
+  let baselineKeys = null;
+  let hasBaseline = false;
+  try {
+    baselineKeys = new Set(JSON.parse(readFileSync(baselinePath, 'utf8')).keys ?? []);
+    hasBaseline = true;
+  } catch {
+    /* no baseline yet */
+  }
+
+  for (const f of allFindings) f.isNew = hasBaseline ? !baselineKeys.has(bkey(f)) : true;
+  const newFindings = allFindings.filter((f) => f.isNew);
+
+  // ---- write artifacts -----------------------------------------------------
+  const totalErr = allFindings.filter((f) => f.severity === 'error').length;
+  const totalWarn = allFindings.filter((f) => f.severity === 'warn').length;
+  writeReportAndNdjson(allFindings, {
+    url,
+    routes,
+    themes,
+    outPath,
+    ndjsonPath,
+    newCount: newFindings.length,
+  });
+
+  // ---- exit decision -------------------------------------------------------
+  const gate =
+    failOn === 'none'
+      ? []
+      : failOn === 'warn'
+        ? newFindings.filter((f) => f.severity === 'error' || f.severity === 'warn')
+        : newFindings.filter((f) => f.severity === 'error');
+  const willFail = gate.length > 0;
+
+  alog('');
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+  alog(
+    `  ${A.B}totals${A.R}  ${totalErr} errors  ${totalWarn} warns  ` +
+      `across ${routes.length} route(s) × ${themes.length} theme(s)`,
+  );
+  if (failedRoutes.length) {
+    alog(`  ${A.Y}${failedRoutes.length} route-theme sweep(s) failed${A.R} ${A.D}(see ✗ above)${A.R}`);
+  }
+  if (!hasBaseline) {
+    alog(
+      `  ${A.Y}no baseline${A.R} — all ${newFindings.length} findings count as NEW. ` +
+        `Run ${A.C}--update-baseline${A.R} to create the ratchet.`,
+    );
+  } else {
+    alog(`  ${A.B}new vs baseline${A.R}  ${newFindings.length} findings`);
+  }
+  alog(`  report  ${A.C}${outPath}${A.R}`);
+  if (willFail) {
+    alog(
+      `  ${A.Rd}${A.B}FAIL${A.R} — ${gate.length} new ${failOn === 'warn' ? 'error/warn' : 'error'}-severity finding(s) (fail-on=${failOn})`,
+    );
+  } else {
+    alog(`  ${A.G}${A.B}PASS${A.R} — 0 new findings at/above fail-on=${failOn}`);
+  }
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+  return willFail ? 1 : 0;
+}
+
+const padRoute = (r) => r.slice(0, 24).padEnd(24);
+const padTheme = (t) => t.padEnd(5);
+
+/** Bootstrap the .lineargrab dir + self-gitignore (mirrors /scan/events). */
+function bootstrapAuditDir(dir) {
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, '.gitignore'), '*\n', { flag: 'wx' });
+  } catch {
+    /* exists */
+  }
+}
+
+/** Append audit findings to scan.ndjson with the same rotation as telemetry. */
+function appendNdjson(file, findings) {
+  const lines =
+    findings
+      .slice(0, 5000)
+      .map((f) =>
+        JSON.stringify({
+          kind: 'slop-scan',
+          mode: 'headless',
+          route: f.route,
+          themes: f.themes,
+          at: Date.now(),
+          ruleId: f.ruleId,
+          part: f.part,
+          severity: f.severity,
+          description: f.description,
+          selector: f.selector,
+          evidence: f.evidence,
+          isNew: !!f.isNew,
+        }),
+      )
+      .join('\n') + '\n';
+  try {
+    appendFileSync(file, lines);
+    const size = statSync(file).size;
+    if (size > 2_000_000) {
+      const keep = readFileSync(file, 'utf8');
+      writeFileSync(file, keep.slice(Math.floor(keep.length / 2)).replace(/^[^\n]*\n/, ''));
+    }
+  } catch {
+    /* disk issues — never fail the audit on telemetry */
+  }
+}
+
+/** Write the markdown report + append NDJSON events. */
+function writeReportAndNdjson(findings, { url, routes, themes, outPath, ndjsonPath, newCount }) {
+  const totalErr = findings.filter((f) => f.severity === 'error').length;
+  const totalWarn = findings.filter((f) => f.severity === 'warn').length;
+
+  const lines = [
+    '# Design slop-scan report',
+    '',
+    `- **url**: ${url}`,
+    `- **routes**: ${routes.length} (${routes.join(', ')})`,
+    `- **themes**: ${themes.join(', ')}`,
+    `- **totals**: ${totalErr} errors / ${totalWarn} warns`,
+    `- **new vs baseline**: ${newCount}`,
+    `- **generated**: ${new Date().toISOString()}`,
+    '',
+  ];
+
+  // Group by route → rule. Errors first, then by count desc.
+  const byRoute = new Map();
+  for (const f of findings) {
+    if (!byRoute.has(f.route)) byRoute.set(f.route, []);
+    byRoute.get(f.route).push(f);
+  }
+  for (const route of routes) {
+    const rf = byRoute.get(route);
+    if (!rf || !rf.length) continue;
+    lines.push(`## ${route}`, '');
+    const byRule = new Map();
+    for (const f of rf) {
+      if (!byRule.has(f.ruleId)) byRule.set(f.ruleId, []);
+      byRule.get(f.ruleId).push(f);
+    }
+    const rules = [...byRule.entries()].sort((a, b) => {
+      const sev = (list) => (list.some((x) => x.severity === 'error') ? 0 : 1);
+      return sev(a[1]) - sev(b[1]) || b[1].length - a[1].length;
+    });
+    for (const [ruleId, list] of rules) {
+      const head = list[0];
+      const sevBadge = head.severity === 'error' ? 'error' : 'warn';
+      lines.push(
+        `### ${ruleId} \`(${sevBadge})\`${head.part ? ` §${head.part}` : ''}`,
+        head.description ? `${head.description}` : '',
+        '',
+      );
+      for (const f of list) {
+        lines.push(
+          `- \`${f.selector}\` — ${f.evidence} [${f.themes.join('/')}]${f.isNew ? ' **NEW**' : ''}`,
+        );
+      }
+      lines.push('');
+    }
+  }
+
+  try {
+    mkdirSync(join(outPath, '..'), { recursive: true });
+  } catch {
+    /* ignore */
+  }
+  writeFileSync(outPath, lines.join('\n'));
+  appendNdjson(ndjsonPath, findings);
+}
+
+// Dispatch audit LAST — every const/fn above is now initialized, so no TDZ.
+if (AUDIT_MODE) {
+  const code = await runAudit();
+  process.exit(code);
+}

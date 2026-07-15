@@ -24,8 +24,16 @@ import {
   subscribeCssWatchEnabled,
   type CssSlowdownFinding,
 } from '@/lib/cssSlowdown';
-import { formatSlopReport, runSlopScan, slopScanPrompt, type SlopFinding } from '@/lib/slopScan';
-import { bridgeBase } from '@/lib/bridge';
+import { formatSlopReport, slopScanPrompt } from '@/lib/slopScan';
+import {
+  clearSlopFindings,
+  scanCurrentPage,
+  setSlopLiveEnabled,
+  slopLiveEnabled,
+  subscribeSlopFindings,
+  subscribeSlopLive,
+  type PageSlopFinding,
+} from '@/lib/slopScanStore';
 
 interface SavedGenome {
   id: number;
@@ -54,12 +62,8 @@ function persist(list: SavedGenome[]): void {
     just-extracted genome without re-picking. Reload → re-pick. */
 const liveEls = new Map<number, WeakRef<Element>>();
 
-/** Last slop scan survives panel close/reopen (the panel unmounts when
-    hidden) — per-tab memory only, per spec: no storage. */
-let lastSlopScan: SlopFinding[] = [];
-
 /** Reveal a finding on the page: scroll to it and pulse an outline. */
-function flashFinding(f: SlopFinding): boolean {
+function flashFinding(f: PageSlopFinding): boolean {
   const el = f.el?.deref();
   if (!(el instanceof HTMLElement) || !el.isConnected) return false;
   el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -74,29 +78,6 @@ function flashFinding(f: SlopFinding): boolean {
   return true;
 }
 
-/** Findings ride the same scan log agents already read (kind "slop-scan"). */
-function pushSlopToBridge(list: SlopFinding[]): void {
-  if (list.length === 0) return;
-  const at = Date.now();
-  const events = list.slice(0, 200).map(({ el: _el, ...f }) => ({
-    kind: 'slop-scan',
-    page: location.pathname,
-    at,
-    ...f,
-  }));
-  void bridgeBase()
-    .then((base) =>
-      fetch(`${base}/scan/events`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ events }),
-        keepalive: true,
-      }),
-    )
-    .catch(() => {
-      /* bridge offline — panel list still has it */
-    });
-}
 
 export default function DesignView() {
   const [saved, setSaved] = createSignal<SavedGenome[]>(loadSaved());
@@ -142,7 +123,10 @@ export default function DesignView() {
   };
 
   // ---- Slop scan (design-contract drift) ----------------------------------
-  const [slop, setSlop] = createSignal<SlopFinding[]>(lastSlopScan);
+  const [slop, setSlop] = createSignal<PageSlopFinding[]>([]);
+  onCleanup(subscribeSlopFindings(setSlop));
+  const [slopLive, setSlopLive] = createSignal(slopLiveEnabled());
+  onCleanup(subscribeSlopLive(setSlopLive));
   const [slopBusy, setSlopBusy] = createSignal(false);
   const [slopRule, setSlopRule] = createSignal<string | null>(null);
   const [showErrors, setShowErrors] = createSignal(true);
@@ -154,11 +138,8 @@ export default function DesignView() {
     setError(null);
     setSlopBusy(true);
     try {
-      const found = runSlopScan(document);
-      lastSlopScan = found;
-      setSlop(found);
+      scanCurrentPage();
       setSlopRule(null);
-      pushSlopToBridge(found);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -166,15 +147,15 @@ export default function DesignView() {
     }
   };
   const clearSlop = () => {
-    lastSlopScan = [];
-    setSlop([]);
+    clearSlopFindings();
     setSlopRule(null);
   };
+  const slopPages = () => new Set(slop().map((f) => f.page)).size;
   const slopVisible = () =>
     slop().filter((f) => (f.severity === 'error' ? showErrors() : showWarns()));
   /** Findings grouped per rule, errors first, biggest groups first. */
   const slopGroups = () => {
-    const map = new Map<string, SlopFinding[]>();
+    const map = new Map<string, PageSlopFinding[]>();
     for (const f of slopVisible()) {
       const list = map.get(f.ruleId);
       if (list) list.push(f);
@@ -683,20 +664,57 @@ export default function DesignView() {
       <div class="border-border mt-1 flex flex-col gap-2 border-t pt-3">
         <div class="flex items-center justify-between gap-2 px-1">
           <div class="min-w-0">
-            <p class="text-text text-[12.5px] font-semibold">Slop scan</p>
+            <p class="text-text text-[12.5px] font-semibold">
+              Slop scan
+              <Show when={slopPages() > 1}>
+                <span class="text-text-faint font-normal tabular-nums"> · {slopPages()} pages</span>
+              </Show>
+            </p>
             <p class="text-text-faint text-[10.5px] leading-snug">
               Design-contract drift — Linear-primitives rules checked against
-              the live DOM. Open menus/popovers first to include them.
+              the live DOM. Results accumulate per page as you navigate;
+              re-scanning a page overwrites only that page's findings.
             </p>
           </div>
-          <Button
-            variant="ghost"
-            class="h-7 shrink-0 px-2.5 text-[11.5px]"
-            loading={slopBusy()}
-            onClick={runScan}
-          >
-            <span class="inline-block min-w-[4ch] text-center">Scan</span>
-          </Button>
+          <div class="flex shrink-0 items-center gap-1">
+            <Button
+              class="size-7 px-0"
+              variant="ghost"
+              title={
+                slopLive()
+                  ? 'Live scan ON — re-scans automatically ~1s after each route change. Click to pause.'
+                  : 'Live scan PAUSED — click to auto-scan every page you navigate to.'
+              }
+              aria-label={slopLive() ? 'Pause live scan' : 'Start live scan'}
+              onClick={() => setSlopLiveEnabled(!slopLive())}
+            >
+              <Show
+                when={slopLive()}
+                fallback={
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                    <path d="M4.5 2.5v11l9-5.5z" />
+                  </svg>
+                }
+              >
+                <span class="relative inline-flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                    <rect x="3.5" y="3" width="3.2" height="10" rx="1" />
+                    <rect x="9.3" y="3" width="3.2" height="10" rx="1" />
+                  </svg>
+                  <span class="bg-success absolute -top-0.5 -right-0.5 size-1.5 animate-pulse rounded-full" aria-hidden />
+                </span>
+              </Show>
+            </Button>
+            <Button
+              variant="ghost"
+              class="h-7 px-2.5 text-[11.5px]"
+              loading={slopBusy()}
+              title="Scan this page — cumulative: keeps other pages' findings, replaces this page's"
+              onClick={runScan}
+            >
+              <span class="inline-block min-w-[4ch] text-center">Scan</span>
+            </Button>
+          </div>
         </div>
         <Show
           when={slop().length > 0}
@@ -778,10 +796,18 @@ export default function DesignView() {
                               class="hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded px-1 py-0.5 text-left"
                               title="Reveal on the page"
                               onClick={() => {
-                                if (!flashFinding(f)) setError('Element is gone — run Scan again.');
+                                if (flashFinding(f)) return;
+                                setError(
+                                  f.page !== location.pathname
+                                    ? `This finding is on ${f.page} — navigate there to reveal it.`
+                                    : 'Element is gone — run Scan again.',
+                                );
                               }}
                             >
                               <span class="text-text min-w-0 truncate font-mono text-[10.5px]">
+                                <Show when={slopPages() > 1}>
+                                  <span class="text-accent">{f.page} </span>
+                                </Show>
                                 {f.selector}
                               </span>
                               <span class="text-text-faint font-mono text-[10px] leading-snug break-all">

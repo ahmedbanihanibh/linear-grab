@@ -44,6 +44,9 @@ export interface SlopFinding {
   selector: string;
   /** The offending computed value / class — what to look at. */
   evidence: string;
+  /** Pathname the finding was recorded on — set by the panel store when scans
+      accumulate across pages; the engine itself leaves it unset. */
+  page?: string;
   /** Weak handle for click-to-highlight in the panel (no retention pressure). */
   el?: WeakRef<Element>;
 }
@@ -1076,13 +1079,14 @@ export function formatSlopReport(findings: SlopFinding[]): string {
 
   const total = findings.length;
   const errors = findings.filter((f) => f.severity === 'error').length;
+  const multiPage = new Set(findings.map((f) => f.page).filter(Boolean)).size > 1;
   const lines = [`# Slop scan — ${errors} error${errors === 1 ? '' : 's'}, ${total - errors} warn (${total} total)`, ''];
   for (const [ruleId, group] of ordered) {
     const f0 = group[0];
     lines.push(`## ${ruleId} — ${f0.severity} ×${group.length} [${f0.part}]`);
     lines.push(f0.description);
     for (const f of group) {
-      lines.push(`- \`${f.selector}\` — ${f.evidence}`);
+      lines.push(`- ${multiPage && f.page ? `\`${f.page}\` ` : ''}\`${f.selector}\` — ${f.evidence}`);
     }
     lines.push('');
   }
