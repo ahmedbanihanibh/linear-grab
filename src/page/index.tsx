@@ -190,7 +190,9 @@ function PagePanel(props: { defaultOpen: boolean }) {
   createEffect(() => {
     const html = document.documentElement;
     const active = open() && pinned();
-    html.style.transition = 'margin 0.2s ease';
+    // NO transition — margin on <html> is a full-page reflow every frame
+    // (§42 of the design contract this tool audits; it was flagging its
+    // own dock in every scan). The squeeze snaps: one reflow, zero jank.
     html.style.marginRight = active && side() === 'right' ? `${panelWidth()}px` : '';
     html.style.marginLeft = active && side() === 'left' ? `${panelWidth()}px` : '';
   });
