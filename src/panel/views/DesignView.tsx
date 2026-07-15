@@ -808,8 +808,14 @@ export default function DesignView() {
                                 <Show when={slopPages() > 1}>
                                   <span class="text-accent">{f.page} </span>
                                 </Show>
+                                <Show when={f.component}>
+                                  <span class="text-accent">{f.component} </span>
+                                </Show>
                                 {f.selector}
                               </span>
+                              <Show when={f.source}>
+                                <span class="text-text-dim font-mono text-[10px] break-all">{f.source}</span>
+                              </Show>
                               <span class="text-text-faint font-mono text-[10px] leading-snug break-all">
                                 {f.evidence}
                               </span>

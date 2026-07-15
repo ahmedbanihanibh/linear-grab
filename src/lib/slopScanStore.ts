@@ -38,14 +38,70 @@ export function clearSlopFindings(): void {
   for (const cb of subs) cb(findings);
 }
 
-/** Scan the current page; replace this page's findings, keep other pages'. */
+/** Scan the current page; replace this page's findings, keep other pages'.
+    Attribution (Component @ file:line via react-grab's fiber source) runs
+    asynchronously after the sync scan — the list paints immediately and the
+    sources fill in; the bridge push waits for them so agents get locators. */
 export function scanCurrentPage(): PageSlopFinding[] {
   const page = location.pathname;
   const fresh = runSlopScan(document).map((f) => ({ ...f, page }));
   findings = [...fresh, ...findings.filter((f) => f.page !== page)];
   for (const cb of subs) cb(findings);
-  pushToBridge(fresh);
+  void attributeFindings(fresh).then(() => {
+    findings = [...findings];
+    for (const cb of subs) cb(findings);
+    pushToBridge(fresh);
+  });
   return fresh;
+}
+
+type GrabApi = {
+  getDisplayName?: (el: Element) => string | null;
+  getSource?: (el: Element) => Promise<{ filePath?: string | null; lineNumber?: number | null } | null>;
+};
+
+/** Fill component/source in place. One lookup per unique ELEMENT (many
+    findings share one element), capped so a 1000-finding page can't stall. */
+async function attributeFindings(list: PageSlopFinding[]): Promise<void> {
+  let api: GrabApi | null = null;
+  try {
+    const rg = await import('react-grab');
+    api = (rg.getGlobalApi() as GrabApi | null) ?? null;
+  } catch {
+    return; // react-grab unavailable — findings stay selector-only
+  }
+  if (!api) return;
+
+  const byEl = new Map<Element, PageSlopFinding[]>();
+  for (const f of list) {
+    const el = f.el?.deref();
+    if (!el) continue;
+    const group = byEl.get(el);
+    if (group) group.push(f);
+    else byEl.set(el, [f]);
+  }
+  let budget = 300; // unique-element lookups per scan
+  for (const [el, group] of byEl) {
+    if (budget-- <= 0) break;
+    let component: string | null = null;
+    let source: string | null = null;
+    try {
+      component = api.getDisplayName?.(el) ?? null;
+    } catch {
+      /* fiber walk mid-render */
+    }
+    try {
+      const s = await api.getSource?.(el);
+      if (s?.filePath) source = `${s.filePath}${s.lineNumber != null ? `:${s.lineNumber}` : ''}`;
+    } catch {
+      /* no debug source in prod builds */
+    }
+    if (!component && !source) continue;
+    for (const f of group) {
+      f.component = component;
+      f.source = source;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

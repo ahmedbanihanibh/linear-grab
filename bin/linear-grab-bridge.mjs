@@ -37,7 +37,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.25.0';
+const VERSION = '0.25.1';
 
 // ---- audit subcommand dispatch ---------------------------------------------
 // `npx linear-grab-bridge audit` is a headless design gate — it sweeps a
@@ -1366,7 +1366,15 @@ async function runAudit() {
         for (let attempt = 0; attempt < 3; attempt++) {
           const evalRes = await cdp.send(
             'Runtime.evaluate',
-            { expression: '__SLOP_SCAN__.run()', returnByValue: true },
+            {
+              // Attributed run resolves Component @ file:line via the page's
+              // own react-grab (loaded by linear-grab's script tag); falls
+              // back to the sync scan on older bundles.
+              expression:
+                '__SLOP_SCAN__.runAttributed ? __SLOP_SCAN__.runAttributed() : __SLOP_SCAN__.run()',
+              awaitPromise: true,
+              returnByValue: true,
+            },
             sessionId,
           );
           if (evalRes.exceptionDetails) {
@@ -1539,6 +1547,8 @@ function appendNdjson(file, findings) {
           description: f.description,
           selector: f.selector,
           evidence: f.evidence,
+          component: f.component ?? null,
+          source: f.source ?? null,
           isNew: !!f.isNew,
         }),
       )
@@ -1600,8 +1610,9 @@ function writeReportAndNdjson(findings, { url, routes, themes, outPath, ndjsonPa
         '',
       );
       for (const f of list) {
+        const where = f.component || f.source ? ` — ${[f.component, f.source].filter(Boolean).join(' @ ')}` : '';
         lines.push(
-          `- \`${f.selector}\` — ${f.evidence} [${f.themes.join('/')}]${f.isNew ? ' **NEW**' : ''}`,
+          `- \`${f.selector}\` — ${f.evidence}${where} [${f.themes.join('/')}]${f.isNew ? ' **NEW**' : ''}`,
         );
       }
       lines.push('');

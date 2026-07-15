@@ -47,6 +47,11 @@ export interface SlopFinding {
   /** Pathname the finding was recorded on — set by the panel store when scans
       accumulate across pages; the engine itself leaves it unset. */
   page?: string;
+  /** React component display name — attributed AFTER the scan (react-grab
+      fiber walk); the pure engine leaves these unset. */
+  component?: string | null;
+  /** file:line of the component (react-grab debug source). */
+  source?: string | null;
   /** Weak handle for click-to-highlight in the panel (no retention pressure). */
   el?: WeakRef<Element>;
 }
@@ -1086,7 +1091,8 @@ export function formatSlopReport(findings: SlopFinding[]): string {
     lines.push(`## ${ruleId} — ${f0.severity} ×${group.length} [${f0.part}]`);
     lines.push(f0.description);
     for (const f of group) {
-      lines.push(`- ${multiPage && f.page ? `\`${f.page}\` ` : ''}\`${f.selector}\` — ${f.evidence}`);
+      const where = f.component || f.source ? ` — ${[f.component, f.source].filter(Boolean).join(' @ ')}` : '';
+      lines.push(`- ${multiPage && f.page ? `\`${f.page}\` ` : ''}\`${f.selector}\` — ${f.evidence}${where}`);
     }
     lines.push('');
   }
@@ -1120,7 +1126,10 @@ export function slopScanPrompt(findings: SlopFinding[]): string {
     '   The scan already excludes them; do not "fix" them.',
     "5. 'unverifiable' warnings mean the token collapsed to the anti-pattern this",
     '   theme — verify the intent in BOTH themes, do not just silence it.',
-    '6. PROOF REQUIRED: after the change I will re-run the scan — it must show 0',
+    '6. Findings carry `Component @ file:line` when the fiber source resolved.',
+    '   When one file:line repeats across many components it is the nearest-',
+    '   debug-fiber fallback — locate the real code by the selector classes.',
+    '7. PROOF REQUIRED: after the change I will re-run the scan — it must show 0',
     '   errors. State what you changed per token/variant; do not claim done blind.',
     '',
     '---',
