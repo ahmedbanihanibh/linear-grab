@@ -359,3 +359,22 @@ describe('formatRenderReport + renderScanPrompt', () => {
     expect(prompt).toContain('SUSPECTED');
   });
 });
+
+describe('framework-noise filter', () => {
+  it('ignores Next.js internals but keeps app components, and honors opts.ignore', () => {
+    const mk = (name: string) =>
+      Array.from({ length: 6 }, () =>
+        commit({ entries: [entry({ name, phase: 'update', changes: [] })] }),
+      );
+    // HotReload (built-in noise) and MyWidget (app) both re-render 6× wasted.
+    const commits = [...mk('HotReload'), ...mk('MyWidget'), ...mk('LegacyThing')];
+    const withDefault = analyzeCommits(commits, FALLBACK_RULEBOOK);
+    expect(withDefault.some((f) => f.component === 'HotReload')).toBe(false);
+    expect(withDefault.some((f) => f.component === 'MyWidget')).toBe(true);
+    expect(withDefault.some((f) => f.component === 'LegacyThing')).toBe(true);
+    // opts.ignore silences an app component by exact name or regex.
+    const withIgnore = analyzeCommits(commits, FALLBACK_RULEBOOK, { ignore: ['^Legacy'] });
+    expect(withIgnore.some((f) => f.component === 'LegacyThing')).toBe(false);
+    expect(withIgnore.some((f) => f.component === 'MyWidget')).toBe(true);
+  });
+});

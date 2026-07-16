@@ -104,7 +104,7 @@ export async function stopRenderRecording(): Promise<PageRenderFinding[]> {
   for (const cb of recSubs) cb(false, null);
   const rulebook = await getRenderRulebook();
   const page = location.pathname;
-  const fresh = analyzeCommits(commits, rulebook).map((f) => ({ ...f, page }));
+  const fresh = analyzeCommits(commits, rulebook, { ignore: await getRenderIgnore() }).map((f) => ({ ...f, page }));
   return accumulate(fresh, page);
 }
 
@@ -186,7 +186,7 @@ async function liveTick(finalPush: boolean): Promise<void> {
       liveCommits.splice(0, liveCommits.length - LIVE_MAX_COMMITS);
     }
     const rulebook = await getRenderRulebook();
-    const fresh = analyzeCommits(liveCommits, rulebook).map((f) => ({ ...f, page }));
+    const fresh = analyzeCommits(liveCommits, rulebook, { ignore: await getRenderIgnore() }).map((f) => ({ ...f, page }));
     findings = [...fresh, ...findings.filter((f) => f.page !== page)];
     for (const cb of subs) cb(findings);
     if (finalPush) {
@@ -257,6 +257,18 @@ export async function getRenderRulebook(): Promise<RenderRulebook> {
     have it, without awaiting — the group header degrades to the bare id else. */
 export function peekRenderRulebook(): RenderRulebook | null {
   return cachedRulebook;
+}
+
+/** Extra component-name ignores from `.lineargrab.json` `renderIgnore` (exact
+    names or regex strings) — merged with the engine's built-in framework-noise
+    list inside analyzeCommits. */
+async function getRenderIgnore(): Promise<string[] | undefined> {
+  try {
+    const s = await getSettings();
+    return Array.isArray(s.renderIgnore) ? s.renderIgnore : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Overlay .lineargrab.json's `renderBudgets` onto the parsed budgets. Read

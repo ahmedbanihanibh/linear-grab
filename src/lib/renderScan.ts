@@ -73,6 +73,40 @@ function sevOf(rulebook: RenderRulebook, id: string, fallback: 'error' | 'warn')
   return rulebook.rules[id]?.severity ?? fallback;
 }
 
+/**
+ * Framework-internal component names that are NOT the app's to fix — Next.js
+ * dev-mode machinery (HotReload), app-router segment plumbing, and error/
+ * loading boundaries. They re-render by design on every navigation and would
+ * otherwise dominate reports and keep the headless baseline from converging.
+ * Apps can extend the list via `.lineargrab.json` `renderIgnore` (exact names
+ * or regex strings).
+ */
+const FRAMEWORK_NOISE =
+  /^(HotReload|Head|AppRouterAnnouncer|HistoryUpdater|AppRouter|Router|ServerRoot|SegmentViewNode|SegmentViewStateNode|SegmentStateProvider|InnerLayoutRouter|OuterLayoutRouter|TemplateContext|RenderFromTemplateContext|ScrollAndFocusHandler|RedirectBoundary|RedirectErrorBoundary|LoadingBoundary|ErrorBoundary|ErrorBoundaryHandler|HTTPAccessFallbackBoundary|HTTPAccessFallbackErrorBoundary|DevRootHTTPAccessFallbackBoundary|__next_root_layout_boundary__|Preloads|NonIndex|ReplaySsrOnlyErrors|AppDevOverlay\w*|DevOverlay\w*|PseudoHtml\w*)$/;
+
+/** Compile the caller's extra ignore names (exact strings or regex sources)
+    into predicates; a bad regex source falls back to exact-match. */
+function compileIgnore(ignore?: string[]): Array<(name: string) => boolean> {
+  if (!ignore?.length) return [];
+  return ignore.map((raw) => {
+    try {
+      const re = new RegExp(raw);
+      return (name: string) => re.test(name);
+    } catch {
+      return (name: string) => name === raw;
+    }
+  });
+}
+
+function isIgnoredName(name: string, extra: Array<(n: string) => boolean>): boolean {
+  // ≤2-char names are minified library internals (`tl`, `qs`) — nothing an app
+  // owner can act on, and they churn per bundle rebuild.
+  if (name.length <= 2) return true;
+  if (FRAMEWORK_NOISE.test(name)) return true;
+  for (const p of extra) if (p(name)) return true;
+  return false;
+}
+
 /** A component's aggregated update renders across the whole recording. */
 interface CompAgg {
   name: string;
@@ -105,9 +139,24 @@ function aggregateComponents(commits: CommitRecord[]): Map<string, CompAgg> {
 // analyzeCommits — the runtime heuristics (rules 1–8)
 // ---------------------------------------------------------------------------
 
-export function analyzeCommits(commits: CommitRecord[], rulebook: RenderRulebook): RenderFinding[] {
+export function analyzeCommits(
+  commits: CommitRecord[],
+  rulebook: RenderRulebook,
+  opts?: { ignore?: string[] },
+): RenderFinding[] {
   const findings: RenderFinding[] = [];
-  const comps = aggregateComponents(commits);
+
+  // Strip framework-noise entries/mounts BEFORE any per-component rule runs —
+  // commit durations stay untouched (the time was really spent; only the
+  // component-level blame is not the app's to fix).
+  const extra = compileIgnore(opts?.ignore);
+  const filtered: CommitRecord[] = commits.map((c) => ({
+    ...c,
+    entries: c.entries.filter((e) => !isIgnoredName(e.name, extra)),
+    mounts: Object.fromEntries(Object.entries(c.mounts).filter(([n]) => !isIgnoredName(n, extra))),
+  }));
+
+  const comps = aggregateComponents(filtered);
   const budgets = rulebook.budgets;
 
   // 1. wasted-render → R9, shape B: ≥5 update renders, ALL change-sets empty.
@@ -157,7 +206,7 @@ export function analyzeCommits(commits: CommitRecord[], rulebook: RenderRulebook
   runRule(findings, () => {
     const out: RenderFinding[] = [];
     const overlayRe = /Tooltip|Menu|Popover|Context|Dialog|Dropdown/i;
-    for (const commit of commits) {
+    for (const commit of filtered) {
       for (const name of Object.keys(commit.mounts)) {
         const count = commit.mounts[name];
         const threshold = overlayRe.test(name) ? 10 : 15;
@@ -180,7 +229,7 @@ export function analyzeCommits(commits: CommitRecord[], rulebook: RenderRulebook
   //    One per offending commit (identical merge happens at the end).
   runRule(findings, () => {
     const out: RenderFinding[] = [];
-    for (const commit of commits) {
+    for (const commit of filtered) {
       if (commit.duration <= budgets.commitMs) continue;
       const top3 = [...commit.entries]
         .sort((a, b) => b.selfTime - a.selfTime)
@@ -203,7 +252,7 @@ export function analyzeCommits(commits: CommitRecord[], rulebook: RenderRulebook
   runRule(findings, () => {
     const out: RenderFinding[] = [];
     const perComp = new Map<string, { hits: number; worst: number; total: number; el?: WeakRef<Element> }>();
-    for (const commit of commits) {
+    for (const commit of filtered) {
       // Sum self time per component WITHIN a commit (a component may appear once,
       // but be defensive about multiple entries of the same name).
       const inCommit = new Map<string, number>();

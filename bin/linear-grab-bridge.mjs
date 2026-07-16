@@ -37,7 +37,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.26.0';
+const VERSION = '0.27.0';
 
 // ---- audit subcommand dispatch ---------------------------------------------
 // `npx linear-grab-bridge audit` is a headless design gate — it sweeps a
@@ -472,6 +472,39 @@ function sendMessage(task, text) {
   saveHistory();
 }
 
+// ---- shared: rulebook path resolution --------------------------------------
+
+/**
+ * Resolve the render-rulebook markdown path under DIR, honoring the
+ * `.lineargrab.json` key "renderRulebook" (default: React-rerender-primitives.md
+ * in the repo root). Guards against absolute paths and repo-escaping traversal.
+ * Shared by the /scan/rulebook endpoint AND `audit --renders` so the traversal
+ * guard lives in exactly one place.
+ *
+ * @returns {{ ok: true, path: string } | { ok: false, error: string }}
+ */
+function resolveRulebookPath() {
+  let relPath = 'React-rerender-primitives.md';
+  try {
+    const cfg = JSON.parse(readFileSync(join(DIR, '.lineargrab.json'), 'utf8'));
+    if (typeof cfg.renderRulebook === 'string' && cfg.renderRulebook.trim()) {
+      relPath = cfg.renderRulebook.trim();
+    }
+  } catch {
+    /* missing or invalid config — use the default */
+  }
+  // Reject absolute paths supplied in the config value.
+  if (relPath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(relPath)) {
+    return { ok: false, error: 'path outside repo' };
+  }
+  // Reject resolved paths that escape the repo root (traversal guard).
+  const resolved = join(DIR, relPath);
+  if (!resolved.startsWith(DIR + sep) && resolved !== DIR) {
+    return { ok: false, error: 'path outside repo' };
+  }
+  return { ok: true, path: resolved };
+}
+
 // ---- HTTP ------------------------------------------------------------------
 
 const server = createServer(async (req, res) => {
@@ -790,36 +823,18 @@ const server = createServer(async (req, res) => {
       const doc = url.searchParams.get('doc') ?? 'render';
       if (doc !== 'render') return json(res, 200, { ok: false, error: 'unknown doc' });
 
-      // Resolve the rulebook path: .lineargrab.json key "renderRulebook" wins,
-      // else fall back to the canonical filename in the repo root.
-      let relPath = 'React-rerender-primitives.md';
-      try {
-        const cfg = JSON.parse(readFileSync(join(DIR, '.lineargrab.json'), 'utf8'));
-        if (typeof cfg.renderRulebook === 'string' && cfg.renderRulebook.trim()) {
-          relPath = cfg.renderRulebook.trim();
-        }
-      } catch {
-        /* missing or invalid config — use the default */
-      }
-
-      // Reject absolute paths supplied in the config value.
-      if (relPath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(relPath)) {
-        return json(res, 400, { ok: false, error: 'path outside repo' });
-      }
-
-      // Reject resolved paths that escape the repo root (traversal guard).
-      const resolved = join(DIR, relPath);
-      if (!resolved.startsWith(DIR + sep) && resolved !== DIR) {
-        return json(res, 400, { ok: false, error: 'path outside repo' });
-      }
+      // Resolve the rulebook path via the shared helper (traversal guard lives
+      // there — reused by `audit --renders`).
+      const rb = resolveRulebookPath();
+      if (!rb.ok) return json(res, 400, rb);
 
       let text;
       try {
-        text = readFileSync(resolved, 'utf8');
+        text = readFileSync(rb.path, 'utf8');
       } catch {
         return json(res, 200, { ok: false, error: 'not found' });
       }
-      return json(res, 200, { ok: true, text, path: resolved });
+      return json(res, 200, { ok: true, text, path: rb.path });
     }
     // Reset the staging branch: delete + recreate from the default branch.
     if (req.method === 'POST' && url.pathname === '/branch/reset') {
@@ -994,6 +1009,10 @@ if (!AUDIT_MODE)
   console.log(`  ${D}»${R} Check the live render telemetry: read the newest lines of`);
   console.log(`    .lineargrab/scan.ndjson and summarize the slow components.`);
   console.log(`  ${D}»${R} curl -s http://127.0.0.1:${PORT}/scan/report ${D}(aggregated view)${R}`);
+  console.log('');
+  console.log(`${B}headless design + render gates${R} ${D}(CI-able, no server needed)${R}`);
+  console.log(`  ${D}»${R} npx linear-grab-bridge audit --url http://localhost:3000 ${D}(design slop-scan)${R}`);
+  console.log(`  ${D}»${R} npx linear-grab-bridge audit --renders --url http://localhost:3000 ${D}(re-render scan; replays .lineargrab.json scenarios)${R}`);
   console.log(`  ${D}tip: add a line to your repo's AGENTS.md/CLAUDE.md so agents find it`);
   console.log(`  on their own: "Live render telemetry: .lineargrab/scan.ndjson`);
   console.log(`  (react-scan via linear-grab bridge); aggregate: GET /scan/report"${R}`);
@@ -1169,11 +1188,39 @@ async function loadBundleSource() {
   }
 }
 
-/** The audit itself. Returns the process exit code. */
+/** Read the render-scan bundle once: local file next to the bridge, else CDN.
+    Mirrors loadBundleSource for slop-scan.global.js. */
+async function readRenderBundle() {
+  const local = new URL('./render-scan.global.js', import.meta.url);
+  try {
+    return readFileSync(local, 'utf8');
+  } catch {
+    /* fall through to CDN */
+  }
+  try {
+    const res = await fetch('https://cdn.jsdelivr.net/npm/linear-grab@latest/dist/render-scan.global.js');
+    if (!res.ok) throw new Error(`CDN ${res.status}`);
+    return await res.text();
+  } catch (e) {
+    die(
+      `could not load the render-scan bundle. Looked for ${local.pathname} and the jsDelivr CDN fallback (${e instanceof Error ? e.message : e}).`,
+    );
+  }
+}
+
+/** The audit itself. Returns the process exit code. `audit --renders` forks to
+    the render-telemetry auditor (scripted interactions + React commit grading);
+    everything else runs the design slop-scan sweep below. */
 async function runAudit() {
   if (typeof WebSocket === 'undefined') {
     die(`audit needs Node 22+ (built-in WebSocket); you have ${process.version}`);
   }
+
+  if (argv.includes('--help') || argv.includes('-h')) {
+    printAuditHelp();
+    return 0;
+  }
+  if (argv.includes('--renders')) return runRenderAudit();
 
   const url = flag('--url', 'http://localhost:3000').replace(/\/+$/, '');
   const themeFlag = flag('--theme', 'both');
@@ -1541,6 +1588,12 @@ async function runAudit() {
     );
   } else {
     alog(`  ${A.B}new vs baseline${A.R}  ${newFindings.length} findings`);
+    if (flakyCount > 0) {
+      alog(
+        `  ${A.Y}${flakyCount} flaky${A.R} ${A.D}new finding(s) did not reproduce in the confirm re-run — not gating; ` +
+          `they union into the baseline on the next --update-baseline${A.R}`,
+      );
+    }
   }
   alog(`  report  ${A.C}${outPath}${A.R}`);
   if (willFail) {
@@ -1666,6 +1719,786 @@ function writeReportAndNdjson(findings, { url, routes, themes, outPath, ndjsonPa
   }
   writeFileSync(outPath, lines.join('\n'));
   appendNdjson(ndjsonPath, findings);
+}
+
+// ============================================================================
+// audit --renders — headless render-telemetry gate
+// ============================================================================
+//
+// The re-render sibling of the slop-scan audit above. Instead of grading the
+// static DOM once per route, it REPLAYS scripted interactions from
+// .lineargrab.json (renderAudit.scenarios) while the render-scan bundle records
+// React commits from before-mount, then grades the recording against the
+// repo's re-render rulebook. Renders are theme-independent, so this runs ONE
+// theme only (no light/dark sweep — the same commits fire either way).
+
+/** US keyboard code + windowsVirtualKeyCode for a single-char `key` step. Only
+    the printable set we need for scripted audits; unknown keys fall back to a
+    best-effort char code so a typo degrades instead of throwing. */
+function keyInfo(key) {
+  const k = String(key);
+  if (/^[a-zA-Z]$/.test(k)) {
+    const upper = k.toUpperCase();
+    return { code: `Key${upper}`, vk: upper.charCodeAt(0), text: k };
+  }
+  if (/^[0-9]$/.test(k)) return { code: `Digit${k}`, vk: k.charCodeAt(0), text: k };
+  const named = {
+    Enter: { code: 'Enter', vk: 13, text: '\r' },
+    Tab: { code: 'Tab', vk: 9 },
+    Escape: { code: 'Escape', vk: 27 },
+    ArrowDown: { code: 'ArrowDown', vk: 40 },
+    ArrowUp: { code: 'ArrowUp', vk: 38 },
+    ArrowLeft: { code: 'ArrowLeft', vk: 37 },
+    ArrowRight: { code: 'ArrowRight', vk: 39 },
+    Backspace: { code: 'Backspace', vk: 8 },
+    ' ': { code: 'Space', vk: 32, text: ' ' },
+    Space: { code: 'Space', vk: 32, text: ' ' },
+  };
+  return named[k] ?? { code: '', vk: k.charCodeAt(0) || 0, text: k.length === 1 ? k : undefined };
+}
+
+/** Poll a selector until it exists in the DOM, or reject after ms. Runs the
+    check in-page over CDP (returnByValue boolean). */
+async function pollSelector(cdp, sessionId, selector, ms) {
+  const deadline = Date.now() + ms;
+  const expr = `!!document.querySelector(${JSON.stringify(selector)})`;
+  for (;;) {
+    const res = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true }, sessionId);
+    if (res.result?.value === true) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+/** Poll for a clickable element whose trimmed textContent EQUALS `text` (exact
+    first, then a substring fallback), scroll it into view, and click it. The
+    match + click happen in ONE in-page evaluate so a lazily-mounted target is
+    caught the instant it appears. Returns true on click, false on timeout. */
+async function pollClickText(cdp, sessionId, text, ms) {
+  const deadline = Date.now() + ms;
+  const expr = `(() => {
+    const want = ${JSON.stringify(String(text))}.trim();
+    const els = Array.from(document.querySelectorAll('button, [role="button"], a'));
+    let hit = els.find((e) => (e.textContent || '').trim() === want);
+    if (!hit) hit = els.find((e) => (e.textContent || '').trim().includes(want));
+    if (!hit) return false;
+    try { hit.scrollIntoView({ block: 'center' }); } catch {}
+    hit.click();
+    return true;
+  })()`;
+  for (;;) {
+    const res = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true }, sessionId);
+    if (res.result?.value === true) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+/** Center point of a selector's bounding box (viewport coords), or null. */
+async function elementCenter(cdp, sessionId, selector) {
+  const expr = `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`;
+  const res = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true }, sessionId);
+  return res.result?.value ?? null;
+}
+
+/** Execute ONE scenario step. Throws only for a waitFor whose selector never
+    appears (the caller ABORTS the scenario then — later steps depend on it);
+    every other failure is surfaced by the caller as a non-fatal warning. */
+async function runStep(cdp, sessionId, step) {
+  // waitFor: block until the selector mounts. Abort-worthy on timeout.
+  if (typeof step.waitFor === 'string') {
+    const ok = await pollSelector(cdp, sessionId, step.waitFor, Number(step.timeoutMs) || 5000);
+    if (!ok) throw new Error(`waitFor never matched: ${step.waitFor}`);
+    return;
+  }
+
+  // clickText: poll for a clickable whose text matches, then click it.
+  if (typeof step.clickText === 'string') {
+    const ok = await pollClickText(cdp, sessionId, step.clickText, Number(step.timeoutMs) || 5000);
+    if (!ok) throw new Error(`clickText never matched: ${step.clickText}`);
+    return;
+  }
+
+  // click: el.click() on the selector (no polling — pair with a prior waitFor).
+  if (typeof step.click === 'string') {
+    const res = await cdp.send(
+      'Runtime.evaluate',
+      {
+        expression: `(() => { const el = document.querySelector(${JSON.stringify(step.click)}); if (!el) return false; el.click(); return true; })()`,
+        returnByValue: true,
+      },
+      sessionId,
+    );
+    if (res.result?.value !== true) throw new Error(`click target not found: ${step.click}`);
+    return;
+  }
+
+  // key: dispatch keyDown+keyUp per press via CDP Input, `repeat` times.
+  if (typeof step.key === 'string') {
+    const info = keyInfo(step.key);
+    const repeat = Math.max(1, Number(step.repeat) || 1);
+    const delayMs = Number(step.delayMs) || 0;
+    for (let i = 0; i < repeat; i++) {
+      const base = { key: String(step.key), code: info.code, windowsVirtualKeyCode: info.vk, nativeVirtualKeyCode: info.vk };
+      await cdp.send('Input.dispatchKeyEvent', { type: info.text != null ? 'keyDown' : 'rawKeyDown', ...base, ...(info.text != null ? { text: info.text } : {}) }, sessionId);
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
+      if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return;
+  }
+
+  // type: focus the selector (if any), then Input.insertText per char w/ delay.
+  if (typeof step.type === 'string') {
+    if (typeof step.selector === 'string') {
+      const focused = await cdp.send(
+        'Runtime.evaluate',
+        {
+          expression: `(() => { const el = document.querySelector(${JSON.stringify(step.selector)}); if (!el) return false; el.focus(); return true; })()`,
+          returnByValue: true,
+        },
+        sessionId,
+      );
+      if (focused.result?.value !== true) throw new Error(`type target not found: ${step.selector}`);
+    }
+    const perCharMs = Number(step.perCharMs) || 0;
+    for (const ch of String(step.type)) {
+      await cdp.send('Input.insertText', { text: ch }, sessionId);
+      if (perCharMs) await new Promise((r) => setTimeout(r, perCharMs));
+    }
+    return;
+  }
+
+  // scroll: mouseWheel at the element's center (default deltaY 600).
+  if (typeof step.scroll === 'string') {
+    const center = await elementCenter(cdp, sessionId, step.scroll);
+    if (!center) throw new Error(`scroll target not found: ${step.scroll}`);
+    await cdp.send(
+      'Input.dispatchMouseEvent',
+      { type: 'mouseWheel', x: center.x, y: center.y, deltaX: Number(step.deltaX) || 0, deltaY: Number(step.deltaY) || 600 },
+      sessionId,
+    );
+    return;
+  }
+
+  // wait: a plain settle pause.
+  if (step.wait != null) {
+    await new Promise((r) => setTimeout(r, Number(step.wait) || 0));
+    return;
+  }
+
+  throw new Error(`unknown step (no known key): ${JSON.stringify(step).slice(0, 80)}`);
+}
+
+/** Load + loosely validate renderAudit.scenarios from .lineargrab.json. A
+    malformed scenario is skipped with a printed warning; the tool ships NO
+    built-in app-specific scenarios (it stays generic). */
+function loadScenarios() {
+  let cfg = null;
+  try {
+    cfg = JSON.parse(readFileSync(join(DIR, '.lineargrab.json'), 'utf8'));
+  } catch {
+    return [];
+  }
+  const raw = cfg?.renderAudit?.scenarios;
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const s of raw) {
+    if (!s || typeof s !== 'object' || typeof s.name !== 'string' || !s.name.trim()) {
+      alog(`  ${A.Y}⚠ skipping malformed scenario (missing name)${A.R}`);
+      continue;
+    }
+    if (s.steps != null && !Array.isArray(s.steps)) {
+      alog(`  ${A.Y}⚠ skipping scenario "${s.name}" (steps must be an array)${A.R}`);
+      continue;
+    }
+    out.push({
+      name: String(s.name),
+      route: typeof s.route === 'string' ? s.route : '/',
+      settleMs: Number(s.settleMs) || undefined,
+      steps: Array.isArray(s.steps) ? s.steps : [],
+    });
+  }
+  return out;
+}
+
+/** The render audit. Returns the process exit code. */
+async function runRenderAudit() {
+  const url = flag('--url', 'http://localhost:3000').replace(/\/+$/, '');
+  const [vw, vh] = flag('--viewport', '1440x900')
+    .split('x')
+    .map((n) => Number(n) || 0);
+  const pageTimeout = Number(flag('--timeout', '30000'));
+  const failOn = flag('--fail-on', 'error'); // error | warn | none
+  const updateBaseline = argv.includes('--update-baseline');
+  const onlyScenario = flag('--scenario', null);
+  const auditDir = join(DIR, '.lineargrab');
+  const outPath = flag('--out', join(auditDir, 'render-report.md'));
+  const baselinePath = join(auditDir, 'render-baseline.json');
+  const ndjsonPath = join(auditDir, 'scan.ndjson');
+
+  let scenarios = loadScenarios();
+  if (onlyScenario) scenarios = scenarios.filter((s) => s.name === onlyScenario);
+  if (!scenarios.length) {
+    die(
+      onlyScenario
+        ? `no scenario named "${onlyScenario}" in .lineargrab.json (renderAudit.scenarios)`
+        : 'no render scenarios found. Add renderAudit.scenarios to .lineargrab.json — see `audit --renders` help.',
+    );
+  }
+
+  // Rulebook markdown (config path > default), read via the shared resolver.
+  let rulebookMd = '';
+  const rb = resolveRulebookPath();
+  if (rb.ok) {
+    try {
+      rulebookMd = readFileSync(rb.path, 'utf8');
+    } catch {
+      /* no rulebook file — engine falls back to FALLBACK_RULEBOOK (budgets only) */
+    }
+  }
+
+  // Budgets + extra component-name ignores from config (both overlaid onto
+  // the engine's defaults inside the bundle).
+  let budgets = null;
+  let renderIgnore = null;
+  try {
+    const cfg = JSON.parse(readFileSync(join(DIR, '.lineargrab.json'), 'utf8'));
+    if (cfg.renderBudgets && typeof cfg.renderBudgets === 'object') budgets = cfg.renderBudgets;
+    if (Array.isArray(cfg.renderIgnore)) renderIgnore = cfg.renderIgnore.filter((x) => typeof x === 'string');
+  } catch {
+    /* no config budgets/ignores */
+  }
+
+  const RENDER_BUNDLE = await readRenderBundle();
+  const bin = findBrowser();
+
+  // Auth reuse: same persistent-profile plumbing as the slop audit.
+  const defaultProfile = join(
+    HISTORY_DIR,
+    `audit-profile-${createHash('sha1').update(DIR).digest('hex').slice(0, 8)}`,
+  );
+  const explicitProfile = flag('--profile', null);
+  const loginMode = argv.includes('--login');
+  const fresh = argv.includes('--fresh');
+  const persistentProfile =
+    explicitProfile ?? (!fresh && (loginMode || existsSync(defaultProfile)) ? defaultProfile : null);
+
+  if (loginMode) {
+    const profile = persistentProfile ?? defaultProfile;
+    mkdirSync(profile, { recursive: true });
+    alog('');
+    alog(`${A.B}◆ linear-grab audit --renders --login${A.R}`);
+    alog(`  A browser window is opening on ${A.C}${url}${A.R}.`);
+    alog(`  Sign in there, then come back and press ${A.B}Enter${A.R} to save the session.`);
+    alog(`  ${A.D}profile: ${profile}${A.R}`);
+    const loginChild = spawn(
+      bin,
+      [`--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', url],
+      { stdio: 'ignore', detached: false },
+    );
+    await new Promise((resolve) => process.stdin.once('data', resolve));
+    try {
+      loginChild.kill('SIGTERM');
+    } catch {
+      /* already closed */
+    }
+    alog(`${A.G}✓${A.R} session saved — future ${A.C}audit${A.R} runs use it automatically.`);
+    return 0;
+  }
+
+  alog('');
+  alog(`${A.B}◆ linear-grab audit --renders${A.R} ${A.D}v${VERSION}${A.R}`);
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+  alog(`  url        ${A.C}${url}${A.R}`);
+  alog(`  scenarios  ${A.C}${scenarios.length}${A.R} ${A.D}${scenarios.map((s) => s.name).join(', ')}${A.R}`);
+  alog(`  browser    ${A.C}${bin}${A.R}`);
+  alog(`  ${A.D}renders are theme-independent — one theme only (no light/dark sweep)${A.R}`);
+  if (persistentProfile) alog(`  profile    ${A.C}${persistentProfile}${A.R} ${A.D}(signed-in session)${A.R}`);
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+
+  const tmp = persistentProfile ?? mkdtempSync(join(tmpdir(), 'lg-render-'));
+  let child = null;
+  let ws = null;
+  const cleanup = () => {
+    try {
+      if (child && !child.killed) {
+        child.kill('SIGTERM');
+        const c = child;
+        setTimeout(() => {
+          try {
+            c.kill('SIGKILL');
+          } catch {
+            /* gone */
+          }
+        }, 2000).unref?.();
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (!persistentProfile) rmSync(tmp, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  };
+  const onSigint = () => {
+    cleanup();
+    process.exit(130);
+  };
+  process.on('SIGINT', onSigint);
+
+  /** @type {Array<any>} */
+  const allFindings = [];
+  const failedScenarios = [];
+
+  // Baseline key. DELIBERATELY carries NO render count: counts jitter
+  // run-to-run (timing, coalescing), so a count in the key would make every
+  // run "new".
+  const bkey = (f) => `${f.ruleId}|${f.scenario}|${f.component ?? ''}`;
+  // Set when a confirm re-run happened: only new keys that REPRODUCED in the
+  // re-run may fail the build (threshold-straddlers — a component at exactly
+  // 5 renders / 3 commits — flip in and out between runs).
+  let confirmedKeys = null;
+
+  try {
+    try {
+      rmSync(join(tmp, 'DevToolsActivePort'), { force: true });
+    } catch {
+      /* fresh profile */
+    }
+    child = spawn(
+      bin,
+      [
+        '--headless=new',
+        '--remote-debugging-port=0',
+        `--user-data-dir=${tmp}`,
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-extensions',
+        '--hide-scrollbars',
+        'about:blank',
+      ],
+      { stdio: 'ignore' },
+    );
+    child.on('error', (e) => die(`failed to launch browser: ${e.message}`));
+
+    const endpoint = await waitForEndpoint(tmp);
+    ws = new WebSocket(endpoint);
+    await new Promise((resolve, reject) => {
+      ws.addEventListener('open', resolve, { once: true });
+      ws.addEventListener('error', () => reject(new Error('WebSocket error')), { once: true });
+    });
+    const cdp = makeCdp(ws);
+
+    /** Run ONE scenario on a fresh page target. Returns the tagged findings
+        array, or null when the scenario failed/aborted (already logged). */
+    const execScenario = async (scenario, label = scenario.name) => {
+      const started = Date.now();
+      const route = scenario.route || '/';
+      const target = url + route;
+
+      // A FRESH page target per scenario so recording always begins pre-mount:
+      // addScriptToEvaluateOnNewDocument fires on the next navigation, so the
+      // recorder is armed before React ever commits.
+      const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+      const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+      let scenarioFindings = null;
+      try {
+        await cdp.send('Page.enable', {}, sessionId);
+        await cdp.send('Runtime.enable', {}, sessionId);
+        await cdp.send(
+          'Emulation.setDeviceMetricsOverride',
+          { width: vw, height: vh, deviceScaleFactor: 1, mobile: false },
+          sessionId,
+        );
+        // Inject autostart flag + bundle BEFORE the app's document scripts run.
+        await cdp.send(
+          'Page.addScriptToEvaluateOnNewDocument',
+          { source: 'window.__RENDER_SCAN_AUTOSTART__=1;\n' + RENDER_BUNDLE },
+          sessionId,
+        );
+
+        const loaded = cdp.once('Page.loadEventFired', sessionId, pageTimeout).then(
+          () => true,
+          () => false,
+        );
+        await cdp.send('Page.navigate', { url: target }, sessionId);
+        if (!(await loaded)) {
+          failedScenarios.push({ name: scenario.name, reason: `load timeout (>${pageTimeout}ms)` });
+          alog(`  ${A.Rd}✗${A.R} ${padScenario(label)} ${A.D}load timeout${A.R}`);
+          return null;
+        }
+        // Settle so first-mount commits land before we start interacting.
+        await new Promise((r) => setTimeout(r, 500));
+
+        // Execute steps sequentially. A failed step is a non-fatal warning; a
+        // failed waitFor/clickText ABORTS (later steps depend on the target).
+        let aborted = false;
+        for (const step of scenario.steps) {
+          try {
+            await runStep(cdp, sessionId, step);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const fatal = typeof step.waitFor === 'string' || typeof step.clickText === 'string';
+            alog(`    ${fatal ? A.Rd : A.Y}${fatal ? '✗' : '⚠'}${A.R} step ${A.D}${msg.slice(0, 70)}${A.R}`);
+            if (fatal) {
+              failedScenarios.push({ name: scenario.name, reason: msg });
+              aborted = true;
+              break;
+            }
+          }
+        }
+        if (aborted) return null;
+
+        // Settle, then stop + analyze + attribute inside the page.
+        await new Promise((r) => setTimeout(r, scenario.settleMs ?? 1500));
+
+        const finishRes = await cdp.send(
+          'Runtime.evaluate',
+          {
+            expression: `__RENDER_SCAN__.finish(${JSON.stringify(rulebookMd)}, ${JSON.stringify(budgets)}, ${JSON.stringify(renderIgnore)})`,
+            awaitPromise: true,
+            returnByValue: true,
+          },
+          sessionId,
+        );
+        if (finishRes.exceptionDetails) {
+          const reason = finishRes.exceptionDetails.exception?.description ?? 'finish() threw';
+          failedScenarios.push({ name: scenario.name, reason });
+          alog(`  ${A.Rd}✗${A.R} ${padScenario(label)} ${A.D}${reason.slice(0, 60)}${A.R}`);
+          return null;
+        }
+        scenarioFindings = Array.isArray(finishRes.result?.value) ? finishRes.result.value : [];
+
+        // One passive R8 DOM snapshot per scenario, merged in.
+        const snapRes = await cdp.send(
+          'Runtime.evaluate',
+          { expression: '__RENDER_SCAN__.snapshot()', awaitPromise: true, returnByValue: true },
+          sessionId,
+        );
+        if (!snapRes.exceptionDetails && Array.isArray(snapRes.result?.value)) {
+          scenarioFindings.push(...snapRes.result.value);
+        }
+      } catch (err) {
+        // A flaky target/CDP failure fails THIS scenario, never the whole run.
+        const reason = err instanceof Error ? err.message : String(err);
+        failedScenarios.push({ name: scenario.name, reason });
+        alog(`  ${A.Rd}✗${A.R} ${padScenario(label)} ${A.D}${reason.slice(0, 60)}${A.R}`);
+        scenarioFindings = null;
+      } finally {
+        try {
+          await cdp.send('Target.closeTarget', { targetId });
+        } catch {
+          /* target already gone */
+        }
+      }
+
+      if (!scenarioFindings) return null;
+      const tagged = scenarioFindings.map((f) => ({ ...f, scenario: scenario.name, route }));
+      const errs = tagged.filter((f) => f.severity === 'error').length;
+      const warns = tagged.filter((f) => f.severity === 'warn').length;
+      alog(
+        `  ${A.G}✓${A.R} ${padScenario(label)} ` +
+          `${String(errs).padStart(4)} ${A.D}errors${A.R}  ${String(warns).padStart(3)} ${A.D}warns${A.R} ` +
+          `${A.D}${Date.now() - started}ms${A.R}`,
+      );
+      return tagged;
+    };
+
+    for (const scenario of scenarios) {
+      const tagged = await execScenario(scenario);
+      if (tagged) allFindings.push(...tagged);
+    }
+
+    // Confirm pass (browser still open): when new gate-severity keys exist vs
+    // the baseline, re-run ONLY the scenarios that produced them and keep the
+    // keys that reproduce. Threshold-straddlers (exactly 5 renders / 3
+    // commits) flip between runs; a key must show up twice to fail the build.
+    if (!updateBaseline && failOn !== 'none') {
+      let baselineKeys = null;
+      try {
+        baselineKeys = new Set(JSON.parse(readFileSync(baselinePath, 'utf8')).keys ?? []);
+      } catch {
+        /* no baseline yet — first run never gates, so nothing to confirm */
+      }
+      if (baselineKeys) {
+        const gateSev = failOn === 'warn' ? ['error', 'warn'] : ['error'];
+        const suspectNames = [
+          ...new Set(
+            allFindings
+              .filter((f) => gateSev.includes(f.severity) && !baselineKeys.has(bkey(f)))
+              .map((f) => f.scenario),
+          ),
+        ];
+        if (suspectNames.length) {
+          alog(`  ${A.D}confirming new findings — re-running: ${suspectNames.join(', ')}${A.R}`);
+          confirmedKeys = new Set();
+          for (const name of suspectNames) {
+            const scenario = scenarios.find((sc) => sc.name === name);
+            if (!scenario) continue;
+            const rerun = await execScenario(scenario, `${name} (confirm)`);
+            for (const f of rerun ?? []) confirmedKeys.add(bkey(f));
+          }
+        }
+      }
+    }
+  } finally {
+    try {
+      ws?.close();
+    } catch {
+      /* ignore */
+    }
+    process.off('SIGINT', onSigint);
+    cleanup();
+  }
+
+  // ---- baseline ratchet ----------------------------------------------------
+  const currentKeys = [...new Set(allFindings.map(bkey))];
+
+  bootstrapAuditDir(auditDir);
+
+  if (updateBaseline) {
+    // UNION with the existing baseline: threshold-flaky keys accumulate over
+    // runs and stop flapping, instead of being dropped by an overwrite. Use
+    // --reset-baseline to start over (e.g. after a big perf fix lands).
+    let existing = [];
+    if (!argv.includes('--reset-baseline')) {
+      try {
+        existing = JSON.parse(readFileSync(baselinePath, 'utf8')).keys ?? [];
+      } catch {
+        /* no baseline yet */
+      }
+    }
+    const merged = [...new Set([...existing, ...currentKeys])];
+    writeFileSync(
+      baselinePath,
+      JSON.stringify({ createdAt: new Date().toISOString(), keys: merged }, null, 2),
+    );
+    alog('');
+    alog(
+      `${A.G}✓${A.R} render baseline updated — ${A.B}+${merged.length - existing.length}${A.R} new keys ` +
+        `${A.D}(${merged.length} total${existing.length ? `, was ${existing.length}` : ''})${A.R}`,
+    );
+    alog(`  ${A.D}${baselinePath}${A.R}`);
+    for (const f of allFindings) f.isNew = false;
+    writeRenderReportAndNdjson(allFindings, { url, scenarios, outPath, ndjsonPath, newCount: 0, failedScenarios });
+    return 0;
+  }
+
+  let baselineKeys = null;
+  let hasBaseline = false;
+  try {
+    baselineKeys = new Set(JSON.parse(readFileSync(baselinePath, 'utf8')).keys ?? []);
+    hasBaseline = true;
+  } catch {
+    /* no baseline yet — mirror the slop audit: first run passes (exit 0) */
+  }
+
+  for (const f of allFindings) f.isNew = hasBaseline ? !baselineKeys.has(bkey(f)) : true;
+  const newFindings = allFindings.filter((f) => f.isNew);
+
+  const totalErr = allFindings.filter((f) => f.severity === 'error').length;
+  const totalWarn = allFindings.filter((f) => f.severity === 'warn').length;
+  writeRenderReportAndNdjson(allFindings, {
+    url,
+    scenarios,
+    outPath,
+    ndjsonPath,
+    newCount: newFindings.length,
+    failedScenarios,
+  });
+
+  // ---- exit decision -------------------------------------------------------
+  // New error-severity keys vs baseline fail (per --fail-on). Missing baseline
+  // → everything is "new" but we exit 0 with a hint (matches the slop audit's
+  // first-run behavior).
+  const gateSeverity =
+    !hasBaseline || failOn === 'none'
+      ? []
+      : failOn === 'warn'
+        ? newFindings.filter((f) => f.severity === 'error' || f.severity === 'warn')
+        : newFindings.filter((f) => f.severity === 'error');
+  // Only CONFIRMED keys fail (reproduced in the confirm re-run). When no
+  // confirm pass ran (no baseline / fail-on none), gateSeverity is empty
+  // anyway or gates directly.
+  const gate = confirmedKeys ? gateSeverity.filter((f) => confirmedKeys.has(bkey(f))) : gateSeverity;
+  const flakyCount = gateSeverity.length - gate.length;
+  const willFail = gate.length > 0;
+
+  alog('');
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+  alog(
+    `  ${A.B}totals${A.R}  ${totalErr} errors  ${totalWarn} warns  across ${scenarios.length} scenario(s)`,
+  );
+  if (failedScenarios.length) {
+    alog(`  ${A.Y}${failedScenarios.length} scenario(s) failed/aborted${A.R} ${A.D}(see ✗ above)${A.R}`);
+  }
+  if (!hasBaseline) {
+    alog(
+      `  ${A.Y}no baseline yet${A.R} — run with ${A.C}--update-baseline${A.R} to create the ratchet ` +
+        `(all ${newFindings.length} findings count as new until then).`,
+    );
+  } else {
+    alog(`  ${A.B}new vs baseline${A.R}  ${newFindings.length} findings`);
+    if (flakyCount > 0) {
+      alog(
+        `  ${A.Y}${flakyCount} flaky${A.R} ${A.D}new finding(s) did not reproduce in the confirm re-run — not gating; ` +
+          `they union into the baseline on the next --update-baseline${A.R}`,
+      );
+    }
+  }
+  alog(`  report  ${A.C}${outPath}${A.R}`);
+  if (willFail) {
+    alog(
+      `  ${A.Rd}${A.B}FAIL${A.R} — ${gate.length} new ${failOn === 'warn' ? 'error/warn' : 'error'}-severity finding(s) (fail-on=${failOn})`,
+    );
+  } else {
+    alog(`  ${A.G}${A.B}PASS${A.R} — 0 new findings at/above fail-on=${failOn}`);
+  }
+  alog(`${A.D}──────────────────────────────────────────────────${A.R}`);
+  return willFail ? 1 : 0;
+}
+
+const padScenario = (s) => s.slice(0, 30).padEnd(30);
+
+/** Help for the `audit` subcommand — both the design slop-scan sweep and the
+    render scan, including the full scenario step schema. */
+function printAuditHelp() {
+  const { B, D, C, G, R } = A;
+  alog('');
+  alog(`${B}linear-grab-bridge audit${R} ${D}— headless, CI-able design + re-render gates (raw CDP, zero deps)${R}`);
+  alog('');
+  alog(`${B}DESIGN slop-scan${R} ${D}(default)${R}`);
+  alog(`  ${D}»${R} audit --url http://localhost:3000 ${D}[--routes /,/x] [--theme light|dark|both]${R}`);
+  alog(`     Sweeps routes route-by-route and grades the design contract; writes .lineargrab/slop-report.md.`);
+  alog('');
+  alog(`${B}RENDER scan${R} ${D}(--renders)${R}`);
+  alog(`  ${D}»${R} audit --renders --url http://localhost:3000 ${D}[--scenario <name>]${R}`);
+  alog(`     Replays scripted interactions while recording React commits, then grades the`);
+  alog(`     re-render contract. ${D}Renders are theme-independent — ONE theme only (no light/dark sweep).${R}`);
+  alog(`     Scenarios come from ${C}.lineargrab.json${R} → ${C}renderAudit.scenarios${R} (array); no built-in scenarios.`);
+  alog('');
+  alog(`  ${B}scenario${R}  { name, route, settleMs?, steps: [ … ] }`);
+  alog(`  ${B}steps${R} ${D}(each step is one key; a failed step warns and continues — except`);
+  alog(`        waitFor/clickText, which ABORT the scenario since later steps depend on them):${R}`);
+  alog(`    ${G}{ "waitFor": "<selector>", "timeoutMs"?: 5000 }${R}   poll until the selector mounts`);
+  alog(`    ${G}{ "click": "<selector>" }${R}                        el.click() the selector`);
+  alog(`    ${G}{ "clickText": "<text>", "timeoutMs"?: 5000 }${R}    poll for a clickable button/[role=button]/a`);
+  alog(`                                                     whose trimmed text EQUALS <text> (else includes), then click`);
+  alog(`    ${G}{ "key": "j", "repeat"?: 20, "delayMs"?: 80 }${R}    dispatch keyDown+keyUp per press`);
+  alog(`    ${G}{ "type": "hello", "selector"?: "…", "perCharMs"?: 40 }${R}  focus, then insert text per char`);
+  alog(`    ${G}{ "scroll": "<selector>", "deltaY"?: 800 }${R}       mouseWheel at the element center`);
+  alog(`    ${G}{ "wait": 500 }${R}                                  settle pause (ms)`);
+  alog('');
+  alog(`${B}shared flags${R}  ${D}--chrome <path> --login --profile <dir> --fresh --timeout <ms>${R}`);
+  alog(`              ${D}--fail-on error|warn|none --update-baseline --out <file>${R}`);
+  alog(`  ${B}rulebook${R}   .lineargrab.json → renderRulebook (default React-rerender-primitives.md); budgets → renderBudgets`);
+  alog(`  ${B}baseline${R}   render ratchet at ${C}.lineargrab/render-baseline.json${R} — new error-severity keys vs baseline exit 1`);
+  alog(`             ${D}new keys must REPRODUCE in an automatic confirm re-run to fail (threshold-flaky keys don't gate);${R}`);
+  alog(`             ${D}--update-baseline UNIONS into the existing baseline; --reset-baseline starts it over${R}`);
+  alog('');
+}
+
+/** Append render findings to scan.ndjson with the same rotation as telemetry.
+    kind 'render-scan', mode 'headless', page = '<scenario> <route>'. */
+function appendRenderNdjson(file, findings) {
+  const lines =
+    findings
+      .slice(0, 5000)
+      .map((f) =>
+        JSON.stringify({
+          kind: 'render-scan',
+          mode: 'headless',
+          page: `${f.scenario} ${f.route}`,
+          at: Date.now(),
+          ruleId: f.ruleId,
+          shape: f.shape,
+          severity: f.severity,
+          suspected: f.suspected,
+          description: f.description,
+          component: f.component ?? null,
+          source: f.source ?? null,
+          renders: f.renders,
+          selfTime: f.selfTime,
+          changes: f.changes,
+          evidence: f.evidence,
+          count: f.count ?? 1,
+          isNew: !!f.isNew,
+        }),
+      )
+      .join('\n') + '\n';
+  try {
+    appendFileSync(file, lines);
+    const size = statSync(file).size;
+    if (size > 2_000_000) {
+      const keep = readFileSync(file, 'utf8');
+      writeFileSync(file, keep.slice(Math.floor(keep.length / 2)).replace(/^[^\n]*\n/, ''));
+    }
+  } catch {
+    /* disk issues — never fail the audit on telemetry */
+  }
+}
+
+/** Write the render markdown report + append NDJSON events. Per-scenario
+    section; each finding a `- [severity] suspected R5 — … (Component @ file:line)
+    · evidence` line with ×count and a NEW-vs-baseline marker. */
+function writeRenderReportAndNdjson(findings, { url, scenarios, outPath, ndjsonPath, newCount, failedScenarios }) {
+  const totalErr = findings.filter((f) => f.severity === 'error').length;
+  const totalWarn = findings.filter((f) => f.severity === 'warn').length;
+
+  const lines = [
+    '# Render scan report',
+    '',
+    `- **url**: ${url}`,
+    `- **scenarios**: ${scenarios.length} (${scenarios.map((s) => s.name).join(', ')})`,
+    `- **totals**: ${totalErr} errors / ${totalWarn} warns`,
+    `- **new vs baseline**: ${newCount}`,
+    `- **generated**: ${new Date().toISOString()}`,
+    '',
+    'Diagnoses are SUSPECTED (heuristic). The numbers (renders, self ms) are measured.',
+    '',
+  ];
+  if (failedScenarios?.length) {
+    lines.push('> Failed/aborted scenarios: ' + failedScenarios.map((f) => `${f.name} (${f.reason})`).join('; '), '');
+  }
+
+  const byScenario = new Map();
+  for (const f of findings) {
+    if (!byScenario.has(f.scenario)) byScenario.set(f.scenario, []);
+    byScenario.get(f.scenario).push(f);
+  }
+  for (const scenario of scenarios) {
+    const sf = byScenario.get(scenario.name);
+    lines.push(`## ${scenario.name} \`${scenario.route || '/'}\``, '');
+    if (!sf || !sf.length) {
+      lines.push('_No findings._', '');
+      continue;
+    }
+    // Errors first, then warns; within, by count desc.
+    const sorted = [...sf].sort((a, b) => {
+      const sev = (x) => (x.severity === 'error' ? 0 : 1);
+      return sev(a) - sev(b) || (b.count ?? 1) - (a.count ?? 1);
+    });
+    for (const f of sorted) {
+      const where = f.component || f.source ? ` (${[f.component, f.source].filter(Boolean).join(' @ ')})` : '';
+      const times = (f.count ?? 1) > 1 ? ` ×${f.count}` : '';
+      lines.push(`- [${f.severity}] ${f.description}${where}${times} · ${f.evidence}${f.isNew ? ' **NEW**' : ''}`);
+    }
+    lines.push('');
+  }
+
+  try {
+    mkdirSync(join(outPath, '..'), { recursive: true });
+  } catch {
+    /* ignore */
+  }
+  writeFileSync(outPath, lines.join('\n'));
+  appendRenderNdjson(ndjsonPath, findings);
 }
 
 // Dispatch audit LAST — every const/fn above is now initialized, so no TDZ.

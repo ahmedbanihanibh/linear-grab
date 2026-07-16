@@ -196,6 +196,7 @@ export default function RendersView() {
           <Button
             class="size-7 px-0"
             variant={recording() ? 'danger' : 'ghost'}
+            data-tip-pos="bottom left"
             disabled={live()}
             title={live() ? 'Live scan owns the recorder — pause it first' : recording() ? 'Stop & analyze' : 'Record renders'}
             aria-label={recording() ? 'Stop and analyze' : 'Record renders'}
@@ -218,6 +219,7 @@ export default function RendersView() {
           <Button
             class="relative size-7 px-0"
             variant="ghost"
+            data-tip-pos="bottom left"
             disabled={recording()}
             title={live() ? 'Pause live render scan' : 'Live render scan — findings update as you browse'}
             aria-label="Toggle live render scan"
@@ -243,6 +245,7 @@ export default function RendersView() {
           <Button
             class="size-7 px-0"
             variant="ghost"
+            data-tip-pos="bottom left"
             loading={snapBusy()}
             title="Snapshot scan (passive DOM pass)"
             aria-label="Snapshot scan"
@@ -256,6 +259,7 @@ export default function RendersView() {
           <Button
             class="size-7 px-0"
             variant="ghost"
+            data-tip-pos="bottom left"
             title={copiedPrompt() ? 'Copied!' : 'Copy AI fix prompt'}
             aria-label="Copy AI fix prompt"
             onClick={() => void copyPrompt()}
@@ -275,6 +279,7 @@ export default function RendersView() {
           <Button
             class="size-7 px-0"
             variant="ghost"
+            data-tip-pos="bottom left"
             title={copiedReport() ? 'Copied!' : 'Copy report'}
             aria-label="Copy report"
             onClick={() => void copyReport()}
@@ -294,6 +299,7 @@ export default function RendersView() {
           <Button
             class="text-danger size-7 px-0"
             variant="ghost"
+            data-tip-pos="bottom left"
             title="Clear findings"
             aria-label="Clear findings"
             onClick={clear}

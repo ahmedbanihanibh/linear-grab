@@ -120,6 +120,8 @@ export interface Settings {
   /** Render-scan budget overrides (shareable via .lineargrab.json). Overlaid
       onto the parsed rulebook budgets: config > doc > fallback. */
   renderBudgets?: { selfMs?: number; commitMs?: number };
+  /** Extra component names (exact or regex strings) the render scan ignores. */
+  renderIgnore?: string[];
 }
 
 // ---- Linear API shapes (thin, only what the UI needs) ----

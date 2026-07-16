@@ -1,6 +1,6 @@
 {
   "name": "linear-grab",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "type": "module",
   "description": "Point at any React element in your dev app, draft a Linear issue with AI, delegate it to the Cursor agent, and track it live — in any browser.",
   "exports": {
@@ -19,7 +19,7 @@
   "scripts": {
     "dev": "wxt",
     "build": "npm run build:lib && npm run build:ext",
-    "build:lib": "vite build --config vite.lib.config.ts && vite build --config vite.global.config.ts && vite build --config vite.slop.config.ts && node scripts/emit-dts.mjs && cp dist/slop-scan.global.js packages/bridge/slop-scan.global.js && cp dist/slop-scan.global.js bin/slop-scan.global.js",
+    "build:lib": "vite build --config vite.lib.config.ts && vite build --config vite.global.config.ts && vite build --config vite.slop.config.ts && vite build --config vite.render.config.ts && node scripts/emit-dts.mjs && cp dist/slop-scan.global.js packages/bridge/slop-scan.global.js && cp dist/slop-scan.global.js bin/slop-scan.global.js && cp dist/render-scan.global.js packages/bridge/render-scan.global.js && cp dist/render-scan.global.js bin/render-scan.global.js",
     "build:ext": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
