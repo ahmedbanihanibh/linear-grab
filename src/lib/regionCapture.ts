@@ -90,6 +90,7 @@ async function captureRectViaTabFrame(rect: {
 export function captureRegionInteractive(): Promise<GrabbedElement | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
+    overlay.setAttribute('data-linear-grab', 'true'); // slop scan skips tooling DOM by this marker
     overlay.style.cssText =
       'position:fixed;inset:0;z-index:2147483647;cursor:crosshair;user-select:none;';
     const box = document.createElement('div');

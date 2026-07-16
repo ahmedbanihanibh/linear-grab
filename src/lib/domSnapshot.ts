@@ -32,6 +32,7 @@ function getDefaults(tag: string): Record<string, string> {
   if (cached) return cached;
   if (!defaultsDoc) {
     const frame = document.createElement('iframe');
+    frame.setAttribute('data-linear-grab', 'true');
     frame.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
     document.body.appendChild(frame);
     defaultsDoc = frame.contentDocument;

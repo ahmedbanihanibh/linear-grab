@@ -293,6 +293,40 @@ describe('editor-shadow', () => {
     stubMetrics(host.querySelector('#panel')!, { rect: { width: 200, height: 100 } });
     expect(findRule(runSlopScan(document), 'editor-shadow')).toHaveLength(0);
   });
+
+  it('passes an all-transparent shadow stack (flattened Tailwind ring vars)', () => {
+    const host = mount(
+      `<div data-editor-surface><div id="panel" style="box-shadow:rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 1px 2px 0px"></div></div>`,
+    );
+    stubMetrics(host.querySelector('#panel')!, { rect: { width: 200, height: 100 } });
+    expect(findRule(runSlopScan(document), 'editor-shadow')).toHaveLength(0);
+  });
+
+  it('still flags when one layer of the stack is visible', () => {
+    const host = mount(
+      `<div data-editor-surface><div id="panel" style="box-shadow:rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.2) 0px 4px 12px 0px"></div></div>`,
+    );
+    stubMetrics(host.querySelector('#panel')!, { rect: { width: 200, height: 100 } });
+    expect(findRule(runSlopScan(document), 'editor-shadow')).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Devtools DOM exclusion — tooling pixels are never the app's contract
+// ---------------------------------------------------------------------------
+
+describe('devtools exclusion', () => {
+  it('never grades linear-grab-tagged or react-grab overlay DOM', () => {
+    const host = mount(
+      `<div data-linear-grab="true" style="border-radius:4px;width:100px;height:40px"></div>` +
+        `<div data-react-grab="true"><div style="border-radius:6px;width:100px;height:40px"></div></div>` +
+        `<div id="linear-grab-root"><div style="border-radius:5px;width:100px;height:40px"></div></div>`,
+    );
+    for (const el of Array.from(host.querySelectorAll('div'))) {
+      stubMetrics(el, { rect: { width: 100, height: 40 } });
+    }
+    expect(findRule(runSlopScan(document), 'radius-vocabulary')).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

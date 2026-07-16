@@ -354,7 +354,8 @@ export function analyzeCommits(
 // ---------------------------------------------------------------------------
 
 /** Selectors/ids owned by tooling, never the app — copied from slopScan. */
-const SKIP_SEL = '#linear-grab-root, #claude-agent-glow-border, [id^="react-scan"]';
+const SKIP_SEL =
+  '#linear-grab-root, [data-linear-grab], [data-react-grab], #claude-agent-glow-border, [id^="react-scan"]';
 
 export function runRenderSnapshotScan(root: ParentNode = typeof document !== 'undefined' ? document : ({} as ParentNode)): RenderFinding[] {
   const findings: RenderFinding[] = [];

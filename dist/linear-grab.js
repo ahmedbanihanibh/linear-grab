@@ -27423,7 +27423,7 @@ function RA(e) {
 	if (t) return t;
 	if (!IA) {
 		let e = document.createElement("iframe");
-		if (e.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden", document.body.appendChild(e), IA = e.contentDocument, !IA) return {};
+		if (e.setAttribute("data-linear-grab", "true"), e.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden", document.body.appendChild(e), IA = e.contentDocument, !IA) return {};
 	}
 	let n = IA.createElement(e);
 	IA.body.appendChild(n);
@@ -41879,7 +41879,7 @@ async function $Z(e) {
 function eQ() {
 	return new Promise((e) => {
 		let t = document.createElement("div");
-		t.style.cssText = "position:fixed;inset:0;z-index:2147483647;cursor:crosshair;user-select:none;";
+		t.setAttribute("data-linear-grab", "true"), t.style.cssText = "position:fixed;inset:0;z-index:2147483647;cursor:crosshair;user-select:none;";
 		let n = document.createElement("div");
 		n.style.cssText = "position:fixed;display:none;border:2px solid #5e6ad2;border-radius:4px;box-shadow:0 0 0 100000px rgba(0,0,0,0.35);pointer-events:none;", t.appendChild(n), document.body.appendChild(t);
 		let r = 0, i = 0, a = !1, o = (e) => ({
@@ -45675,7 +45675,7 @@ var V0 = [
 }, W0 = null;
 function G0(e) {
 	try {
-		return W0 || (W0 = document.createElement("span"), W0.style.display = "none", document.body.appendChild(W0)), W0.style.color = "", W0.style.color = e, W0.style.color ? getComputedStyle(W0).color : null;
+		return W0 || (W0 = document.createElement("span"), W0.setAttribute("data-linear-grab", "true"), W0.style.display = "none", document.body.appendChild(W0)), W0.style.color = "", W0.style.color = e, W0.style.color ? getComputedStyle(W0).color : null;
 	} catch {
 		return null;
 	}
@@ -45942,7 +45942,7 @@ function l2(e) {
 function u2() {
 	return new Promise((e) => {
 		let t = document.createElement("div");
-		t.style.cssText = "position:fixed;z-index:2147483647;pointer-events:none;border:1.5px solid #5e6ad2;border-radius:4px;background:rgba(94,106,210,0.08);display:none;", document.body.appendChild(t);
+		t.setAttribute("data-linear-grab", "true"), t.style.cssText = "position:fixed;z-index:2147483647;pointer-events:none;border:1.5px solid #5e6ad2;border-radius:4px;background:rgba(94,106,210,0.08);display:none;", document.body.appendChild(t);
 		let n = null, r = (e) => {
 			let t = document.elementFromPoint(e.clientX, e.clientY);
 			return !t || t.closest("#linear-grab-root") ? null : t;
@@ -46559,7 +46559,7 @@ var r4 = (e) => getComputedStyle(e), i4 = {
 			let t = e.root, r = t.documentElement;
 			if (r && t.body) {
 				let i = e.css(r), a = t.createElement("span");
-				a.style.display = "none", t.body.appendChild(a);
+				a.setAttribute("data-linear-grab", "true"), a.style.display = "none", t.body.appendChild(a);
 				for (let e = 0; e < i.length; e++) {
 					let t = i[e];
 					if (!t.startsWith("--")) continue;
@@ -46595,7 +46595,7 @@ var r4 = (e) => getComputedStyle(e), i4 = {
 		for (let n of e.els) {
 			if (!n.closest("[data-editor-surface]") && !/\/editor\//.test(typeof location < "u" ? location.pathname : "")) continue;
 			let r = e.css(n).boxShadow;
-			!r || r === "none" || A4(r) || t.push(W2(this, n, `box-shadow: ${r}`));
+			!r || r === "none" || j4(r) || M4(r) || t.push(W2(this, n, `box-shadow: ${r}`));
 		}
 		return t;
 	}
@@ -46851,9 +46851,25 @@ function k4(e, t, n) {
 	return r < 40 ? !1 : r - Math.min(e, t, n) > 60;
 }
 function A4(e) {
+	let t = [], n = 0, r = 0;
+	for (let i = 0; i < e.length; i++) {
+		let a = e[i];
+		a === "(" ? n++ : a === ")" ? n-- : a === "," && n === 0 && (t.push(e.slice(r, i).trim()), r = i + 1);
+	}
+	return t.push(e.slice(r).trim()), t.filter(Boolean);
+}
+function j4(e) {
+	return A4(e).every((e) => {
+		if (/\btransparent\b/.test(e) || /(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([^)]*[/,]\s*0(?:\.0+)?\s*\)/.test(e)) return !0;
+		let t = e.match(/-?\d*\.?\d+(?:px|em|rem)/g) ?? [];
+		return t.length > 0 && t.every((e) => parseFloat(e) === 0);
+	});
+}
+function M4(e) {
 	return !!(/\b0px\s+0px\s+0px\s+0?\.?5px\b/.test(e) || /\b0px?\s+0px?\s+0px?\s+0?\.?5px\b/.test(e));
 }
-function j4(e = typeof document < "u" ? document : {}) {
+var N4 = "#linear-grab-root, [data-linear-grab], [data-react-grab], #claude-agent-glow-border, [id^=\"react-scan\"]";
+function P4(e = typeof document < "u" ? document : {}) {
 	let t = /* @__PURE__ */ new Map(), n = (e) => {
 		let n = t.get(e);
 		return n || (n = getComputedStyle(e), t.set(e, n)), n;
@@ -46861,7 +46877,7 @@ function j4(e = typeof document < "u" ? document : {}) {
 	r4 = n;
 	let r = Array.from(e.querySelectorAll("*")), i = [], a = e.documentElement ?? null, o = e.body ?? null, s = (a?.getBoundingClientRect().width ?? 0) > 0;
 	for (let e of r) {
-		if (e === a || e === o || e.closest("#linear-grab-root, #claude-agent-glow-border, [id^=\"react-scan\"]")) continue;
+		if (e === a || e === o || e.closest(N4)) continue;
 		let t = G2(e);
 		if (s) {
 			if (t.width < 2 || t.height < 2) continue;
@@ -46884,7 +46900,7 @@ function j4(e = typeof document < "u" ? document : {}) {
 	}
 	return [...u.values()];
 }
-function M4(e) {
+function F4(e) {
 	let t = /* @__PURE__ */ new Map();
 	for (let n of e) {
 		let e = t.get(n.ruleId);
@@ -46905,7 +46921,7 @@ function M4(e) {
 	}
 	return o.join("\n");
 }
-function N4(e) {
+function I4(e) {
 	return [
 		"Below is a design-system SLOP report from my running app — each finding is a",
 		"live-DOM violation of the Linear/Protocolbase primitives contract (`Linear",
@@ -46937,33 +46953,33 @@ function N4(e) {
 		"",
 		"---",
 		"",
-		M4(e)
+		F4(e)
 	].join("\n");
 }
 //#endregion
 //#region src/lib/slopScanStore.ts
-var P4 = [], F4 = /* @__PURE__ */ new Set();
-function I4(e) {
-	return F4.add(e), e(P4), () => void F4.delete(e);
+var L4 = [], R4 = /* @__PURE__ */ new Set();
+function z4(e) {
+	return R4.add(e), e(L4), () => void R4.delete(e);
 }
-function L4() {
-	P4 = [];
-	for (let e of F4) e(P4);
+function B4() {
+	L4 = [];
+	for (let e of R4) e(L4);
 }
-function R4() {
-	let e = location.pathname, t = j4(document).map((t) => ({
+function V4() {
+	let e = location.pathname, t = P4(document).map((t) => ({
 		...t,
 		page: e
 	}));
-	P4 = [...t, ...P4.filter((t) => t.page !== e)];
-	for (let e of F4) e(P4);
-	return z4(t).then(() => {
-		P4 = [...P4];
-		for (let e of F4) e(P4);
-		B4(t);
+	L4 = [...t, ...L4.filter((t) => t.page !== e)];
+	for (let e of R4) e(L4);
+	return H4(t).then(() => {
+		L4 = [...L4];
+		for (let e of R4) e(L4);
+		U4(t);
 	}), t;
 }
-async function z4(e) {
+async function H4(e) {
 	let t = null;
 	try {
 		t = (await Promise.resolve().then(() => (RZ(), AZ))).getGlobalApi() ?? null;
@@ -46992,7 +47008,7 @@ async function z4(e) {
 		if (!(!n && !a)) for (let e of i) e.component = n, e.source = a;
 	}
 }
-function B4(e) {
+function U4(e) {
 	if (e.length === 0) return;
 	let t = Date.now(), n = e.slice(0, 200).map(({ el: e, ...n }) => ({
 		kind: "slop-scan",
@@ -47006,59 +47022,59 @@ function B4(e) {
 		keepalive: !0
 	})).catch(() => {});
 }
-var V4 = !1;
+var W4 = !1;
 try {
-	V4 = localStorage.getItem("linear-grab:slop-live") === "1";
+	W4 = localStorage.getItem("linear-grab:slop-live") === "1";
 } catch {}
-var H4 = /* @__PURE__ */ new Set();
-function U4() {
-	return V4;
+var G4 = /* @__PURE__ */ new Set();
+function K4() {
+	return W4;
 }
-function W4(e) {
-	V4 = e;
+function q4(e) {
+	W4 = e;
 	try {
 		localStorage.setItem("linear-grab:slop-live", e ? "1" : "0");
 	} catch {}
-	for (let t of H4) t(e);
-	e && q4(300);
+	for (let t of G4) t(e);
+	e && X4(300);
 }
-function G4(e) {
-	return H4.add(e), e(V4), () => void H4.delete(e);
+function J4(e) {
+	return G4.add(e), e(W4), () => void G4.delete(e);
 }
-var K4 = null;
-function q4(e) {
-	K4 && clearTimeout(K4), K4 = setTimeout(() => {
-		if (K4 = null, V4) try {
-			R4();
+var Y4 = null;
+function X4(e) {
+	Y4 && clearTimeout(Y4), Y4 = setTimeout(() => {
+		if (Y4 = null, W4) try {
+			V4();
 		} catch {}
 	}, e);
 }
-var J4 = !1;
-function Y4() {
-	if (J4 || typeof window > "u") return;
-	J4 = !0;
+var Z4 = !1;
+function Q4() {
+	if (Z4 || typeof window > "u") return;
+	Z4 = !0;
 	let e = location.pathname;
 	setInterval(() => {
-		location.pathname !== e && (e = location.pathname, V4 && q4(1e3));
+		location.pathname !== e && (e = location.pathname, W4 && X4(1e3));
 	}, 500);
 }
 //#endregion
 //#region src/panel/views/DesignView.tsx
-var X4 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[7ch] text-center\">Extract"), Z4 = /*#__PURE__*/ N("<div class=\"relative flex flex-col gap-2 pl-4\"><div class=\"bg-border absolute top-1 bottom-1 left-[5px] w-px\"aria-hidden>"), Q4 = /*#__PURE__*/ N("<span class=\"text-success text-[12px] leading-none\">✓"), $4 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round aria-hidden><path d=\"M4 4l8 8M12 4l-8 8\">"), e3 = /*#__PURE__*/ N("<div class=\"flex items-center justify-end gap-1 px-1\">"), t3 = /*#__PURE__*/ N("<span class=\"relative inline-flex items-center justify-center\"><svg width=12 height=12 viewBox=\"0 0 16 16\"fill=currentColor aria-hidden><rect x=3.5 y=3 width=3.2 height=10 rx=1></rect><rect x=9.3 y=3 width=3.2 height=10 rx=1></rect></svg><span class=\"bg-success absolute -top-0.5 -right-0.5 size-1.5 animate-pulse rounded-full\"aria-hidden>"), n3 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[5ch] text-center\">Audit"), r3 = /*#__PURE__*/ N("<div class=\"flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-2\">"), i3 = /*#__PURE__*/ N("<span class=\"text-[12px] leading-none\">✓"), a3 = /*#__PURE__*/ N("<div class=\"flex items-center gap-1 px-1\">"), o3 = /*#__PURE__*/ N("<span class=\"text-text-faint font-normal tabular-nums\"> · <!> pages"), s3 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[4ch] text-center\">Scan"), c3 = /*#__PURE__*/ N("<div class=\"flex items-center gap-1 px-1\"><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> errors</button><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> warns"), l3 = /*#__PURE__*/ N("<div class=\"flex h-full flex-col gap-3 overflow-y-auto pt-3 pb-4 pr-3 pl-2\"><div class=\"flex items-center justify-between gap-2 px-1\"><div class=min-w-0><p class=\"text-text text-[12.5px] font-semibold\">Design genomes</p><p class=\"text-text-faint text-[10.5px] leading-snug\">Point at a component → get its structure, tokens and interaction states as a spec you can hand to an agent.</p></div></div><div class=\"border-border mt-1 flex flex-col gap-2 border-t pt-3\"><div class=\"flex items-center justify-between gap-2 px-1\"><div class=min-w-0><p class=\"text-text text-[12.5px] font-semibold\">CSS slowdowns</p><p class=\"text-text-faint text-[10.5px] leading-snug\">Transitions/delays over the 100ms house cap (§42) on interactive elements — feedback that animates instead of being instant. Live hits appear as you use the app; Audit sweeps the whole page.</p></div><div class=\"flex shrink-0 items-center gap-1\"></div></div></div><div class=\"border-border mt-1 flex flex-col gap-2 border-t pt-3\"><div class=\"flex items-center justify-between gap-2 px-1\"><div class=min-w-0><p class=\"text-text text-[12.5px] font-semibold\">Slop scan</p><p class=\"text-text-faint text-[10.5px] leading-snug\">Design-contract drift — Linear-primitives rules checked against the live DOM. Results accumulate per page as you navigate; re-scanning a page overwrites only that page's findings.</p></div><div class=\"flex shrink-0 items-center gap-1\">"), u3 = /*#__PURE__*/ N("<p class=\"text-text mt-1 text-[11px] font-semibold\">Interaction states"), d3 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"aria-hidden><rect x=3.5 y=3.5 width=9 height=9 rx=1.5 fill=currentColor>"), f3 = /*#__PURE__*/ N("<span class=\"text-warn text-[10.5px] font-medium tabular-nums\">s · <!> states"), p3 = /*#__PURE__*/ N("<div class=\"border-border flex flex-col gap-2 border-t px-2.5 py-2\"><p class=\"text-text-faint truncate text-[10px]\"></p><div class=\"flex max-h-64 flex-col gap-2 overflow-y-auto pr-2\"></div><div class=\"flex items-center gap-1\">"), m3 = /*#__PURE__*/ N("<div class=relative><span class=\"border-border bg-surface absolute top-3 -left-[13.5px] size-[9px] rounded-full border\"aria-hidden></span><div class=\"bg-surface border-border flex flex-col rounded-lg border\"><button class=\"flex w-full cursor-pointer items-center gap-2 px-2.5 py-2 text-left\"><span class=\"text-accent min-w-0 truncate font-mono text-[12px]\"></span><span class=\"text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums\"> roles<!> · </span><svg width=10 height=10 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 class=\"text-text-faint shrink-0 transition-transform\"aria-hidden><path d=\"m4 6 4 4 4-4\">"), h3 = /*#__PURE__*/ N("<span class=text-text-faint> ×"), g3 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-0.5\"><p class=\"text-text text-[11px] font-medium\">"), _3 = /*#__PURE__*/ N("<span class=text-accent> ← var(<!>)"), v3 = /*#__PURE__*/ N("<p class=\"text-text-dim font-mono text-[10px] leading-snug break-all\">: "), y3 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-0.5\"><p class=\"text-warn text-[10.5px] font-medium\"> — "), b3 = /*#__PURE__*/ N("<p class=\"text-text-dim font-mono text-[10px] leading-snug break-all\">: <!> → "), x3 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round aria-hidden><circle cx=8 cy=8 r=6></circle><circle cx=8 cy=8 r=2 fill=currentColor stroke=none>"), S3 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round aria-hidden><rect x=5.5 y=5.5 width=9 height=9 rx=1.5></rect><path d=\"M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2\">"), C3 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"fill=currentColor aria-hidden><path d=\"M4.5 2.5v11l9-5.5z\">"), w3 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px]\">Nothing caught yet — interact with the app, or run Audit."), T3 = /*#__PURE__*/ N("<span class=\"text-text-dim font-mono text-[10px] break-all\">"), E3 = /*#__PURE__*/ N("<span class=\"text-danger text-[10px] leading-snug\">⚠ layout/paint transition: "), D3 = /*#__PURE__*/ N("<span class=\"text-danger text-[10px] leading-snug\">⚠ ease-in easing: "), O3 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex flex-col gap-0.5 rounded-lg border p-2\"><div class=\"flex items-center gap-2\"><span class=\"text-warn shrink-0 text-[10px] font-semibold tracking-wide uppercase\"></span><span class=\"text-accent min-w-0 truncate font-mono text-[11.5px]\"></span><span class=\"text-text ml-auto shrink-0 text-[11px] font-medium tabular-nums\">ms</span></div><span class=\"text-text-dim text-[10px] leading-snug\"></span><span class=\"text-text-faint text-[10px] leading-snug\">"), k3 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round aria-hidden><path d=\"M8 1.5 9.6 6l4.4 1.6L9.6 9.2 8 13.7 6.4 9.2 2 7.6 6.4 6Z\"></path><path d=\"M13 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z\">"), A3 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px]\">No scan yet — click Scan to audit this page against the contract."), j3 = /*#__PURE__*/ N("<div class=\"border-border flex flex-col gap-1 border-t px-2 py-1.5\"><p class=\"text-text-dim text-[10px] leading-snug\">"), M3 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex flex-col rounded-lg border\"><button class=\"flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left\"><span class=\"size-1.5 shrink-0 rounded-full\"aria-hidden></span><span class=\"text-accent min-w-0 truncate font-mono text-[11.5px]\"></span><span class=\"text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums\">×</span><svg width=10 height=10 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 class=\"text-text-faint shrink-0 transition-transform\"aria-hidden><path d=\"m4 6 4 4 4-4\">"), N3 = /*#__PURE__*/ N("<span class=text-accent> "), P3 = /*#__PURE__*/ N("<span class=\"text-text-faint tabular-nums\"> ×"), F3 = /*#__PURE__*/ N("<button class=\"hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded px-1 py-0.5 text-left\"title=\"Reveal on the page\"><span class=\"text-text min-w-0 truncate font-mono text-[10.5px]\"></span><span class=\"text-text-faint font-mono text-[10px] leading-snug break-all\">"), I3 = "linear-grab:genomes:v1", L3 = 30;
-function R3() {
+var $4 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[7ch] text-center\">Extract"), e3 = /*#__PURE__*/ N("<div class=\"relative flex flex-col gap-2 pl-4\"><div class=\"bg-border absolute top-1 bottom-1 left-[5px] w-px\"aria-hidden>"), t3 = /*#__PURE__*/ N("<span class=\"text-success text-[12px] leading-none\">✓"), n3 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round aria-hidden><path d=\"M4 4l8 8M12 4l-8 8\">"), r3 = /*#__PURE__*/ N("<div class=\"flex items-center justify-end gap-1 px-1\">"), i3 = /*#__PURE__*/ N("<span class=\"relative inline-flex items-center justify-center\"><svg width=12 height=12 viewBox=\"0 0 16 16\"fill=currentColor aria-hidden><rect x=3.5 y=3 width=3.2 height=10 rx=1></rect><rect x=9.3 y=3 width=3.2 height=10 rx=1></rect></svg><span class=\"bg-success absolute -top-0.5 -right-0.5 size-1.5 animate-pulse rounded-full\"aria-hidden>"), a3 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[5ch] text-center\">Audit"), o3 = /*#__PURE__*/ N("<div class=\"flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-2\">"), s3 = /*#__PURE__*/ N("<span class=\"text-[12px] leading-none\">✓"), c3 = /*#__PURE__*/ N("<div class=\"flex items-center gap-1 px-1\">"), l3 = /*#__PURE__*/ N("<span class=\"text-text-faint font-normal tabular-nums\"> · <!> pages"), u3 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[4ch] text-center\">Scan"), d3 = /*#__PURE__*/ N("<div class=\"flex items-center gap-1 px-1\"><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> errors</button><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> warns"), f3 = /*#__PURE__*/ N("<div class=\"flex h-full flex-col gap-3 overflow-y-auto pt-3 pb-4 pr-3 pl-2\"><div class=\"flex items-center justify-between gap-2 px-1\"><div class=min-w-0><p class=\"text-text text-[12.5px] font-semibold\">Design genomes</p><p class=\"text-text-faint text-[10.5px] leading-snug\">Point at a component → get its structure, tokens and interaction states as a spec you can hand to an agent.</p></div></div><div class=\"border-border mt-1 flex flex-col gap-2 border-t pt-3\"><div class=\"flex items-center justify-between gap-2 px-1\"><div class=min-w-0><p class=\"text-text text-[12.5px] font-semibold\">CSS slowdowns</p><p class=\"text-text-faint text-[10.5px] leading-snug\">Transitions/delays over the 100ms house cap (§42) on interactive elements — feedback that animates instead of being instant. Live hits appear as you use the app; Audit sweeps the whole page.</p></div><div class=\"flex shrink-0 items-center gap-1\"></div></div></div><div class=\"border-border mt-1 flex flex-col gap-2 border-t pt-3\"><div class=\"flex items-center justify-between gap-2 px-1\"><div class=min-w-0><p class=\"text-text text-[12.5px] font-semibold\">Slop scan</p><p class=\"text-text-faint text-[10.5px] leading-snug\">Design-contract drift — Linear-primitives rules checked against the live DOM. Results accumulate per page as you navigate; re-scanning a page overwrites only that page's findings.</p></div><div class=\"flex shrink-0 items-center gap-1\">"), p3 = /*#__PURE__*/ N("<p class=\"text-text mt-1 text-[11px] font-semibold\">Interaction states"), m3 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"aria-hidden><rect x=3.5 y=3.5 width=9 height=9 rx=1.5 fill=currentColor>"), h3 = /*#__PURE__*/ N("<span class=\"text-warn text-[10.5px] font-medium tabular-nums\">s · <!> states"), g3 = /*#__PURE__*/ N("<div class=\"border-border flex flex-col gap-2 border-t px-2.5 py-2\"><p class=\"text-text-faint truncate text-[10px]\"></p><div class=\"flex max-h-64 flex-col gap-2 overflow-y-auto pr-2\"></div><div class=\"flex items-center gap-1\">"), _3 = /*#__PURE__*/ N("<div class=relative><span class=\"border-border bg-surface absolute top-3 -left-[13.5px] size-[9px] rounded-full border\"aria-hidden></span><div class=\"bg-surface border-border flex flex-col rounded-lg border\"><button class=\"flex w-full cursor-pointer items-center gap-2 px-2.5 py-2 text-left\"><span class=\"text-accent min-w-0 truncate font-mono text-[12px]\"></span><span class=\"text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums\"> roles<!> · </span><svg width=10 height=10 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 class=\"text-text-faint shrink-0 transition-transform\"aria-hidden><path d=\"m4 6 4 4 4-4\">"), v3 = /*#__PURE__*/ N("<span class=text-text-faint> ×"), y3 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-0.5\"><p class=\"text-text text-[11px] font-medium\">"), b3 = /*#__PURE__*/ N("<span class=text-accent> ← var(<!>)"), x3 = /*#__PURE__*/ N("<p class=\"text-text-dim font-mono text-[10px] leading-snug break-all\">: "), S3 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-0.5\"><p class=\"text-warn text-[10.5px] font-medium\"> — "), C3 = /*#__PURE__*/ N("<p class=\"text-text-dim font-mono text-[10px] leading-snug break-all\">: <!> → "), w3 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round aria-hidden><circle cx=8 cy=8 r=6></circle><circle cx=8 cy=8 r=2 fill=currentColor stroke=none>"), T3 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round aria-hidden><rect x=5.5 y=5.5 width=9 height=9 rx=1.5></rect><path d=\"M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2\">"), E3 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"fill=currentColor aria-hidden><path d=\"M4.5 2.5v11l9-5.5z\">"), D3 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px]\">Nothing caught yet — interact with the app, or run Audit."), O3 = /*#__PURE__*/ N("<span class=\"text-text-dim font-mono text-[10px] break-all\">"), k3 = /*#__PURE__*/ N("<span class=\"text-danger text-[10px] leading-snug\">⚠ layout/paint transition: "), A3 = /*#__PURE__*/ N("<span class=\"text-danger text-[10px] leading-snug\">⚠ ease-in easing: "), j3 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex flex-col gap-0.5 rounded-lg border p-2\"><div class=\"flex items-center gap-2\"><span class=\"text-warn shrink-0 text-[10px] font-semibold tracking-wide uppercase\"></span><span class=\"text-accent min-w-0 truncate font-mono text-[11.5px]\"></span><span class=\"text-text ml-auto shrink-0 text-[11px] font-medium tabular-nums\">ms</span></div><span class=\"text-text-dim text-[10px] leading-snug\"></span><span class=\"text-text-faint text-[10px] leading-snug\">"), M3 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round aria-hidden><path d=\"M8 1.5 9.6 6l4.4 1.6L9.6 9.2 8 13.7 6.4 9.2 2 7.6 6.4 6Z\"></path><path d=\"M13 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z\">"), N3 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px]\">No scan yet — click Scan to audit this page against the contract."), P3 = /*#__PURE__*/ N("<div class=\"border-border flex flex-col gap-1 border-t px-2 py-1.5\"><p class=\"text-text-dim text-[10px] leading-snug\">"), F3 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex flex-col rounded-lg border\"><button class=\"flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left\"><span class=\"size-1.5 shrink-0 rounded-full\"aria-hidden></span><span class=\"text-accent min-w-0 truncate font-mono text-[11.5px]\"></span><span class=\"text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums\">×</span><svg width=10 height=10 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 class=\"text-text-faint shrink-0 transition-transform\"aria-hidden><path d=\"m4 6 4 4 4-4\">"), I3 = /*#__PURE__*/ N("<span class=text-accent> "), L3 = /*#__PURE__*/ N("<span class=\"text-text-faint tabular-nums\"> ×"), R3 = /*#__PURE__*/ N("<button class=\"hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded px-1 py-0.5 text-left\"title=\"Reveal on the page\"><span class=\"text-text min-w-0 truncate font-mono text-[10.5px]\"></span><span class=\"text-text-faint font-mono text-[10px] leading-snug break-all\">"), z3 = "linear-grab:genomes:v1", B3 = 30;
+function V3() {
 	try {
-		return JSON.parse(localStorage.getItem(I3) ?? "[]");
+		return JSON.parse(localStorage.getItem(z3) ?? "[]");
 	} catch {
 		return [];
 	}
 }
-function z3(e) {
+function H3(e) {
 	try {
-		localStorage.setItem(I3, JSON.stringify(e.slice(0, L3)));
+		localStorage.setItem(z3, JSON.stringify(e.slice(0, B3)));
 	} catch {}
 }
-var B3 = /* @__PURE__ */ new Map();
-function V3(e) {
+var U3 = /* @__PURE__ */ new Map();
+function W3(e) {
 	let t = e.el?.deref();
 	if (!(t instanceof HTMLElement) || !t.isConnected) return !1;
 	t.scrollIntoView({
@@ -47070,8 +47086,8 @@ function V3(e) {
 		t.style.outline = n, t.style.outlineOffset = r;
 	}, 1400), !0;
 }
-function H3() {
-	let [e, t] = T(R3()), [n, r] = T(null), [i, a] = T(null), [o, s] = T(null), [c, l] = T(null), [u, d] = T(null), [f, p] = T({
+function G3() {
+	let [e, t] = T(V3()), [n, r] = T(null), [i, a] = T(null), [o, s] = T(null), [c, l] = T(null), [u, d] = T(null), [f, p] = T({
 		active: !1,
 		msLeft: 0,
 		total: 0,
@@ -47102,20 +47118,20 @@ function H3() {
 			l("Clipboard was blocked — click Copy again.");
 		}
 	}, [k, ee] = T([]);
-	ae(I4(ee));
-	let [te, A] = T(U4());
-	ae(G4(A));
+	ae(z4(ee));
+	let [te, A] = T(K4());
+	ae(J4(A));
 	let [ne, re] = T(!1), [ie, oe] = T(null), [se, ce] = T(!0), [le, ue] = T(!0), [de, fe] = T(!1), [pe, me] = T(!1), he = () => {
 		l(null), re(!0);
 		try {
-			R4(), oe(null);
+			V4(), oe(null);
 		} catch (e) {
 			l(e instanceof Error ? e.message : String(e));
 		} finally {
 			re(!1);
 		}
 	}, ge = () => {
-		L4(), oe(null);
+		B4(), oe(null);
 	}, _e = () => new Set(k().map((e) => e.page)).size, ve = () => k().filter((e) => e.severity === "error" ? se() : le()), ye = () => {
 		let e = /* @__PURE__ */ new Map();
 		for (let t of ve()) {
@@ -47125,25 +47141,25 @@ function H3() {
 		return [...e.values()].sort((e, t) => Number(t[0].severity === "error") - Number(e[0].severity === "error") || t.length - e.length);
 	}, be = () => k().filter((e) => e.severity === "error").length, xe = () => k().length - be(), Se = async () => {
 		try {
-			await navigator.clipboard.writeText(M4(ve())), fe(!0), setTimeout(() => fe(!1), 1600);
+			await navigator.clipboard.writeText(F4(ve())), fe(!0), setTimeout(() => fe(!1), 1600);
 		} catch {
 			l("Clipboard was blocked — click Copy again.");
 		}
 	}, Ce = async () => {
 		try {
-			await navigator.clipboard.writeText(N4(ve())), me(!0), setTimeout(() => me(!1), 1600);
+			await navigator.clipboard.writeText(I4(ve())), me(!0), setTimeout(() => me(!1), 1600);
 		} catch {
 			l("Clipboard was blocked — click Copy again.");
 		}
 	}, we = (e) => {
-		t(e), z3(e);
+		t(e), H3(e);
 	}, Te = async () => {
 		l(null), a("extract"), window.dispatchEvent(new CustomEvent(BZ));
 		try {
 			let t = await u2();
 			if (!t) return;
 			let n = await e2(t), i = Date.now();
-			B3.set(i, new WeakRef(t)), we([{
+			U3.set(i, new WeakRef(t)), we([{
 				id: i,
 				genome: n
 			}, ...e()]), r(i);
@@ -47155,10 +47171,10 @@ function H3() {
 	}, Ee = async (t) => {
 		l(null), a(t.id), window.dispatchEvent(new CustomEvent(BZ));
 		try {
-			let n = B3.get(t.id)?.deref() ?? null;
+			let n = U3.get(t.id)?.deref() ?? null;
 			if (!n || !n.isConnected) {
 				if (n = await u2(), !n) return;
-				B3.set(t.id, new WeakRef(n));
+				U3.set(t.id, new WeakRef(n));
 			}
 			let r = await c2(n, 8e3, (e) => s(Math.ceil(e / 1e3)));
 			r.length === 0 && l("No state changes captured — hover/open the component while the 8s window runs."), we(e().map((e) => e.id === t.id ? {
@@ -47180,7 +47196,7 @@ function H3() {
 			l("Clipboard was blocked — click Copy again.");
 		}
 	}, Oe = (t) => {
-		B3.delete(t), we(e().filter((e) => e.id !== t));
+		U3.delete(t), we(e().filter((e) => e.id !== t));
 	}, [ke, Ae] = T(!1), je = async () => {
 		try {
 			let t = e().map((e) => l2(e.genome)).join("\n\n---\n\n");
@@ -47189,10 +47205,10 @@ function H3() {
 			l("Clipboard was blocked — click Copy again.");
 		}
 	}, Me = () => {
-		B3.clear(), we([]), r(null);
+		U3.clear(), we([]), r(null);
 	};
 	return (() => {
-		var t = l3(), a = t.firstChild;
+		var t = f3(), a = t.firstChild;
 		a.firstChild;
 		var o = a.nextSibling, s = o.firstChild.firstChild.nextSibling, d = o.nextSibling, p = d.firstChild.firstChild, h = p.firstChild;
 		h.firstChild;
@@ -47205,7 +47221,7 @@ function H3() {
 			},
 			onClick: () => void Te(),
 			get children() {
-				return X4();
+				return $4();
 			}
 		}), null), P(t, j(M, {
 			get when() {
@@ -47228,7 +47244,7 @@ function H3() {
 			},
 			get children() {
 				return [(() => {
-					var t = Z4();
+					var t = e3();
 					return t.firstChild, P(t, j(We, {
 						get each() {
 							return e();
@@ -47236,7 +47252,7 @@ function H3() {
 						children: (e) => {
 							let t = () => n() === e.id;
 							return (() => {
-								var n = m3(), a = n.firstChild, o = a.nextSibling, s = o.firstChild, c = s.firstChild, l = c.nextSibling, d = l.firstChild, p = d.nextSibling;
+								var n = _3(), a = n.firstChild, o = a.nextSibling, s = o.firstChild, c = s.firstChild, l = c.nextSibling, d = l.firstChild, p = d.nextSibling;
 								p.nextSibling;
 								var m = l.nextSibling;
 								return s.$$click = () => r(t() ? null : e.id), P(c, () => e.genome.title), P(l, () => e.genome.nodes.length, d), P(l, (() => {
@@ -47247,19 +47263,19 @@ function H3() {
 										return t();
 									},
 									get children() {
-										var t = p3(), n = t.firstChild, r = n.nextSibling, a = r.nextSibling;
+										var t = g3(), n = t.firstChild, r = n.nextSibling, a = r.nextSibling;
 										return P(n, () => e.genome.pageUrl), P(r, j(We, {
 											get each() {
 												return e.genome.nodes;
 											},
 											children: (e) => (() => {
-												var t = g3(), n = t.firstChild;
+												var t = y3(), n = t.firstChild;
 												return P(n, () => e.label, null), P(n, j(M, {
 													get when() {
 														return e.count > 1;
 													},
 													get children() {
-														var t = h3();
+														var t = v3();
 														return t.firstChild, P(t, () => e.count, null), t;
 													}
 												}), null), P(t, j(We, {
@@ -47267,13 +47283,13 @@ function H3() {
 														return Object.entries(e.styles);
 													},
 													children: ([t, n]) => (() => {
-														var r = v3(), i = r.firstChild;
+														var r = x3(), i = r.firstChild;
 														return P(r, t, i), P(r, n, null), P(r, j(M, {
 															get when() {
 																return e.tokens[t];
 															},
 															get children() {
-																var n = _3(), r = n.firstChild.nextSibling;
+																var n = b3(), r = n.firstChild.nextSibling;
 																return r.nextSibling, P(n, () => e.tokens[t], r), n;
 															}
 														}), null), r;
@@ -47285,18 +47301,18 @@ function H3() {
 												return e.genome.states.length > 0;
 											},
 											get children() {
-												return [u3(), j(We, {
+												return [p3(), j(We, {
 													get each() {
 														return e.genome.states;
 													},
 													children: (e) => (() => {
-														var t = y3(), n = t.firstChild, r = n.firstChild;
+														var t = S3(), n = t.firstChild, r = n.firstChild;
 														return P(n, () => e.label, r), P(n, () => e.trigger, null), P(t, j(We, {
 															get each() {
 																return Object.entries(e.changed);
 															},
 															children: ([e, t]) => (() => {
-																var n = b3(), r = n.firstChild, i = r.nextSibling;
+																var n = C3(), r = n.firstChild, i = r.nextSibling;
 																return i.nextSibling, P(n, e, r), P(n, () => t.from, i), P(n, () => t.to, null), n;
 															})()
 														}), null), t;
@@ -47318,7 +47334,7 @@ function H3() {
 													"aria-label": "Capture interaction states",
 													onClick: () => void Ee(e),
 													get children() {
-														return x3();
+														return w3();
 													}
 												});
 											},
@@ -47332,10 +47348,10 @@ function H3() {
 													"aria-label": "Stop recording states",
 													onClick: () => o2(),
 													get children() {
-														return d3();
+														return m3();
 													}
 												}), (() => {
-													var e = f3(), t = e.firstChild, n = t.nextSibling;
+													var e = h3(), t = e.firstChild, n = t.nextSibling;
 													return n.nextSibling, P(e, () => Math.ceil(f().msLeft / 1e3), t), P(e, () => f().total, n), e;
 												})()];
 											}
@@ -47353,10 +47369,10 @@ function H3() {
 														return u() === e.id;
 													},
 													get fallback() {
-														return S3();
+														return T3();
 													},
 													get children() {
-														return Q4();
+														return t3();
 													}
 												});
 											}
@@ -47367,7 +47383,7 @@ function H3() {
 											"aria-label": "Delete genome",
 											onClick: () => Oe(e.id),
 											get children() {
-												return $4();
+												return n3();
 											}
 										}), null), t;
 									}
@@ -47382,7 +47398,7 @@ function H3() {
 						}
 					}), null), t;
 				})(), (() => {
-					var e = e3();
+					var e = r3();
 					return P(e, j(q, {
 						class: "size-7 px-0",
 						variant: "ghost",
@@ -47397,10 +47413,10 @@ function H3() {
 									return ke();
 								},
 								get fallback() {
-									return S3();
+									return T3();
 								},
 								get children() {
-									return Q4();
+									return t3();
 								}
 							});
 						}
@@ -47411,7 +47427,7 @@ function H3() {
 						"aria-label": "Delete all genomes",
 						onClick: Me,
 						get children() {
-							return $4();
+							return n3();
 						}
 					}), null), e;
 				})()];
@@ -47432,10 +47448,10 @@ function H3() {
 						return g();
 					},
 					get fallback() {
-						return C3();
+						return E3();
 					},
 					get children() {
-						return t3();
+						return i3();
 					}
 				});
 			}
@@ -47447,24 +47463,24 @@ function H3() {
 			},
 			onClick: () => void S(),
 			get children() {
-				return n3();
+				return a3();
 			}
 		}), null), P(o, j(M, {
 			get when() {
 				return m().length > 0;
 			},
 			get fallback() {
-				return w3();
+				return D3();
 			},
 			get children() {
 				return [(() => {
-					var e = r3();
+					var e = o3();
 					return P(e, j(We, {
 						get each() {
 							return m();
 						},
 						children: (e) => (() => {
-							var t = O3(), n = t.firstChild, r = n.firstChild, i = r.nextSibling, a = i.nextSibling, o = a.firstChild, s = n.nextSibling, c = s.nextSibling;
+							var t = j3(), n = t.firstChild, r = n.firstChild, i = r.nextSibling, a = i.nextSibling, o = a.firstChild, s = n.nextSibling, c = s.nextSibling;
 							return P(r, () => e.mode === "live" ? "live" : "audit"), P(i, () => e.component ?? e.element, null), P(i, j(M, {
 								get when() {
 									return e.count > 1;
@@ -47480,7 +47496,7 @@ function H3() {
 									return e.source;
 								},
 								get children() {
-									var t = T3();
+									var t = O3();
 									return P(t, () => e.source), t;
 								}
 							}), s), P(s, () => e.properties.join(", "), null), P(s, j(M, {
@@ -47499,7 +47515,7 @@ function H3() {
 									return e.jankProps?.length;
 								},
 								get children() {
-									var t = E3();
+									var t = k3();
 									return t.firstChild, P(t, () => e.jankProps.join(", "), null), t;
 								}
 							}), c), P(t, j(M, {
@@ -47507,14 +47523,14 @@ function H3() {
 									return e.easing;
 								},
 								get children() {
-									var t = D3();
+									var t = A3();
 									return t.firstChild, P(t, () => e.easing, null), t;
 								}
 							}), c), P(c, () => e.suggestion), t;
 						})()
 					})), e;
 				})(), (() => {
-					var e = a3();
+					var e = c3();
 					return P(e, j(q, {
 						class: "size-7 px-0",
 						variant: "primary",
@@ -47529,10 +47545,10 @@ function H3() {
 									return w();
 								},
 								get fallback() {
-									return k3();
+									return M3();
 								},
 								get children() {
-									return i3();
+									return s3();
 								}
 							});
 						}
@@ -47550,10 +47566,10 @@ function H3() {
 									return b();
 								},
 								get fallback() {
-									return S3();
+									return T3();
 								},
 								get children() {
-									return Q4();
+									return t3();
 								}
 							});
 						}
@@ -47564,7 +47580,7 @@ function H3() {
 						"aria-label": "Clear all findings",
 						onClick: M2,
 						get children() {
-							return $4();
+							return n3();
 						}
 					}), null), e;
 				})()];
@@ -47574,7 +47590,7 @@ function H3() {
 				return _e() > 1;
 			},
 			get children() {
-				var e = o3(), t = e.firstChild.nextSibling;
+				var e = l3(), t = e.firstChild.nextSibling;
 				return t.nextSibling, P(e, _e, t), e;
 			}
 		}), null), P(_, j(q, {
@@ -47586,17 +47602,17 @@ function H3() {
 			get "aria-label"() {
 				return te() ? "Pause live scan" : "Start live scan";
 			},
-			onClick: () => W4(!te()),
+			onClick: () => q4(!te()),
 			get children() {
 				return j(M, {
 					get when() {
 						return te();
 					},
 					get fallback() {
-						return C3();
+						return E3();
 					},
 					get children() {
-						return t3();
+						return i3();
 					}
 				});
 			}
@@ -47609,19 +47625,19 @@ function H3() {
 			title: "Scan this page — cumulative: keeps other pages' findings, replaces this page's",
 			onClick: he,
 			get children() {
-				return s3();
+				return u3();
 			}
 		}), null), P(d, j(M, {
 			get when() {
 				return k().length > 0;
 			},
 			get fallback() {
-				return A3();
+				return N3();
 			},
 			get children() {
 				return [
 					(() => {
-						var e = c3(), t = e.firstChild, n = t.firstChild, r = t.nextSibling, i = r.firstChild;
+						var e = d3(), t = e.firstChild, n = t.firstChild, r = t.nextSibling, i = r.firstChild;
 						return t.$$click = () => ce(!se()), P(t, be, n), r.$$click = () => ue(!le()), P(r, xe, i), D((e) => {
 							var n = {
 								"text-danger bg-danger/10 border-danger/40": se(),
@@ -47639,7 +47655,7 @@ function H3() {
 						}), e;
 					})(),
 					(() => {
-						var e = r3();
+						var e = o3();
 						return P(e, j(We, {
 							get each() {
 								return ye();
@@ -47647,7 +47663,7 @@ function H3() {
 							children: (e) => {
 								let t = e[0], n = () => ie() === t.ruleId;
 								return (() => {
-									var r = M3(), i = r.firstChild, a = i.firstChild, o = a.nextSibling, s = o.nextSibling;
+									var r = F3(), i = r.firstChild, a = i.firstChild, o = a.nextSibling, s = o.nextSibling;
 									s.firstChild;
 									var c = s.nextSibling;
 									return i.$$click = () => oe(n() ? null : t.ruleId), P(o, () => t.ruleId), P(s, () => e.reduce((e, t) => e + (t.count ?? 1), 0), null), P(r, j(M, {
@@ -47655,19 +47671,19 @@ function H3() {
 											return n();
 										},
 										get children() {
-											var n = j3(), r = n.firstChild;
+											var n = P3(), r = n.firstChild;
 											return P(r, () => t.description), P(n, j(We, {
 												each: e,
 												children: (e) => (() => {
-													var t = F3(), n = t.firstChild, r = n.nextSibling;
+													var t = R3(), n = t.firstChild, r = n.nextSibling;
 													return t.$$click = () => {
-														V3(e) || l(e.page === location.pathname ? "Element is gone — run Scan again." : `This finding is on ${e.page} — navigate there to reveal it.`);
+														W3(e) || l(e.page === location.pathname ? "Element is gone — run Scan again." : `This finding is on ${e.page} — navigate there to reveal it.`);
 													}, P(n, j(M, {
 														get when() {
 															return _e() > 1;
 														},
 														get children() {
-															var t = N3(), n = t.firstChild;
+															var t = I3(), n = t.firstChild;
 															return P(t, () => e.page, n), t;
 														}
 													}), null), P(n, j(M, {
@@ -47675,7 +47691,7 @@ function H3() {
 															return e.component;
 														},
 														get children() {
-															var t = N3(), n = t.firstChild;
+															var t = I3(), n = t.firstChild;
 															return P(t, () => e.component, n), t;
 														}
 													}), null), P(n, () => e.selector, null), P(n, j(M, {
@@ -47683,7 +47699,7 @@ function H3() {
 															return (e.count ?? 1) > 1;
 														},
 														get children() {
-															var t = P3();
+															var t = L3();
 															return t.firstChild, P(t, () => e.count, null), t;
 														}
 													}), null), P(t, j(M, {
@@ -47691,7 +47707,7 @@ function H3() {
 															return e.source;
 														},
 														get children() {
-															var t = T3();
+															var t = O3();
 															return P(t, () => e.source), t;
 														}
 													}), r), P(r, () => e.evidence), t;
@@ -47711,7 +47727,7 @@ function H3() {
 						})), e;
 					})(),
 					(() => {
-						var e = a3();
+						var e = c3();
 						return P(e, j(q, {
 							class: "size-7 px-0",
 							variant: "primary",
@@ -47726,10 +47742,10 @@ function H3() {
 										return pe();
 									},
 									get fallback() {
-										return k3();
+										return M3();
 									},
 									get children() {
-										return i3();
+										return s3();
 									}
 								});
 							}
@@ -47747,10 +47763,10 @@ function H3() {
 										return de();
 									},
 									get fallback() {
-										return S3();
+										return T3();
 									},
 									get children() {
-										return Q4();
+										return t3();
 									}
 								});
 							}
@@ -47761,7 +47777,7 @@ function H3() {
 							"aria-label": "Clear scan results",
 							onClick: ge,
 							get children() {
-								return $4();
+								return n3();
 							}
 						}), null), e;
 					})()
@@ -47773,14 +47789,14 @@ function H3() {
 rt(["click"]);
 //#endregion
 //#region src/lib/renderScan.ts
-function U3(e) {
+function K3(e) {
 	return Math.round(e * 10) / 10;
 }
-function W3(e, t, n) {
+function q3(e, t, n) {
 	return e.rules[t]?.severity ?? n;
 }
-var G3 = /^(HotReload|Head|AppRouterAnnouncer|HistoryUpdater|AppRouter|Router|ServerRoot|SegmentViewNode|SegmentViewStateNode|SegmentStateProvider|InnerLayoutRouter|OuterLayoutRouter|TemplateContext|RenderFromTemplateContext|ScrollAndFocusHandler|RedirectBoundary|RedirectErrorBoundary|LoadingBoundary|ErrorBoundary|ErrorBoundaryHandler|HTTPAccessFallbackBoundary|HTTPAccessFallbackErrorBoundary|DevRootHTTPAccessFallbackBoundary|__next_root_layout_boundary__|Preloads|NonIndex|ReplaySsrOnlyErrors|AppDevOverlay\w*|DevOverlay\w*|PseudoHtml\w*)$/;
-function K3(e) {
+var J3 = /^(HotReload|Head|AppRouterAnnouncer|HistoryUpdater|AppRouter|Router|ServerRoot|SegmentViewNode|SegmentViewStateNode|SegmentStateProvider|InnerLayoutRouter|OuterLayoutRouter|TemplateContext|RenderFromTemplateContext|ScrollAndFocusHandler|RedirectBoundary|RedirectErrorBoundary|LoadingBoundary|ErrorBoundary|ErrorBoundaryHandler|HTTPAccessFallbackBoundary|HTTPAccessFallbackErrorBoundary|DevRootHTTPAccessFallbackBoundary|__next_root_layout_boundary__|Preloads|NonIndex|ReplaySsrOnlyErrors|AppDevOverlay\w*|DevOverlay\w*|PseudoHtml\w*)$/;
+function Y3(e) {
 	return e?.length ? e.map((e) => {
 		try {
 			let t = new RegExp(e);
@@ -47790,12 +47806,12 @@ function K3(e) {
 		}
 	}) : [];
 }
-function q3(e, t) {
-	if (e.length <= 2 || G3.test(e)) return !0;
+function X3(e, t) {
+	if (e.length <= 2 || J3.test(e)) return !0;
 	for (let n of t) if (n(e)) return !0;
 	return !1;
 }
-function J3(e) {
+function Z3(e) {
 	let t = /* @__PURE__ */ new Map();
 	for (let n of e) for (let e of n.entries) {
 		let n = t.get(e.name);
@@ -47808,13 +47824,13 @@ function J3(e) {
 	}
 	return t;
 }
-function Y3(e, t, n) {
-	let r = [], i = K3(n?.ignore), a = e.map((e) => ({
+function Q3(e, t, n) {
+	let r = [], i = Y3(n?.ignore), a = e.map((e) => ({
 		...e,
-		entries: e.entries.filter((e) => !q3(e.name, i)),
-		mounts: Object.fromEntries(Object.entries(e.mounts).filter(([e]) => !q3(e, i)))
-	})), o = J3(a), s = t.budgets;
-	return i6(r, () => {
+		entries: e.entries.filter((e) => !X3(e.name, i)),
+		mounts: Object.fromEntries(Object.entries(e.mounts).filter(([e]) => !X3(e, i)))
+	})), o = Z3(a), s = t.budgets;
+	return s6(r, () => {
 		let e = [];
 		for (let n of o.values()) {
 			if (n.updates.length < 5 || !n.updates.every((e) => e.length === 0)) continue;
@@ -47822,20 +47838,20 @@ function Y3(e, t, n) {
 			e.push({
 				ruleId: "R9",
 				shape: "B",
-				severity: W3(t, "R9", "error"),
+				severity: q3(t, "R9", "error"),
 				suspected: !0,
 				description: `suspected R9 — ${n.name} re-rendered ${r}× with zero prop changes (dead memo or subscription-in-body)`,
 				component: n.name,
 				source: null,
 				renders: r,
-				selfTime: U3(n.selfTime),
+				selfTime: K3(n.selfTime),
 				changes: [],
-				evidence: `${r} renders · ${U3(n.selfTime)}ms self · all props identity-equal`,
+				evidence: `${r} renders · ${K3(n.selfTime)}ms self · all props identity-equal`,
 				el: n.el
 			});
 		}
 		return e;
-	}), i6(r, () => {
+	}), s6(r, () => {
 		let e = [];
 		for (let n of o.values()) {
 			if (n.updates.length < 5 || !n.updates.every((e) => e.length > 0 && e.every((e) => /\((?:fn|ref)\)$/.test(e)))) continue;
@@ -47843,20 +47859,20 @@ function Y3(e, t, n) {
 			e.push({
 				ruleId: "R5",
 				shape: "B",
-				severity: W3(t, "R5", "error"),
+				severity: q3(t, "R5", "error"),
 				suspected: !0,
 				description: `suspected R5 — ${i} renders of ${n.name} with fresh ${a} identity per parent render (memo defeated)`,
 				component: n.name,
 				source: null,
 				renders: i,
-				selfTime: U3(n.selfTime),
+				selfTime: K3(n.selfTime),
 				changes: r,
-				evidence: `${i} renders · ${U3(n.selfTime)}ms self · churning ${a}`,
+				evidence: `${i} renders · ${K3(n.selfTime)}ms self · churning ${a}`,
 				el: n.el
 			});
 		}
 		return e;
-	}), i6(r, () => {
+	}), s6(r, () => {
 		let e = [], n = /Tooltip|Menu|Popover|Context|Dialog|Dropdown/i;
 		for (let r of a) for (let i of Object.keys(r.mounts)) {
 			let a = r.mounts[i];
@@ -47865,7 +47881,7 @@ function Y3(e, t, n) {
 			e.push({
 				ruleId: "R4",
 				shape: "A",
-				severity: W3(t, "R4", "error"),
+				severity: q3(t, "R4", "error"),
 				suspected: !0,
 				description: `suspected R4 — ${a} ${i} instances mounted in one commit (per-row overlays should mount on intent)`,
 				component: i,
@@ -47878,11 +47894,11 @@ function Y3(e, t, n) {
 			});
 		}
 		return e;
-	}), i6(r, () => {
+	}), s6(r, () => {
 		let e = [];
 		for (let t of a) {
 			if (t.duration <= s.commitMs) continue;
-			let n = [...t.entries].sort((e, t) => t.selfTime - e.selfTime).slice(0, 3).map((e) => `${e.name} ${U3(e.selfTime)}ms`).join(", "), r = U3(t.duration), i = t.duration > 16 ? ` · ~${Math.round(1e3 / t.duration)} FPS` : "";
+			let n = [...t.entries].sort((e, t) => t.selfTime - e.selfTime).slice(0, 3).map((e) => `${e.name} ${K3(e.selfTime)}ms`).join(", "), r = K3(t.duration), i = t.duration > 16 ? ` · ~${Math.round(1e3 / t.duration)} FPS` : "";
 			e.push({
 				ruleId: null,
 				shape: null,
@@ -47898,7 +47914,7 @@ function Y3(e, t, n) {
 			});
 		}
 		return e;
-	}), i6(r, () => {
+	}), s6(r, () => {
 		let e = [], t = /* @__PURE__ */ new Map();
 		for (let e of a) {
 			let n = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Map();
@@ -47923,18 +47939,18 @@ function Y3(e, t, n) {
 			component: n,
 			source: null,
 			renders: r.hits,
-			selfTime: U3(r.total),
+			selfTime: K3(r.total),
 			changes: [],
-			evidence: `${r.hits} commits over ${s.selfMs}ms self (worst ${U3(r.worst)}ms)`,
+			evidence: `${r.hits} commits over ${s.selfMs}ms self (worst ${K3(r.worst)}ms)`,
 			el: r.el
 		});
 		return e;
-	}), i6(r, () => {
-		let n = [], r = n6(e.filter((e) => e.nearInput).map((e) => e.at).sort((e, t) => e - t), 1e3);
+	}), s6(r, () => {
+		let n = [], r = a6(e.filter((e) => e.nearInput).map((e) => e.at).sort((e, t) => e - t), 1e3);
 		return r >= 5 && n.push({
 			ruleId: "R10",
 			shape: "B",
-			severity: W3(t, "R10", "error"),
+			severity: q3(t, "R10", "error"),
 			suspected: !0,
 			description: `suspected R10 — ${r} React commits during scroll/pointer movement (frame-rate state updates)`,
 			component: null,
@@ -47944,12 +47960,12 @@ function Y3(e, t, n) {
 			changes: [],
 			evidence: `${r} commits within a 1s scroll/pointer window`
 		}), n;
-	}), i6(r, () => {
-		let n = [], { count: r, span: i } = r6(e.filter((e) => !e.nearInput).map((e) => e.at).sort((e, t) => e - t), 300);
+	}), s6(r, () => {
+		let n = [], { count: r, span: i } = o6(e.filter((e) => !e.nearInput).map((e) => e.at).sort((e, t) => e - t), 300);
 		return r >= 8 && n.push({
 			ruleId: "R24",
 			shape: "B",
-			severity: W3(t, "R24", "warn"),
+			severity: q3(t, "R24", "warn"),
 			suspected: !0,
 			description: `suspected R24 — ${r} commits in ${Math.round(i)}ms burst (multi-row writes / un-coalesced pokes?)`,
 			component: null,
@@ -47959,9 +47975,9 @@ function Y3(e, t, n) {
 			changes: [],
 			evidence: `${r} commits in a ${Math.round(i)}ms burst (no input)`
 		}), n;
-	}), i6(r, () => {
+	}), s6(r, () => {
 		let e = [];
-		if (!e6()) return e;
+		if (!r6()) return e;
 		for (let n of o.values()) {
 			if (n.updates.length < 3) continue;
 			let r = n.el?.deref();
@@ -47978,33 +47994,33 @@ function Y3(e, t, n) {
 			e.push({
 				ruleId: "R3",
 				shape: "C",
-				severity: W3(t, "R3", "error"),
+				severity: q3(t, "R3", "error"),
 				suspected: !0,
 				description: `suspected R3 — ${n.name} re-rendered ${a}× while its DOM is hidden/detached (closed host without everOpened gate?) [R3/R7/R23 family]`,
 				component: n.name,
 				source: null,
 				renders: a,
-				selfTime: U3(n.selfTime),
+				selfTime: K3(n.selfTime),
 				changes: [],
-				evidence: `${a} renders while hidden/detached · ${U3(n.selfTime)}ms self`,
+				evidence: `${a} renders while hidden/detached · ${K3(n.selfTime)}ms self`,
 				el: n.el
 			});
 		}
 		return e;
-	}), a6(r);
+	}), c6(r);
 }
-var X3 = "#linear-grab-root, #claude-agent-glow-border, [id^=\"react-scan\"]";
-function Z3(e = typeof document < "u" ? document : {}) {
+var $3 = "#linear-grab-root, [data-linear-grab], [data-react-grab], #claude-agent-glow-border, [id^=\"react-scan\"]";
+function e6(e = typeof document < "u" ? document : {}) {
 	let t = [];
-	return i6(t, () => {
-		let t = [], n = Array.from(e.querySelectorAll("[role=\"slider\"], [role=\"progressbar\"], [role=\"switch\"]")), r = t6(e);
+	return s6(t, () => {
+		let t = [], n = Array.from(e.querySelectorAll("[role=\"slider\"], [role=\"progressbar\"], [role=\"switch\"]")), r = i6(e);
 		for (let e of n) {
-			if (e.closest(X3)) continue;
+			if (e.closest($3)) continue;
 			if (r) try {
 				let t = e.getBoundingClientRect();
 				if (t.width < 2 || t.height < 2) continue;
 			} catch {}
-			if (!Q3(e)) continue;
+			if (!t6(e)) continue;
 			let n = e.getAttribute("role") ?? "widget";
 			t.push({
 				ruleId: "R8",
@@ -48017,14 +48033,14 @@ function Z3(e = typeof document < "u" ? document : {}) {
 				renders: 0,
 				selfTime: 0,
 				changes: [],
-				evidence: $3(e),
+				evidence: n6(e),
 				el: typeof WeakRef < "u" ? new WeakRef(e) : void 0
 			});
 		}
 		return t;
-	}), a6(t);
+	}), c6(t);
 }
-function Q3(e) {
+function t6(e) {
 	if (e.hasAttribute("disabled") || e.getAttribute("aria-disabled") === "true") return !0;
 	let t = e;
 	for (let e = 0; t && e <= 3; e++) {
@@ -48035,17 +48051,17 @@ function Q3(e) {
 	}
 	return !1;
 }
-function $3(e) {
+function n6(e) {
 	let t = typeof e.className == "string" && e.className ? "." + e.className.split(/\s+/).filter(Boolean).slice(0, 2).join(".") : "";
 	return `${e.tagName.toLowerCase()}${t}`;
 }
-function e6() {
+function r6() {
 	return typeof document > "u" ? !1 : (document.documentElement?.getBoundingClientRect().width ?? 0) > 0;
 }
-function t6(e) {
+function i6(e) {
 	return ((e.documentElement ?? (typeof document < "u" ? document.documentElement : null))?.getBoundingClientRect().width ?? 0) > 0;
 }
-function n6(e, t) {
+function a6(e, t) {
 	let n = 0, r = 0;
 	for (let i = 0; i < e.length; i++) {
 		for (; e[i] - e[r] > t;) r++;
@@ -48053,7 +48069,7 @@ function n6(e, t) {
 	}
 	return n;
 }
-function r6(e, t) {
+function o6(e, t) {
 	let n = 0, r = 0, i = 0;
 	for (let a = 0; a < e.length; a++) {
 		for (; e[a] - e[i] > t;) i++;
@@ -48065,12 +48081,12 @@ function r6(e, t) {
 		span: r
 	};
 }
-function i6(e, t) {
+function s6(e, t) {
 	try {
 		e.push(...t());
 	} catch {}
 }
-function a6(e) {
+function c6(e) {
 	let t = /* @__PURE__ */ new Map();
 	for (let n of e) {
 		let e = `${n.ruleId}|${n.component}|${n.changes.join()}|${n.description}`, r = t.get(e);
@@ -48078,7 +48094,7 @@ function a6(e) {
 	}
 	return [...t.values()];
 }
-function o6(e) {
+function l6(e) {
 	let t = /* @__PURE__ */ new Map();
 	for (let n of e) {
 		let e = n.ruleId ?? "budget", r = t.get(e);
@@ -48104,7 +48120,7 @@ function o6(e) {
 	}
 	return a.join("\n");
 }
-function s6(e, t) {
+function u6(e, t) {
 	let n = Array.from(new Set(e.map((e) => e.ruleId).filter((e) => !!e))).sort(), r = [];
 	for (let e of n) {
 		let n = t.rules[e];
@@ -48131,35 +48147,35 @@ function s6(e, t) {
 		"",
 		"---",
 		"",
-		o6(e)
+		l6(e)
 	].join("\n");
 }
-var c6 = "bippy-0.5.43", l6 = Object.defineProperty, u6 = Object.prototype.hasOwnProperty, d6 = () => {}, f6 = (e) => {
+var d6 = "bippy-0.5.43", f6 = Object.defineProperty, p6 = Object.prototype.hasOwnProperty, m6 = () => {}, h6 = (e) => {
 	try {
 		Function.prototype.toString.call(e).indexOf("^_^") > -1 && setTimeout(() => {
 			throw Error("React is running in production mode, but dead code elimination has not been applied. Read how to correctly configure React for production: https://reactjs.org/link/perf-use-production-build");
 		});
 	} catch {}
-}, p6 = (e = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__) => !!(e && "getFiberRoots" in e), m6 = !1, h6, g6 = (e = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__) => m6 ? !0 : (e && typeof e.inject == "function" && (h6 = e.inject.toString()), !!h6?.includes("(injected)")), _6 = /* @__PURE__ */ new Set(), v6 = /* @__PURE__ */ new Set(), y6 = (e) => {
+}, g6 = (e = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__) => !!(e && "getFiberRoots" in e), _6 = !1, v6, y6 = (e = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__) => _6 ? !0 : (e && typeof e.inject == "function" && (v6 = e.inject.toString()), !!v6?.includes("(injected)")), b6 = /* @__PURE__ */ new Set(), x6 = /* @__PURE__ */ new Set(), S6 = (e) => {
 	let t = /* @__PURE__ */ new Map(), n = 0, r = {
 		_instrumentationIsActive: !1,
-		_instrumentationSource: c6,
-		checkDCE: f6,
+		_instrumentationSource: d6,
+		checkDCE: h6,
 		hasUnsupportedRendererAttached: !1,
 		inject(e) {
 			let i = ++n;
-			return t.set(i, e), v6.add(e), r._instrumentationIsActive || (r._instrumentationIsActive = !0, _6.forEach((e) => e())), i;
+			return t.set(i, e), x6.add(e), r._instrumentationIsActive || (r._instrumentationIsActive = !0, b6.forEach((e) => e())), i;
 		},
-		on: d6,
-		onCommitFiberRoot: d6,
-		onCommitFiberUnmount: d6,
-		onPostCommitFiberRoot: d6,
+		on: m6,
+		onCommitFiberRoot: m6,
+		onCommitFiberUnmount: m6,
+		onPostCommitFiberRoot: m6,
 		renderers: t,
 		supportsFiber: !0,
 		supportsFlight: !0
 	};
 	try {
-		l6(globalThis, "__REACT_DEVTOOLS_GLOBAL_HOOK__", {
+		f6(globalThis, "__REACT_DEVTOOLS_GLOBAL_HOOK__", {
 			configurable: !0,
 			enumerable: !0,
 			get() {
@@ -48169,13 +48185,13 @@ var c6 = "bippy-0.5.43", l6 = Object.defineProperty, u6 = Object.prototype.hasOw
 				if (t && typeof t == "object") {
 					let n = r.renderers;
 					r = t, n.size > 0 && (n.forEach((e, n) => {
-						v6.add(e), t.renderers.set(n, e);
-					}), b6(e));
+						x6.add(e), t.renderers.set(n, e);
+					}), C6(e));
 				}
 			}
 		});
 		let t = window.hasOwnProperty, n = !1;
-		l6(window, "hasOwnProperty", {
+		f6(window, "hasOwnProperty", {
 			configurable: !0,
 			value: function(...e) {
 				try {
@@ -48186,47 +48202,47 @@ var c6 = "bippy-0.5.43", l6 = Object.defineProperty, u6 = Object.prototype.hasOw
 			writable: !0
 		});
 	} catch {
-		b6(e);
+		C6(e);
 	}
 	return r;
-}, b6 = (e) => {
-	e && _6.add(e);
+}, C6 = (e) => {
+	e && b6.add(e);
 	try {
 		let t = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
 		if (!t) return;
 		if (!t._instrumentationSource) {
-			t.checkDCE = f6, t.supportsFiber = !0, t.supportsFlight = !0, t.hasUnsupportedRendererAttached = !1, t._instrumentationSource = c6, t._instrumentationIsActive = !1;
-			let e = p6(t);
-			if (e || (t.on = d6), t.renderers.size) {
-				t._instrumentationIsActive = !0, _6.forEach((e) => e());
+			t.checkDCE = h6, t.supportsFiber = !0, t.supportsFlight = !0, t.hasUnsupportedRendererAttached = !1, t._instrumentationSource = d6, t._instrumentationIsActive = !1;
+			let e = g6(t);
+			if (e || (t.on = m6), t.renderers.size) {
+				t._instrumentationIsActive = !0, b6.forEach((e) => e());
 				return;
 			}
-			let n = t.inject, r = g6(t);
-			r && !e && (m6 = !0, t.inject({ scheduleRefresh() {} }) && (t._instrumentationIsActive = !0)), t.inject = (e) => {
+			let n = t.inject, r = y6(t);
+			r && !e && (_6 = !0, t.inject({ scheduleRefresh() {} }) && (t._instrumentationIsActive = !0)), t.inject = (e) => {
 				let i = n(e);
-				return v6.add(e), r && t.renderers.set(i, e), t._instrumentationIsActive = !0, _6.forEach((e) => e()), i;
+				return x6.add(e), r && t.renderers.set(i, e), t._instrumentationIsActive = !0, b6.forEach((e) => e()), i;
 			};
 		}
-		(t.renderers.size || t._instrumentationIsActive || g6()) && e?.();
+		(t.renderers.size || t._instrumentationIsActive || y6()) && e?.();
 	} catch {}
-}, x6 = () => u6.call(globalThis, "__REACT_DEVTOOLS_GLOBAL_HOOK__"), S6 = (e) => x6() ? (b6(e), globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__) : y6(e), C6 = () => !!(typeof window < "u" && (window.document?.createElement || window.navigator?.product === "ReactNative"));
+}, w6 = () => p6.call(globalThis, "__REACT_DEVTOOLS_GLOBAL_HOOK__"), T6 = (e) => w6() ? (C6(e), globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__) : S6(e), E6 = () => !!(typeof window < "u" && (window.document?.createElement || window.navigator?.product === "ReactNative"));
 //#endregion
 //#region node_modules/bippy/dist/install-hook-only.js
 (() => {
 	try {
-		C6() && S6();
+		E6() && T6();
 	} catch {}
 })();
 //#endregion
 //#region node_modules/bippy/dist/core.js
-var w6 = 60111, T6 = "Symbol(react.concurrent_mode)", E6 = "Symbol(react.async_mode)", D6 = (e) => {
+var D6 = 60111, O6 = "Symbol(react.concurrent_mode)", k6 = "Symbol(react.async_mode)", A6 = (e) => {
 	switch (e.tag) {
 		case 5:
 		case 26:
 		case 27: return !0;
 		default: return typeof e.type == "string";
 	}
-}, O6 = (e) => {
+}, j6 = (e) => {
 	switch (e.tag) {
 		case 1:
 		case 11:
@@ -48235,7 +48251,7 @@ var w6 = 60111, T6 = "Symbol(react.concurrent_mode)", E6 = "Symbol(react.async_m
 		case 15: return !0;
 		default: return !1;
 	}
-}, k6 = (e) => {
+}, M6 = (e) => {
 	let t = e.memoizedProps, n = e.alternate?.memoizedProps || {}, r = e.flags ?? e.effectTag ?? 0;
 	switch (e.tag) {
 		case 1:
@@ -48246,7 +48262,7 @@ var w6 = 60111, T6 = "Symbol(react.concurrent_mode)", E6 = "Symbol(react.async_m
 		case 15: return (r & 1) == 1;
 		default: return !e.alternate || n !== t || e.alternate.memoizedState !== e.memoizedState || e.alternate.ref !== e.ref;
 	}
-}, A6 = (e) => {
+}, N6 = (e) => {
 	switch (e.tag) {
 		case 18: return !0;
 		case 7:
@@ -48257,25 +48273,25 @@ var w6 = 60111, T6 = "Symbol(react.concurrent_mode)", E6 = "Symbol(react.async_m
 		default: {
 			let t = typeof e.type == "object" && e.type !== null ? e.type.$$typeof : e.type;
 			switch (typeof t == "symbol" ? t.toString() : t) {
-				case w6:
-				case T6:
-				case E6: return !0;
+				case D6:
+				case O6:
+				case k6: return !0;
 				default: return !1;
 			}
 		}
 	}
-}, j6 = (e, t = !1) => {
-	let n = M6(e, D6, t);
-	return n ||= M6(e, D6, !t), n;
+}, P6 = (e, t = !1) => {
+	let n = F6(e, A6, t);
+	return n ||= F6(e, A6, !t), n;
 };
-function M6(e, t, n = !1) {
+function F6(e, t, n = !1) {
 	if (!e) return null;
 	let r = t(e);
 	if (r instanceof Promise) return (async () => {
 		if (await r === !0) return e;
 		let i = n ? e.return : e.child;
 		for (; i;) {
-			let e = await P6(i, t, n);
+			let e = await L6(i, t, n);
 			if (e) return e;
 			i = n ? null : i.sibling;
 		}
@@ -48284,118 +48300,118 @@ function M6(e, t, n = !1) {
 	if (r === !0) return e;
 	let i = n ? e.return : e.child;
 	for (; i;) {
-		let e = N6(i, t, n);
+		let e = I6(i, t, n);
 		if (e) return e;
 		i = n ? null : i.sibling;
 	}
 	return null;
 }
-var N6 = (e, t, n = !1) => {
+var I6 = (e, t, n = !1) => {
 	if (!e) return null;
 	if (t(e) === !0) return e;
 	let r = n ? e.return : e.child;
 	for (; r;) {
-		let e = N6(r, t, n);
+		let e = I6(r, t, n);
 		if (e) return e;
 		r = n ? null : r.sibling;
 	}
 	return null;
-}, P6 = async (e, t, n = !1) => {
+}, L6 = async (e, t, n = !1) => {
 	if (!e) return null;
 	if (await t(e) === !0) return e;
 	let r = n ? e.return : e.child;
 	for (; r;) {
-		let e = await P6(r, t, n);
+		let e = await L6(r, t, n);
 		if (e) return e;
 		r = n ? null : r.sibling;
 	}
 	return null;
-}, F6 = (e) => {
+}, R6 = (e) => {
 	let t = e?.actualDuration ?? 0, n = t, r = e?.child ?? null;
 	for (; t > 0 && r != null;) n -= r.actualDuration ?? 0, r = r.sibling;
 	return {
 		selfTime: n,
 		totalTime: t
 	};
-}, I6 = (e) => {
+}, z6 = (e) => {
 	let t = e;
-	return typeof t == "function" ? t : typeof t == "object" && t ? I6(t.type || t.render) : null;
-}, L6 = (e) => {
+	return typeof t == "function" ? t : typeof t == "object" && t ? z6(t.type || t.render) : null;
+}, B6 = (e) => {
 	let t = e;
 	if (typeof t == "string") return t;
 	if (typeof t != "function" && !(typeof t == "object" && t)) return null;
 	let n = t.displayName || t.name || null;
 	if (n) return n;
-	let r = I6(t);
+	let r = z6(t);
 	return r && (r.displayName || r.name) || null;
-}, R6 = 0, z6 = /* @__PURE__ */ new WeakMap(), B6 = (e, t = R6++) => {
-	z6.set(e, t);
-}, V6 = (e) => {
-	let t = z6.get(e);
-	return !t && e.alternate && (t = z6.get(e.alternate)), t || (t = R6++, B6(e, t)), t;
-}, H6 = (e, t, n) => {
+}, V6 = 0, H6 = /* @__PURE__ */ new WeakMap(), U6 = (e, t = V6++) => {
+	H6.set(e, t);
+}, W6 = (e) => {
+	let t = H6.get(e);
+	return !t && e.alternate && (t = H6.get(e.alternate)), t || (t = V6++, U6(e, t)), t;
+}, G6 = (e, t, n) => {
 	let r = t;
 	for (; r != null;) {
-		if (z6.has(r) || V6(r), !A6(r) && k6(r) && e(r, "mount"), r.tag === 13) if (r.memoizedState !== null) {
+		if (H6.has(r) || W6(r), !N6(r) && M6(r) && e(r, "mount"), r.tag === 13) if (r.memoizedState !== null) {
 			let t = r.child, n = t ? t.sibling : null;
 			if (n) {
 				let t = n.child;
-				t !== null && H6(e, t, !1);
+				t !== null && G6(e, t, !1);
 			}
 		} else {
 			let t = null;
-			r.child !== null && (t = r.child.child), t !== null && H6(e, t, !1);
+			r.child !== null && (t = r.child.child), t !== null && G6(e, t, !1);
 		}
-		else r.child != null && H6(e, r.child, !0);
+		else r.child != null && G6(e, r.child, !0);
 		r = n ? r.sibling : null;
 	}
-}, U6 = (e, t, n, r) => {
-	if (z6.has(t) || V6(t), !n) return;
-	z6.has(n) || V6(n);
-	let i = t.tag === 13, a = !A6(t);
-	a && k6(t) && e(t, "update");
+}, K6 = (e, t, n, r) => {
+	if (H6.has(t) || W6(t), !n) return;
+	H6.has(n) || W6(n);
+	let i = t.tag === 13, a = !N6(t);
+	a && M6(t) && e(t, "update");
 	let o = i && n.memoizedState !== null, s = i && t.memoizedState !== null;
 	if (o && s) {
 		let r = t.child?.sibling ?? null, i = n.child?.sibling ?? null;
-		r !== null && i !== null && U6(e, r, i, t);
+		r !== null && i !== null && K6(e, r, i, t);
 	} else if (o && !s) {
 		let n = t.child;
-		n !== null && H6(e, n, !0);
+		n !== null && G6(e, n, !0);
 	} else if (!o && s) {
-		G6(e, n);
+		J6(e, n);
 		let r = t.child?.sibling ?? null;
-		r !== null && H6(e, r, !0);
+		r !== null && G6(e, r, !0);
 	} else if (t.child !== n.child) {
 		let n = t.child;
 		for (; n;) {
 			if (n.alternate) {
 				let i = n.alternate;
-				U6(e, n, i, a ? t : r);
-			} else H6(e, n, !1);
+				K6(e, n, i, a ? t : r);
+			} else G6(e, n, !1);
 			n = n.sibling;
 		}
 	}
-}, W6 = (e, t) => {
-	(t.tag === 3 || !A6(t)) && e(t, "unmount");
-}, G6 = (e, t) => {
+}, q6 = (e, t) => {
+	(t.tag === 3 || !N6(t)) && e(t, "unmount");
+}, J6 = (e, t) => {
 	let n = t.tag === 13 && t.memoizedState !== null, r = t.child;
-	for (n && (r = (t.child?.sibling ?? null)?.child ?? null); r !== null;) r.return !== null && (W6(e, r), G6(e, r)), r = r.sibling;
-}, K6 = 0, q6 = /* @__PURE__ */ new WeakMap(), J6 = (e, t) => {
-	let n = "current" in e ? e.current : e, r = q6.get(e);
+	for (n && (r = (t.child?.sibling ?? null)?.child ?? null); r !== null;) r.return !== null && (q6(e, r), J6(e, r)), r = r.sibling;
+}, Y6 = 0, X6 = /* @__PURE__ */ new WeakMap(), Z6 = (e, t) => {
+	let n = "current" in e ? e.current : e, r = X6.get(e);
 	r || (r = {
-		id: K6++,
+		id: Y6++,
 		prevFiber: null
-	}, q6.set(e, r));
+	}, X6.set(e, r));
 	let { prevFiber: i } = r;
-	if (!n) W6(t, n);
+	if (!n) q6(t, n);
 	else if (i !== null) {
 		let e = i && i.memoizedState != null && i.memoizedState.element != null && i.memoizedState.isDehydrated !== !0, r = n.memoizedState != null && n.memoizedState.element != null && n.memoizedState.isDehydrated !== !0;
-		!e && r ? H6(t, n, !1) : e && r ? U6(t, n, n.alternate, null) : e && !r && W6(t, n);
-	} else H6(t, n, !0);
+		!e && r ? G6(t, n, !1) : e && r ? K6(t, n, n.alternate, null) : e && !r && q6(t, n);
+	} else G6(t, n, !0);
 	r.prevFiber = n;
-}, Y6 = (e) => {
-	let t = S6(e.onActive);
-	t._instrumentationSource = e.name ?? c6;
+}, Q6 = (e) => {
+	let t = T6(e.onActive);
+	t._instrumentationSource = e.name ?? d6;
 	let n = t.onCommitFiberRoot;
 	if (e.onCommitFiberRoot) {
 		let r = (t, i, a) => {
@@ -48418,52 +48434,52 @@ var N6 = (e, t, n = !1) => {
 		t.onPostCommitFiberRoot = n;
 	}
 	return t;
-}, X6 = !1, Z6 = !1, Q6 = [], $6 = -Infinity, e8 = 200, t8 = 4e3, n8 = 100;
-function r8() {
-	$6 = a8();
+}, $6 = !1, e8 = !1, t8 = [], n8 = -Infinity, r8 = 200, i8 = 4e3, a8 = 100;
+function o8() {
+	n8 = c8();
 }
-var i8 = [
+var s8 = [
 	"scroll",
 	"wheel",
 	"pointermove"
 ];
-function a8() {
+function c8() {
 	return typeof performance < "u" ? performance.now() : Date.now();
 }
-function o8(e, t) {
+function l8(e, t) {
 	let n = e && typeof e == "object" ? e : {}, r = t && typeof t == "object" ? t : {}, i = /* @__PURE__ */ new Set([...Object.keys(n), ...Object.keys(r)]), a = [];
 	for (let e of i) {
 		if (e === "children") continue;
 		let t = n[e], i = r[e];
-		Object.is(t, i) || (typeof t == "function" && typeof i == "function" ? a.push(`prop:${e}(fn)`) : t && i && typeof t == "object" && typeof i == "object" && s8(t, i) ? a.push(`prop:${e}(ref)`) : a.push(`prop:${e}`));
+		Object.is(t, i) || (typeof t == "function" && typeof i == "function" ? a.push(`prop:${e}(fn)`) : t && i && typeof t == "object" && typeof i == "object" && u8(t, i) ? a.push(`prop:${e}(ref)`) : a.push(`prop:${e}`));
 	}
 	return a;
 }
-function s8(e, t) {
+function u8(e, t) {
 	let n = Object.keys(e), r = Object.keys(t);
 	if (n.length !== r.length) return !1;
 	for (let r of n) if (!Object.is(e[r], t[r])) return !1;
 	return !0;
 }
-function c8(e) {
+function d8(e) {
 	let t = [], n = {};
-	J6(e, (e, r) => {
-		if (r === "unmount" || !O6(e)) return;
-		let i = L6(e.type) ?? "Anonymous";
+	Z6(e, (e, r) => {
+		if (r === "unmount" || !j6(e)) return;
+		let i = B6(e.type) ?? "Anonymous";
 		r === "mount" && (n[i] = (n[i] ?? 0) + 1);
 		let a = 0;
 		try {
-			a = F6(e).selfTime || 0;
+			a = R6(e).selfTime || 0;
 		} catch {}
 		let o = [];
 		if (r === "update" && e.alternate) try {
-			o = o8(e.alternate.memoizedProps, e.memoizedProps);
+			o = l8(e.alternate.memoizedProps, e.memoizedProps);
 		} catch {
 			o = ["prop:(unknown)"];
 		}
 		let s = null;
 		try {
-			let t = j6(e)?.stateNode;
+			let t = P6(e)?.stateNode;
 			t && typeof WeakRef < "u" && t instanceof Element && (s = new WeakRef(t));
 		} catch {}
 		t.push({
@@ -48474,10 +48490,10 @@ function c8(e) {
 			el: s
 		});
 	}), t.sort((e, t) => t.selfTime - e.selfTime);
-	let r = t.slice(0, e8), i = Math.max(0, t.length - e8), a = 0;
+	let r = t.slice(0, r8), i = Math.max(0, t.length - r8), a = 0;
 	for (let e of t) a += e.selfTime;
-	let o = a8(), s = o - $6 <= n8;
-	Q6.push({
+	let o = c8(), s = o - n8 <= a8;
+	t8.push({
 		at: o,
 		duration: a,
 		entries: r,
@@ -48486,55 +48502,55 @@ function c8(e) {
 		nearInput: s
 	});
 }
-function l8() {
-	if (!X6 && !(typeof window > "u")) {
-		X6 = !0;
+function f8() {
+	if (!$6 && !(typeof window > "u")) {
+		$6 = !0;
 		try {
-			Y6({ onCommitFiberRoot: (e, t) => {
-				if (Z6 && !(Q6.length >= t8)) try {
-					c8(t);
+			Q6({ onCommitFiberRoot: (e, t) => {
+				if (e8 && !(t8.length >= i8)) try {
+					d8(t);
 				} catch {}
 			} });
 		} catch {}
 	}
 }
-function u8() {
-	if (!(typeof window > "u") && !Z6) {
-		Q6 = [], $6 = -Infinity, l8();
+function p8() {
+	if (!(typeof window > "u") && !e8) {
+		t8 = [], n8 = -Infinity, f8();
 		try {
-			for (let e of i8) window.addEventListener(e, r8, {
+			for (let e of s8) window.addEventListener(e, o8, {
 				capture: !0,
 				passive: !0
 			});
 		} catch {}
-		Z6 = !0;
+		e8 = !0;
 	}
 }
-function d8() {
-	Z6 = !1;
+function m8() {
+	e8 = !1;
 	try {
-		for (let e of i8) window.removeEventListener(e, r8, { capture: !0 });
+		for (let e of s8) window.removeEventListener(e, o8, { capture: !0 });
 	} catch {}
-	let e = Q6;
-	return Q6 = [], $6 = -Infinity, e;
+	let e = t8;
+	return t8 = [], n8 = -Infinity, e;
 }
-function f8() {
-	let e = Q6;
-	return Q6 = [], e;
+function h8() {
+	let e = t8;
+	return t8 = [], e;
 }
 //#endregion
 //#region src/lib/renderRulebook.ts
-var p8 = {
+var g8 = {
 	budgets: {
 		selfMs: 2,
 		commitMs: 8
 	},
 	rules: {}
-}, m8 = /^###\s+(R\d+)\s*[·.\-–—:]?\s*`([^`]+)`.*?\((error|warn)\)\s*$/;
-function h8(e) {
-	return m8.test(e.trim());
+}, _8 = /^###\s+(R\d+)\s*[·.\-–—:]?\s*`([^`]+)`.*?\((error|warn)\)\s*$/;
+function v8(e) {
+	return _8.test(e.trim());
 }
-function g8(e, t) {
+function y8(e, t) {
 	let n = e.split("\n"), r = RegExp(`^\\s*\\*\\*${t.source}[^*]*:\\*\\*\\s*(.*)$`, "i"), i = /^\s*\*\*[^*]+:\*\*/, a = 0;
 	for (; a < n.length && !r.test(n[a]); a++);
 	if (a >= n.length) return "";
@@ -48549,43 +48565,43 @@ function g8(e, t) {
 			if (e >= n.length || i.test(n[e]) || /^###\s|^##\s|^---\s*$/.test(n[e])) break;
 		}
 	}
-	return _8(s.join(" ")).trim();
+	return b8(s.join(" ")).trim();
 }
-function _8(e) {
+function b8(e) {
 	return e.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/__([^_]+)__/g, "$1").replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_]([\s.,;:)]|$)/g, "$1$2$3").replace(/\s{2,}/g, " ");
 }
-function v8(e) {
+function x8(e) {
 	let t = e.match(/≤(\d+(?:\.\d+)?)ms self/), n = e.match(/commit >(\d+(?:\.\d+)?)ms/) ?? e.match(/>(\d+(?:\.\d+)?)ms of React work/);
 	return {
-		selfMs: t ? parseFloat(t[1]) : p8.budgets.selfMs,
-		commitMs: n ? parseFloat(n[1]) : p8.budgets.commitMs
+		selfMs: t ? parseFloat(t[1]) : g8.budgets.selfMs,
+		commitMs: n ? parseFloat(n[1]) : g8.budgets.commitMs
 	};
 }
-function y8(e) {
-	let t = v8(e), n = {}, r = e.split("\n"), i = 0;
+function S8(e) {
+	let t = x8(e), n = {}, r = e.split("\n"), i = 0;
 	for (; i < r.length;) {
 		let e = r[i];
-		if (!h8(e)) {
+		if (!v8(e)) {
 			i++;
 			continue;
 		}
 		let t = e.trim(), a = [], o = i + 1;
 		for (; o < r.length; o++) {
 			let e = r[o];
-			if (h8(e) || /^##\s/.test(e.trim()) || /^---\s*$/.test(e.trim())) break;
+			if (v8(e) || /^##\s/.test(e.trim()) || /^---\s*$/.test(e.trim())) break;
 			a.push(e);
 		}
 		try {
-			let e = t.match(m8);
+			let e = t.match(_8);
 			if (e) {
 				let [, t, r, i] = e, o = a.join("\n");
 				n[t] = {
 					id: t,
 					slug: r,
 					severity: i === "warn" ? "warn" : "error",
-					ruleText: g8(o, /Rule/),
-					fixText: g8(o, /Fix/),
-					detectText: g8(o, /Detect/)
+					ruleText: y8(o, /Rule/),
+					fixText: y8(o, /Fix/),
+					detectText: y8(o, /Detect/)
 				};
 			}
 		} catch {}
@@ -48599,114 +48615,114 @@ function y8(e) {
 //#endregion
 //#region src/lib/renderScanStore.ts
 Br();
-var b8 = [], x8 = /* @__PURE__ */ new Set();
-function S8(e) {
-	return x8.add(e), e(b8), () => void x8.delete(e);
+var C8 = [], w8 = /* @__PURE__ */ new Set();
+function T8(e) {
+	return w8.add(e), e(C8), () => void w8.delete(e);
 }
-function C8() {
-	b8 = [];
-	for (let e of x8) e(b8);
+function E8() {
+	C8 = [];
+	for (let e of w8) e(C8);
 }
-function w8(e, t) {
-	b8 = [...e, ...b8.filter((e) => e.page !== t)];
-	for (let e of x8) e(b8);
-	return X8(e).then(() => {
-		b8 = [...b8];
-		for (let e of x8) e(b8);
-		Z8(e);
+function D8(e, t) {
+	C8 = [...e, ...C8.filter((e) => e.page !== t)];
+	for (let e of w8) e(C8);
+	return $8(e).then(() => {
+		C8 = [...C8];
+		for (let e of w8) e(C8);
+		e5(e);
 	}), e;
 }
-var T8 = /* @__PURE__ */ new Set(), E8 = !1, D8 = null;
-function O8(e) {
-	return T8.add(e), e(E8, D8), () => void T8.delete(e);
+var O8 = /* @__PURE__ */ new Set(), k8 = !1, A8 = null;
+function j8(e) {
+	return O8.add(e), e(k8, A8), () => void O8.delete(e);
 }
-function k8() {
-	if (!(j8 || E8)) {
-		u8(), E8 = !0, D8 = Date.now();
-		for (let e of T8) e(!0, D8);
+function M8() {
+	if (!(P8 || k8)) {
+		p8(), k8 = !0, A8 = Date.now();
+		for (let e of O8) e(!0, A8);
 	}
 }
-async function A8() {
-	if (!E8) return [];
-	let e = d8();
-	E8 = !1, D8 = null;
-	for (let e of T8) e(!1, null);
-	let t = await K8(), n = location.pathname;
-	return w8(Y3(e, t, { ignore: await J8() }).map((e) => ({
+async function N8() {
+	if (!k8) return [];
+	let e = m8();
+	k8 = !1, A8 = null;
+	for (let e of O8) e(!1, null);
+	let t = await Y8(), n = location.pathname;
+	return D8(Q3(e, t, { ignore: await Z8() }).map((e) => ({
 		...e,
 		page: n
 	})), n);
 }
-var j8 = !1;
+var P8 = !1;
 try {
-	j8 = localStorage.getItem("linear-grab:render-live") === "1";
+	P8 = localStorage.getItem("linear-grab:render-live") === "1";
 } catch {}
-var M8 = /* @__PURE__ */ new Set();
-function N8(e) {
-	return M8.add(e), e(j8), () => void M8.delete(e);
+var F8 = /* @__PURE__ */ new Set();
+function I8(e) {
+	return F8.add(e), e(P8), () => void F8.delete(e);
 }
-var P8 = 3e3, F8 = 4e3, I8 = null, L8 = [], R8 = "";
-function z8(e) {
-	if (e !== j8 && !(e && E8)) {
-		j8 = e;
+var L8 = 3e3, R8 = 4e3, z8 = null, B8 = [], V8 = "";
+function H8(e) {
+	if (e !== P8 && !(e && k8)) {
+		P8 = e;
 		try {
 			localStorage.setItem("linear-grab:render-live", e ? "1" : "0");
 		} catch {}
-		for (let t of M8) t(e);
-		e ? (u8(), L8 = [], R8 = location.pathname, I8 = setInterval(() => void B8(!1), P8)) : (I8 && clearInterval(I8), I8 = null, B8(!0).finally(() => {
-			d8(), L8 = [];
+		for (let t of F8) t(e);
+		e ? (p8(), B8 = [], V8 = location.pathname, z8 = setInterval(() => void U8(!1), L8)) : (z8 && clearInterval(z8), z8 = null, U8(!0).finally(() => {
+			m8(), B8 = [];
 		}));
 	}
 }
-async function B8(e) {
+async function U8(e) {
 	try {
 		let t = location.pathname;
-		if (t !== R8) {
-			let e = b8.filter((e) => e.page === R8);
-			X8(e).then(() => {
-				b8 = [...b8];
-				for (let e of x8) e(b8);
-				Z8(e);
-			}), L8 = [], R8 = t;
+		if (t !== V8) {
+			let e = C8.filter((e) => e.page === V8);
+			$8(e).then(() => {
+				C8 = [...C8];
+				for (let e of w8) e(C8);
+				e5(e);
+			}), B8 = [], V8 = t;
 		}
-		L8.push(...f8()), L8.length > F8 && L8.splice(0, L8.length - F8);
-		let n = await K8(), r = Y3(L8, n, { ignore: await J8() }).map((e) => ({
+		B8.push(...h8()), B8.length > R8 && B8.splice(0, B8.length - R8);
+		let n = await Y8(), r = Q3(B8, n, { ignore: await Z8() }).map((e) => ({
 			...e,
 			page: t
 		}));
-		b8 = [...r, ...b8.filter((e) => e.page !== t)];
-		for (let e of x8) e(b8);
+		C8 = [...r, ...C8.filter((e) => e.page !== t)];
+		for (let e of w8) e(C8);
 		if (e) {
-			await X8(r), b8 = [...b8];
-			for (let e of x8) e(b8);
-			Z8(r);
+			await $8(r), C8 = [...C8];
+			for (let e of w8) e(C8);
+			e5(r);
 		}
 	} catch {}
 }
-function V8() {
-	typeof window > "u" || !j8 || I8 || (u8(), L8 = [], R8 = location.pathname, I8 = setInterval(() => void B8(!1), P8));
+function W8() {
+	typeof window > "u" || !P8 || z8 || (p8(), B8 = [], V8 = location.pathname, z8 = setInterval(() => void U8(!1), L8));
 }
-function H8() {
+function G8() {
 	let e = location.pathname;
-	return w8(Z3(document).map((t) => ({
+	return D8(e6(document).map((t) => ({
 		...t,
 		page: e
 	})), e);
 }
-var U8 = 5 * 6e4, W8 = null, G8 = 0;
-async function K8() {
-	if (W8 && Date.now() - G8 < U8) return W8;
-	let e = p8;
+var K8 = 5 * 6e4, q8 = null, J8 = 0;
+async function Y8() {
+	if (q8 && Date.now() - J8 < K8) return q8;
+	let e = g8;
 	try {
 		let t = await YO(), n = await (await fetch(`${t}/scan/rulebook`)).json();
-		n.ok && n.text && (e = y8(n.text));
+		n.ok && n.text && (e = S8(n.text));
 	} catch {}
-	return e = await Y8(e), W8 = e, G8 = Date.now(), e;
+	return e = await Q8(e), q8 = e, J8 = Date.now(), e;
 }
-function q8() {
-	return W8;
+function X8() {
+	return q8;
 }
-async function J8() {
+async function Z8() {
 	try {
 		let e = await Tr();
 		return Array.isArray(e.renderIgnore) ? e.renderIgnore : void 0;
@@ -48714,7 +48730,7 @@ async function J8() {
 		return;
 	}
 }
-async function Y8(e) {
+async function Q8(e) {
 	try {
 		let t = (await Tr()).renderBudgets;
 		if (t && (t.selfMs != null || t.commitMs != null)) return {
@@ -48727,7 +48743,7 @@ async function Y8(e) {
 	} catch {}
 	return e;
 }
-async function X8(e) {
+async function $8(e) {
 	let t = null;
 	try {
 		t = (await Promise.resolve().then(() => (RZ(), AZ))).getGlobalApi() ?? null;
@@ -48756,7 +48772,7 @@ async function X8(e) {
 		if (!(!n && !a)) for (let e of i) !e.component && n && (e.component = n), a && (e.source = a);
 	}
 }
-function Z8(e) {
+function e5(e) {
 	if (e.length === 0) return;
 	let t = Date.now(), n = e.slice(0, 200).map(({ el: e, ...n }) => ({
 		kind: "render-scan",
@@ -48772,8 +48788,8 @@ function Z8(e) {
 }
 //#endregion
 //#region src/panel/views/RendersView.tsx
-var Q8 = /*#__PURE__*/ N("<span class=\"text-text-faint font-normal tabular-nums\"> · <!> pages"), $8 = /*#__PURE__*/ N("<span class=\"bg-danger size-1.5 shrink-0 animate-pulse rounded-full\"aria-hidden>"), e5 = /*#__PURE__*/ N("<span class=\"text-danger inline-block min-w-[4ch] text-right text-[10.5px] font-medium tabular-nums\">"), t5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"aria-hidden><rect x=3.5 y=3.5 width=9 height=9 rx=1.5 fill=currentColor>"), n5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"aria-hidden><rect x=4 y=3.5 width=3 height=9 rx=1 fill=currentColor></rect><rect x=9 y=3.5 width=3 height=9 rx=1 fill=currentColor>"), r5 = /*#__PURE__*/ N("<span class=\"bg-success absolute -top-0.5 -right-0.5 size-1.5 animate-pulse rounded-full\"aria-hidden>"), i5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round aria-hidden><path d=\"M5.5 3 6.5 1.5h3L10.5 3h2A1.5 1.5 0 0 1 14 4.5v7A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3h2Z\"></path><circle cx=8 cy=7.75 r=2.25>"), a5 = /*#__PURE__*/ N("<span class=\"text-success text-[12px] leading-none\">✓"), o5 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round aria-hidden><path d=\"M4 4l8 8M12 4l-8 8\">"), s5 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px] leading-snug\">Recording commits… interact with the page."), c5 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px] leading-snug\">Live render scan — findings update as you interact and navigate."), l5 = /*#__PURE__*/ N("<div class=\"flex items-center gap-1 px-1\"><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> errors</button><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> warns"), u5 = /*#__PURE__*/ N("<div class=\"flex max-h-[28rem] flex-col gap-1.5 overflow-y-auto pr-3 pl-2\">"), d5 = /*#__PURE__*/ N("<div class=\"flex h-full flex-col gap-3 overflow-y-auto pt-3 pb-4 pr-3 pl-2\"><div class=\"flex flex-col gap-1 px-1\"><div class=\"flex items-center justify-between gap-2\"><p class=\"text-text min-w-0 truncate text-[12.5px] font-semibold\">Renders</p><div class=\"flex shrink-0 items-center gap-1\"></div></div><p class=\"text-text-faint text-[10.5px] leading-snug\">Commits graded against React-rerender-primitives.md — record then interact, go live, or snapshot the DOM. Accumulates per page."), f5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 aria-hidden><circle cx=8 cy=8 r=6></circle><circle cx=8 cy=8 r=2.25 fill=currentColor stroke=none>"), p5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"aria-hidden><path d=\"M5 3.3v9.4a.5.5 0 0 0 .77.42l7.1-4.7a.5.5 0 0 0 0-.84l-7.1-4.7A.5.5 0 0 0 5 3.3Z\"fill=currentColor>"), m5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round aria-hidden><path d=\"M8 1.5 9.6 6l4.4 1.6L9.6 9.2 8 13.7 6.4 9.2 2 7.6 6.4 6Z\"></path><path d=\"M13 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z\">"), h5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round aria-hidden><rect x=5.5 y=5.5 width=9 height=9 rx=1.5></rect><path d=\"M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2\">"), g5 = /*#__PURE__*/ N("<div class=\"border-border flex flex-col gap-1 border-t px-2 py-1.5\">"), _5 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex flex-col rounded-lg border\"><button class=\"flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left\"><span class=\"size-1.5 shrink-0 rounded-full\"aria-hidden></span><span class=\"text-accent min-w-0 truncate font-mono text-[11.5px]\"></span><span class=\"text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums\">×</span><svg width=10 height=10 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 class=\"text-text-faint shrink-0 transition-transform\"aria-hidden><path d=\"m4 6 4 4 4-4\">"), v5 = /*#__PURE__*/ N("<span class=\"text-accent font-mono\"> "), y5 = /*#__PURE__*/ N("<span class=\"text-text-faint tabular-nums\"> ×"), b5 = /*#__PURE__*/ N("<span class=\"flex flex-wrap gap-1\">"), x5 = /*#__PURE__*/ N("<span class=\"text-text-dim font-mono\"> · "), S5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-0.5 rounded px-1 py-0.5 text-left\"><span class=\"text-text-dim text-[10.5px] leading-snug\"></span><span class=\"text-text-faint text-[10px] leading-snug tabular-nums\">"), C5 = /*#__PURE__*/ N("<span class=\"bg-surface-2 text-text-dim rounded px-1 font-mono text-[9.5px] leading-relaxed\">");
-function w5(e) {
+var t5 = /*#__PURE__*/ N("<span class=\"text-text-faint font-normal tabular-nums\"> · <!> pages"), n5 = /*#__PURE__*/ N("<span class=\"bg-danger size-1.5 shrink-0 animate-pulse rounded-full\"aria-hidden>"), r5 = /*#__PURE__*/ N("<span class=\"text-danger inline-block min-w-[4ch] text-right text-[10.5px] font-medium tabular-nums\">"), i5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"aria-hidden><rect x=3.5 y=3.5 width=9 height=9 rx=1.5 fill=currentColor>"), a5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"aria-hidden><rect x=4 y=3.5 width=3 height=9 rx=1 fill=currentColor></rect><rect x=9 y=3.5 width=3 height=9 rx=1 fill=currentColor>"), o5 = /*#__PURE__*/ N("<span class=\"bg-success absolute -top-0.5 -right-0.5 size-1.5 animate-pulse rounded-full\"aria-hidden>"), s5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round aria-hidden><path d=\"M5.5 3 6.5 1.5h3L10.5 3h2A1.5 1.5 0 0 1 14 4.5v7A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3h2Z\"></path><circle cx=8 cy=7.75 r=2.25>"), c5 = /*#__PURE__*/ N("<span class=\"text-success text-[12px] leading-none\">✓"), l5 = /*#__PURE__*/ N("<svg width=12 height=12 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round aria-hidden><path d=\"M4 4l8 8M12 4l-8 8\">"), u5 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px] leading-snug\">Recording commits… interact with the page."), d5 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1 text-[10.5px] leading-snug\">Live render scan — findings update as you interact and navigate."), f5 = /*#__PURE__*/ N("<div class=\"flex items-center gap-1 px-1\"><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> errors</button><button class=\"border-border cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums\"> warns"), p5 = /*#__PURE__*/ N("<div class=\"flex max-h-[28rem] flex-col gap-1.5 overflow-y-auto pr-3 pl-2\">"), m5 = /*#__PURE__*/ N("<div class=\"flex h-full flex-col gap-3 overflow-y-auto pt-3 pb-4 pr-3 pl-2\"><div class=\"flex flex-col gap-1 px-1\"><div class=\"flex items-center justify-between gap-2\"><p class=\"text-text min-w-0 truncate text-[12.5px] font-semibold\">Renders</p><div class=\"flex shrink-0 items-center gap-1\"></div></div><p class=\"text-text-faint text-[10.5px] leading-snug\">Commits graded against React-rerender-primitives.md — record then interact, go live, or snapshot the DOM. Accumulates per page."), h5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 aria-hidden><circle cx=8 cy=8 r=6></circle><circle cx=8 cy=8 r=2.25 fill=currentColor stroke=none>"), g5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"aria-hidden><path d=\"M5 3.3v9.4a.5.5 0 0 0 .77.42l7.1-4.7a.5.5 0 0 0 0-.84l-7.1-4.7A.5.5 0 0 0 5 3.3Z\"fill=currentColor>"), _5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round aria-hidden><path d=\"M8 1.5 9.6 6l4.4 1.6L9.6 9.2 8 13.7 6.4 9.2 2 7.6 6.4 6Z\"></path><path d=\"M13 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z\">"), v5 = /*#__PURE__*/ N("<svg width=13 height=13 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round aria-hidden><rect x=5.5 y=5.5 width=9 height=9 rx=1.5></rect><path d=\"M10.5 5.5v-2a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2\">"), y5 = /*#__PURE__*/ N("<div class=\"border-border flex flex-col gap-1 border-t px-2 py-1.5\">"), b5 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex flex-col rounded-lg border\"><button class=\"flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left\"><span class=\"size-1.5 shrink-0 rounded-full\"aria-hidden></span><span class=\"text-accent min-w-0 truncate font-mono text-[11.5px]\"></span><span class=\"text-text-faint ml-auto shrink-0 text-[10.5px] tabular-nums\">×</span><svg width=10 height=10 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 class=\"text-text-faint shrink-0 transition-transform\"aria-hidden><path d=\"m4 6 4 4 4-4\">"), x5 = /*#__PURE__*/ N("<span class=\"text-accent font-mono\"> "), S5 = /*#__PURE__*/ N("<span class=\"text-text-faint tabular-nums\"> ×"), C5 = /*#__PURE__*/ N("<span class=\"flex flex-wrap gap-1\">"), w5 = /*#__PURE__*/ N("<span class=\"text-text-dim font-mono\"> · "), T5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-0.5 rounded px-1 py-0.5 text-left\"><span class=\"text-text-dim text-[10.5px] leading-snug\"></span><span class=\"text-text-faint text-[10px] leading-snug tabular-nums\">"), E5 = /*#__PURE__*/ N("<span class=\"bg-surface-2 text-text-dim rounded px-1 font-mono text-[9.5px] leading-relaxed\">");
+function D5(e) {
 	let t = e.el?.deref();
 	if (!(t instanceof HTMLElement) || !t.isConnected) return !1;
 	t.scrollIntoView({
@@ -48785,45 +48801,45 @@ function w5(e) {
 		t.style.outline = n, t.style.outlineOffset = r;
 	}, 1400), !0;
 }
-function T5(e) {
+function O5(e) {
 	let t = Math.max(0, Math.floor(e / 1e3));
 	return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
-function E5(e) {
+function k5(e) {
 	return e.replace(/^prop:/, "");
 }
-function D5() {
+function A5() {
 	let [e, t] = T([]);
-	ae(S8(t));
+	ae(T8(t));
 	let [n, r] = T(!1), [i, a] = T(null), [o, s] = T(Date.now()), c = null, l = () => {
 		c && clearInterval(c), c = null;
 	};
-	ae(l), ae(O8((e, t) => {
+	ae(l), ae(j8((e, t) => {
 		r(e), a(t), e ? (s(Date.now()), c ||= setInterval(() => s(Date.now()), 500)) : l();
 	}));
 	let [u, d] = T(!1);
-	ae(N8(d));
-	let [f, p] = T(q8());
-	K8().then(p);
+	ae(I8(d));
+	let [f, p] = T(X8());
+	Y8().then(p);
 	let [m, h] = T(null), [g, _] = T(null), [v, y] = T(!0), [b, x] = T(!0), [S, C] = T(!1), [w, E] = T(!1), [O, k] = T(!1), ee = async () => {
 		if (h(null), n()) try {
-			let e = await A8();
-			p(q8()), _(null), e.length === 0 && h("No re-render anti-patterns caught — interact more (scroll, open menus, type) between record and stop.");
+			let e = await N8();
+			p(X8()), _(null), e.length === 0 && h("No re-render anti-patterns caught — interact more (scroll, open menus, type) between record and stop.");
 		} catch (e) {
 			h(e instanceof Error ? e.message : String(e));
 		}
-		else k8();
+		else M8();
 	}, te = () => {
 		h(null), C(!0);
 		try {
-			H8(), _(null);
+			G8(), _(null);
 		} catch (e) {
 			h(e instanceof Error ? e.message : String(e));
 		} finally {
 			C(!1);
 		}
 	}, A = () => {
-		C8(), _(null);
+		E8(), _(null);
 	}, ne = () => new Set(e().map((e) => e.page)).size, re = () => e().filter((e) => e.severity === "error" ? v() : b()), ie = () => e().filter((e) => e.severity === "error").reduce((e, t) => e + (t.count ?? 1), 0), oe = () => e().reduce((e, t) => e + (t.count ?? 1), 0) - ie(), se = () => {
 		let e = /* @__PURE__ */ new Map();
 		for (let t of re()) {
@@ -48836,19 +48852,19 @@ function D5() {
 		return t ? `${e} · ${t}` : e;
 	}, le = async () => {
 		try {
-			await navigator.clipboard.writeText(o6(re())), E(!0), setTimeout(() => E(!1), 1600);
+			await navigator.clipboard.writeText(l6(re())), E(!0), setTimeout(() => E(!1), 1600);
 		} catch {
 			h("Clipboard was blocked — click Copy again.");
 		}
 	}, ue = async () => {
 		try {
-			await navigator.clipboard.writeText(s6(re(), await K8())), k(!0), setTimeout(() => k(!1), 1600);
+			await navigator.clipboard.writeText(u6(re(), await Y8())), k(!0), setTimeout(() => k(!1), 1600);
 		} catch {
 			h("Clipboard was blocked — click Copy again.");
 		}
 	};
 	return (() => {
-		var t = d5(), r = t.firstChild.firstChild.firstChild;
+		var t = m5(), r = t.firstChild.firstChild.firstChild;
 		r.firstChild;
 		var a = r.nextSibling;
 		return P(r, j(M, {
@@ -48856,7 +48872,7 @@ function D5() {
 				return ne() > 1;
 			},
 			get children() {
-				var e = Q8(), t = e.firstChild.nextSibling;
+				var e = t5(), t = e.firstChild.nextSibling;
 				return t.nextSibling, P(e, ne, t), e;
 			}
 		}), null), P(a, j(M, {
@@ -48864,9 +48880,9 @@ function D5() {
 				return n();
 			},
 			get children() {
-				return [$8(), (() => {
-					var e = e5();
-					return P(e, () => T5(o() - (i() ?? o()))), e;
+				return [n5(), (() => {
+					var e = r5();
+					return P(e, () => O5(o() - (i() ?? o()))), e;
 				})()];
 			}
 		}), null), P(a, j(q, {
@@ -48891,10 +48907,10 @@ function D5() {
 						return n();
 					},
 					get fallback() {
-						return f5();
+						return h5();
 					},
 					get children() {
-						return t5();
+						return i5();
 					}
 				});
 			}
@@ -48909,24 +48925,24 @@ function D5() {
 				return u() ? "Pause live render scan" : "Live render scan — findings update as you browse";
 			},
 			"aria-label": "Toggle live render scan",
-			onClick: () => z8(!u()),
+			onClick: () => H8(!u()),
 			get children() {
 				return [j(M, {
 					get when() {
 						return u();
 					},
 					get fallback() {
-						return p5();
+						return g5();
 					},
 					get children() {
-						return n5();
+						return a5();
 					}
 				}), j(M, {
 					get when() {
 						return u();
 					},
 					get children() {
-						return r5();
+						return o5();
 					}
 				})];
 			}
@@ -48941,7 +48957,7 @@ function D5() {
 			"aria-label": "Snapshot scan",
 			onClick: te,
 			get children() {
-				return i5();
+				return s5();
 			}
 		}), null), P(a, j(q, {
 			class: "size-7 px-0",
@@ -48958,10 +48974,10 @@ function D5() {
 						return O();
 					},
 					get fallback() {
-						return m5();
+						return _5();
 					},
 					get children() {
-						return a5();
+						return c5();
 					}
 				});
 			}
@@ -48980,10 +48996,10 @@ function D5() {
 						return w();
 					},
 					get fallback() {
-						return h5();
+						return v5();
 					},
 					get children() {
-						return a5();
+						return c5();
 					}
 				});
 			}
@@ -48995,7 +49011,7 @@ function D5() {
 			"aria-label": "Clear findings",
 			onClick: A,
 			get children() {
-				return o5();
+				return l5();
 			}
 		}), null), P(t, j(M, {
 			get when() {
@@ -49011,14 +49027,14 @@ function D5() {
 				return n();
 			},
 			get children() {
-				return s5();
+				return u5();
 			}
 		}), null), P(t, j(M, {
 			get when() {
 				return $e(() => !!u())() && !n();
 			},
 			get children() {
-				return c5();
+				return d5();
 			}
 		}), null), P(t, j(M, {
 			get when() {
@@ -49039,7 +49055,7 @@ function D5() {
 			},
 			get children() {
 				return [(() => {
-					var e = l5(), t = e.firstChild, n = t.firstChild, r = t.nextSibling, i = r.firstChild;
+					var e = f5(), t = e.firstChild, n = t.firstChild, r = t.nextSibling, i = r.firstChild;
 					return t.$$click = () => y(!v()), P(t, ie, n), r.$$click = () => x(!b()), P(r, oe, i), D((e) => {
 						var n = {
 							"text-danger bg-danger/10 border-danger/40": v(),
@@ -49056,7 +49072,7 @@ function D5() {
 						o: void 0
 					}), e;
 				})(), (() => {
-					var e = u5();
+					var e = p5();
 					return P(e, j(We, {
 						get each() {
 							return se();
@@ -49064,7 +49080,7 @@ function D5() {
 						children: ([e, t]) => {
 							let n = t[0], r = () => g() === e;
 							return (() => {
-								var i = _5(), a = i.firstChild, o = a.firstChild, s = o.nextSibling, c = s.nextSibling;
+								var i = b5(), a = i.firstChild, o = a.firstChild, s = o.nextSibling, c = s.nextSibling;
 								c.firstChild;
 								var l = c.nextSibling;
 								return a.$$click = () => _(r() ? null : e), P(s, () => ce(e)), P(c, () => t.reduce((e, t) => e + (t.count ?? 1), 0), null), P(i, j(M, {
@@ -49072,21 +49088,21 @@ function D5() {
 										return r();
 									},
 									get children() {
-										var e = g5();
+										var e = y5();
 										return P(e, j(We, {
 											each: t,
 											children: (e) => {
 												let t = () => e.el?.deref() != null;
 												return (() => {
-													var n = S5(), r = n.firstChild, i = r.nextSibling;
+													var n = T5(), r = n.firstChild, i = r.nextSibling;
 													return n.$$click = () => {
-														t() && (w5(e) || h(e.page === location.pathname ? "Element is gone — record or snapshot again." : `This finding is on ${e.page} — navigate there to reveal it.`));
+														t() && (D5(e) || h(e.page === location.pathname ? "Element is gone — record or snapshot again." : `This finding is on ${e.page} — navigate there to reveal it.`));
 													}, P(r, j(M, {
 														get when() {
 															return ne() > 1;
 														},
 														get children() {
-															var t = v5(), n = t.firstChild;
+															var t = x5(), n = t.firstChild;
 															return P(t, () => e.page, n), t;
 														}
 													}), null), P(r, () => e.description, null), P(r, j(M, {
@@ -49094,7 +49110,7 @@ function D5() {
 															return (e.count ?? 1) > 1;
 														},
 														get children() {
-															var t = y5();
+															var t = S5();
 															return t.firstChild, P(t, () => e.count, null), t;
 														}
 													}), null), P(n, j(M, {
@@ -49102,14 +49118,14 @@ function D5() {
 															return e.changes.length > 0;
 														},
 														get children() {
-															var t = b5();
+															var t = C5();
 															return P(t, j(We, {
 																get each() {
 																	return e.changes;
 																},
 																children: (e) => (() => {
-																	var t = C5();
-																	return P(t, () => E5(e)), t;
+																	var t = E5();
+																	return P(t, () => k5(e)), t;
 																})()
 															})), t;
 														}
@@ -49118,7 +49134,7 @@ function D5() {
 															return e.component || e.source;
 														},
 														get children() {
-															var t = x5();
+															var t = w5();
 															return t.firstChild, P(t, () => [e.component, e.source].filter(Boolean).join(" @ "), null), t;
 														}
 													}), null), D((e) => {
@@ -49151,7 +49167,7 @@ function D5() {
 rt(["click"]);
 //#endregion
 //#region src/lib/projectConfig.ts
-var O5 = [
+var j5 = [
 	"defaultTeamId",
 	"defaultProjectId",
 	"defaultLabelIds",
@@ -49168,29 +49184,29 @@ var O5 = [
 	"renderBudgets",
 	"renderIgnore"
 ];
-function k5(e) {
+function M5(e) {
 	let t = {};
-	for (let n of O5) {
+	for (let n of j5) {
 		let r = e[n];
 		r !== void 0 && r !== "" && !(Array.isArray(r) && r.length === 0) && (t[n] = r);
 	}
 	return t;
 }
-function A5(e, t) {
+function N5(e, t) {
 	let n = {};
-	for (let r of O5) e[r] === void 0 && t[r] !== void 0 && (n[r] = t[r]);
+	for (let r of j5) e[r] === void 0 && t[r] !== void 0 && (n[r] = t[r]);
 	return Object.keys(n).length ? n : null;
 }
 //#endregion
 //#region src/lib/linear/auth.ts
 Br();
-function j5(e) {
+function P5(e) {
 	let t = "";
 	for (let n of e) t += String.fromCharCode(n);
 	return btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
-async function M5(e) {
-	let t = j5(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(32))), n = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)), r = j5(new Uint8Array(n)), i = j5(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(16))), a = chrome.identity.getRedirectURL(), o = new URL("https://linear.app/oauth/authorize");
+async function F5(e) {
+	let t = P5(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(32))), n = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)), r = P5(new Uint8Array(n)), i = P5(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(16))), a = chrome.identity.getRedirectURL(), o = new URL("https://linear.app/oauth/authorize");
 	o.searchParams.set("client_id", e), o.searchParams.set("redirect_uri", a), o.searchParams.set("response_type", "code"), o.searchParams.set("scope", "read,write"), o.searchParams.set("state", i), o.searchParams.set("code_challenge", r), o.searchParams.set("code_challenge_method", "S256");
 	let s = await chrome.identity.launchWebAuthFlow({
 		url: o.toString(),
@@ -49218,15 +49234,15 @@ async function M5(e) {
 		linearOauthClientId: e
 	});
 }
-async function N5() {
+async function I5() {
 	await Er({
 		linearAccessToken: void 0,
 		linearApiKey: void 0
 	});
 }
 Br(), Sr(), Ix(), _D();
-var P5 = /*#__PURE__*/ N("<div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\">"), F5 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Cloud: picking an element opens the panel to draft &amp; delegate to the Cursor agent. Local (react-grab style): picking auto-copies the element's context — source, stack, and your skills/memory paths — straight to the clipboard for a local Claude Code or Cursor session; the panel stays out of the way. Both share the same picker; switch anytime."), I5 = /*#__PURE__*/ N("<label class=\"flex cursor-pointer items-center gap-2 select-none\"><input type=checkbox class=\"accent-accent rounded\"><span class=\"text-text text-[12px]\">Element screenshots"), L5 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Captures a highlighted screenshot of each picked element and attaches it to the issue. Costs a beat on huge pages — with this off, picking is instant (pure react-grab speed)."), R5 = /*#__PURE__*/ N("<span class=text-text>Connected as <span class=font-medium></span> · <span class=text-text-dim>"), z5 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex items-center justify-between rounded-lg border p-2.5\"><span class=\"text-text text-[12px]\">"), B5 = /*#__PURE__*/ N("<option value>Select a team…"), V5 = /*#__PURE__*/ N("<option value>No project"), H5 = /*#__PURE__*/ N("<div class=\"flex flex-wrap gap-1\">"), U5 = /*#__PURE__*/ N("<label class=\"flex items-start gap-2\"><input type=checkbox class=\"accent-accent mt-0.5\"><span class=\"flex flex-col gap-0.5\"><span class=text-[12px]>Let agents close out Linear themselves</span><span class=\"text-text-faint text-[10.5px] leading-snug\">Embeds your Linear API key + raw GraphQL closeout recipes in every issue's Agent instructions — cloud agent VMs have no authenticated Linear MCP, so without this they can't comment, attach media, or move the issue. The key is visible to anyone who can read the issue."), W5 = /*#__PURE__*/ N("<p class=\"text-text-dim text-[11px]\">No agents found — install the Cursor integration in Linear first."), G5 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Empty = the default above (computer-use testing, video demo, PR + review babysitting)."), K5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1.5\">"), q5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1\"><span class=\"text-text-dim text-[11px] font-medium\">Mode</span><div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\"></div><span class=\"text-text-faint text-[10.5px] leading-snug\">Beside page squeezes the app next to the panel, DevTools-style — nothing gets covered. Also toggleable from the dock icon in the panel header."), J5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1\"><span class=\"text-text-dim text-[11px] font-medium\">Dock side</span><div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\"></div><span class=\"text-text-faint text-[10.5px] leading-snug\">The launcher pill is draggable — park it anywhere it doesn't cover your app."), Y5 = /*#__PURE__*/ N("<p class=\"text-text-faint text-[10.5px] leading-snug\">A committed <code>.lineargrab.json</code> at the repo root (where the bridge runs) shares team/project/labels, skills, staging branch, and workflow defaults with every machine and teammate — it seeds any setting you haven't set locally. Secrets never belong in it."), X5 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[10ch] text-center\">"), Z5 = /*#__PURE__*/ N("<div class=\"flex items-center gap-2\">"), Q5 = /*#__PURE__*/ N("<option value>Select a channel…"), $5 = /*#__PURE__*/ N("<label class=\"flex cursor-pointer items-center gap-2 select-none\"><input type=checkbox class=\"accent-accent rounded\"><span class=\"text-text text-[12px]\">Announce new issues on create"), e7 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">⚠️ Tokens are embedded in issue Agent-instructions so agents can post the finished demo — everyone who can read the issue can read them. Use single-channel-scoped bots."), t7 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1\"><span class=\"text-text-dim text-[11px] font-medium\">Provider preference</span><div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\"><button>Auto</button><button>OpenAI</button><button>Anthropic"), n7 = /*#__PURE__*/ N("<p class=\"text-text-dim text-[11px]\">"), r7 = /*#__PURE__*/ N("<div class=min-h-[2lh]>"), i7 = /*#__PURE__*/ N("<ol class=\"text-text-faint flex list-decimal flex-col gap-1 pl-4 text-[11px] leading-relaxed\"><li>Pick an element on your running dev app.</li><li>Draft the issue (AI optional).</li><li>Create + delegate — Cursor's cloud agent fixes it and opens a PR.</li><li>Track and steer it from Activity."), a7 = /*#__PURE__*/ N("<div class=\"flex h-full flex-col gap-5 overflow-y-auto pt-3 pb-6 pl-3 pr-4\">"), o7 = /*#__PURE__*/ N("<button>"), s7 = /*#__PURE__*/ N("<div class=\"flex gap-1.5\">"), c7 = /*#__PURE__*/ N("<p class=\"text-text-faint text-center text-[10.5px]\">or"), l7 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Register this callback URL in your Linear OAuth app config:<br><span class=\"font-mono text-[10.5px] break-all\">"), u7 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-3\">"), d7 = /*#__PURE__*/ N("<span class=text-text-dim>Connected — verifying…"), f7 = /*#__PURE__*/ N("<option> (<!>)"), p7 = /*#__PURE__*/ N("<option>"), m7 = /*#__PURE__*/ N("<button type=button><span class=\"mr-1 inline-block size-2 rounded-full align-middle\">"), h7 = /*#__PURE__*/ N("<option value>Select the agent…"), g7 = /*#__PURE__*/ N("<option>#"), _7 = /*#__PURE__*/ N("<p class=\"text-text-dim text-[11px]\">No key set — AI drafting disabled, manual drafting still works.");
-function v7() {
+var L5 = /*#__PURE__*/ N("<div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\">"), R5 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Cloud: picking an element opens the panel to draft &amp; delegate to the Cursor agent. Local (react-grab style): picking auto-copies the element's context — source, stack, and your skills/memory paths — straight to the clipboard for a local Claude Code or Cursor session; the panel stays out of the way. Both share the same picker; switch anytime."), z5 = /*#__PURE__*/ N("<label class=\"flex cursor-pointer items-center gap-2 select-none\"><input type=checkbox class=\"accent-accent rounded\"><span class=\"text-text text-[12px]\">Element screenshots"), B5 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Captures a highlighted screenshot of each picked element and attaches it to the issue. Costs a beat on huge pages — with this off, picking is instant (pure react-grab speed)."), V5 = /*#__PURE__*/ N("<span class=text-text>Connected as <span class=font-medium></span> · <span class=text-text-dim>"), H5 = /*#__PURE__*/ N("<div class=\"bg-surface border-border flex items-center justify-between rounded-lg border p-2.5\"><span class=\"text-text text-[12px]\">"), U5 = /*#__PURE__*/ N("<option value>Select a team…"), W5 = /*#__PURE__*/ N("<option value>No project"), G5 = /*#__PURE__*/ N("<div class=\"flex flex-wrap gap-1\">"), K5 = /*#__PURE__*/ N("<label class=\"flex items-start gap-2\"><input type=checkbox class=\"accent-accent mt-0.5\"><span class=\"flex flex-col gap-0.5\"><span class=text-[12px]>Let agents close out Linear themselves</span><span class=\"text-text-faint text-[10.5px] leading-snug\">Embeds your Linear API key + raw GraphQL closeout recipes in every issue's Agent instructions — cloud agent VMs have no authenticated Linear MCP, so without this they can't comment, attach media, or move the issue. The key is visible to anyone who can read the issue."), q5 = /*#__PURE__*/ N("<p class=\"text-text-dim text-[11px]\">No agents found — install the Cursor integration in Linear first."), J5 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Empty = the default above (computer-use testing, video demo, PR + review babysitting)."), Y5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1.5\">"), X5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1\"><span class=\"text-text-dim text-[11px] font-medium\">Mode</span><div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\"></div><span class=\"text-text-faint text-[10.5px] leading-snug\">Beside page squeezes the app next to the panel, DevTools-style — nothing gets covered. Also toggleable from the dock icon in the panel header."), Z5 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1\"><span class=\"text-text-dim text-[11px] font-medium\">Dock side</span><div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\"></div><span class=\"text-text-faint text-[10.5px] leading-snug\">The launcher pill is draggable — park it anywhere it doesn't cover your app."), Q5 = /*#__PURE__*/ N("<p class=\"text-text-faint text-[10.5px] leading-snug\">A committed <code>.lineargrab.json</code> at the repo root (where the bridge runs) shares team/project/labels, skills, staging branch, and workflow defaults with every machine and teammate — it seeds any setting you haven't set locally. Secrets never belong in it."), $5 = /*#__PURE__*/ N("<span class=\"inline-block min-w-[10ch] text-center\">"), e7 = /*#__PURE__*/ N("<div class=\"flex items-center gap-2\">"), t7 = /*#__PURE__*/ N("<option value>Select a channel…"), n7 = /*#__PURE__*/ N("<label class=\"flex cursor-pointer items-center gap-2 select-none\"><input type=checkbox class=\"accent-accent rounded\"><span class=\"text-text text-[12px]\">Announce new issues on create"), r7 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">⚠️ Tokens are embedded in issue Agent-instructions so agents can post the finished demo — everyone who can read the issue can read them. Use single-channel-scoped bots."), i7 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-1\"><span class=\"text-text-dim text-[11px] font-medium\">Provider preference</span><div class=\"bg-surface-2 border-border flex rounded-md border p-0.5\"><button>Auto</button><button>OpenAI</button><button>Anthropic"), a7 = /*#__PURE__*/ N("<p class=\"text-text-dim text-[11px]\">"), o7 = /*#__PURE__*/ N("<div class=min-h-[2lh]>"), s7 = /*#__PURE__*/ N("<ol class=\"text-text-faint flex list-decimal flex-col gap-1 pl-4 text-[11px] leading-relaxed\"><li>Pick an element on your running dev app.</li><li>Draft the issue (AI optional).</li><li>Create + delegate — Cursor's cloud agent fixes it and opens a PR.</li><li>Track and steer it from Activity."), c7 = /*#__PURE__*/ N("<div class=\"flex h-full flex-col gap-5 overflow-y-auto pt-3 pb-6 pl-3 pr-4\">"), l7 = /*#__PURE__*/ N("<button>"), u7 = /*#__PURE__*/ N("<div class=\"flex gap-1.5\">"), d7 = /*#__PURE__*/ N("<p class=\"text-text-faint text-center text-[10.5px]\">or"), f7 = /*#__PURE__*/ N("<span class=\"text-text-faint text-[10.5px] leading-snug\">Register this callback URL in your Linear OAuth app config:<br><span class=\"font-mono text-[10.5px] break-all\">"), p7 = /*#__PURE__*/ N("<div class=\"flex flex-col gap-3\">"), m7 = /*#__PURE__*/ N("<span class=text-text-dim>Connected — verifying…"), h7 = /*#__PURE__*/ N("<option> (<!>)"), g7 = /*#__PURE__*/ N("<option>"), _7 = /*#__PURE__*/ N("<button type=button><span class=\"mr-1 inline-block size-2 rounded-full align-middle\">"), v7 = /*#__PURE__*/ N("<option value>Select the agent…"), y7 = /*#__PURE__*/ N("<option>#"), b7 = /*#__PURE__*/ N("<p class=\"text-text-dim text-[11px]\">No key set — AI drafting disabled, manual drafting still works.");
+function x7() {
 	let e = sr(), t = _r(() => ({
 		queryKey: ["settings"],
 		queryFn: Tr,
@@ -49254,13 +49270,13 @@ function v7() {
 		retry: 0
 	})), [l, u] = T(!1), d = async () => {
 		try {
-			await navigator.clipboard.writeText(JSON.stringify(k5(n()), null, 2) + "\n"), u(!0), setTimeout(() => u(!1), 1800);
+			await navigator.clipboard.writeText(JSON.stringify(M5(n()), null, 2) + "\n"), u(!0), setTimeout(() => u(!1), 1800);
 		} catch {}
 	}, f = () => {
 		let e = c.data?.projectConfig;
 		if (!e) return;
 		let t = {};
-		for (let n of O5) e[n] !== void 0 && (t[n] = e[n]);
+		for (let n of j5) e[n] !== void 0 && (t[n] = e[n]);
 		r(t);
 	}, p = _r(() => ({
 		queryKey: ["linear-labels"],
@@ -49293,7 +49309,7 @@ function v7() {
 		}
 		E(!0), ee("");
 		try {
-			await M5(t), await e.invalidateQueries({ queryKey: ["settings"] }), await e.invalidateQueries({ queryKey: ["viewer"] }), await e.invalidateQueries({ queryKey: ["teams"] }), await e.invalidateQueries({ queryKey: ["agents"] }), await e.invalidateQueries({ queryKey: ["my-issues"] });
+			await F5(t), await e.invalidateQueries({ queryKey: ["settings"] }), await e.invalidateQueries({ queryKey: ["viewer"] }), await e.invalidateQueries({ queryKey: ["teams"] }), await e.invalidateQueries({ queryKey: ["agents"] }), await e.invalidateQueries({ queryKey: ["my-issues"] });
 		} catch (e) {
 			ee(e instanceof Error ? e.message : "OAuth flow failed.");
 		} finally {
@@ -49304,7 +49320,7 @@ function v7() {
 	async function re() {
 		ne(!0);
 		try {
-			await N5(), await e.invalidateQueries({ queryKey: ["settings"] }), await e.invalidateQueries({ queryKey: ["viewer"] }), await e.invalidateQueries({ queryKey: ["teams"] }), await e.invalidateQueries({ queryKey: ["agents"] }), await e.invalidateQueries({ queryKey: ["my-issues"] });
+			await I5(), await e.invalidateQueries({ queryKey: ["settings"] }), await e.invalidateQueries({ queryKey: ["viewer"] }), await e.invalidateQueries({ queryKey: ["teams"] }), await e.invalidateQueries({ queryKey: ["agents"] }), await e.invalidateQueries({ queryKey: ["my-issues"] });
 		} finally {
 			ne(!1);
 		}
@@ -49320,12 +49336,12 @@ function v7() {
 		return e ? `Drafting with ${e} — ${Px[e].fast} (fast) / ${Px[e].best} (best)` : null;
 	});
 	return (() => {
-		var e = a7();
+		var e = c7();
 		return P(e, j(Rj, {
 			title: "Workflow",
 			get children() {
 				return [(() => {
-					var e = P5();
+					var e = L5();
 					return P(e, j(We, {
 						each: [{
 							id: "cloud",
@@ -49335,19 +49351,19 @@ function v7() {
 							label: "Local · clipboard"
 						}],
 						children: (e) => (() => {
-							var t = o7();
+							var t = l7();
 							return t.$$click = () => void r({ workflowMode: e.id }), P(t, () => e.label), D(() => st(t, `flex-1 rounded-[5px] px-2 py-1 text-[11.5px] font-medium transition-colors ${(n().workflowMode ?? "cloud") === e.id ? "bg-surface-3 text-text" : "text-text-dim hover:text-text cursor-pointer"}`)), t;
 						})()
 					})), e;
-				})(), F5()];
+				})(), R5()];
 			}
 		}), null), P(e, j(Rj, {
 			title: "Capture",
 			get children() {
 				return [(() => {
-					var e = I5(), t = e.firstChild;
+					var e = z5(), t = e.firstChild;
 					return t.addEventListener("change", (e) => void r({ captureShots: e.currentTarget.checked || void 0 })), D(() => t.checked = !!n().captureShots), e;
-				})(), L5()];
+				})(), B5()];
 			}
 		}), null), P(e, j(Rj, {
 			title: "Linear",
@@ -49358,13 +49374,13 @@ function v7() {
 					},
 					get fallback() {
 						return (() => {
-							var e = u7();
+							var e = p7();
 							return P(e, j(Lj, {
 								label: "Personal API key",
 								hint: "Create one at linear.app → Settings → API — fastest path.",
 								get children() {
 									return [(() => {
-										var e = s7();
+										var e = u7();
 										return P(e, j(jj, {
 											type: "password",
 											placeholder: "lin_api_…",
@@ -49401,12 +49417,12 @@ function v7() {
 							}), null), P(e, j(M, {
 								when: xr,
 								get children() {
-									return [c7(), j(Lj, {
+									return [d7(), j(Lj, {
 										label: "OAuth client ID",
 										get children() {
 											return [
 												(() => {
-													var e = s7();
+													var e = u7();
 													return P(e, j(jj, {
 														placeholder: "your-client-id",
 														get value() {
@@ -49434,7 +49450,7 @@ function v7() {
 													}
 												}),
 												(() => {
-													var e = l7(), t = e.firstChild.nextSibling.nextSibling;
+													var e = f7(), t = e.firstChild.nextSibling.nextSibling;
 													return P(t, ie), e;
 												})()
 											];
@@ -49445,13 +49461,13 @@ function v7() {
 						})();
 					},
 					get children() {
-						var e = z5(), t = e.firstChild;
+						var e = H5(), t = e.firstChild;
 						return P(t, j(M, {
 							get when() {
 								return !a.isLoading;
 							},
 							get fallback() {
-								return d7();
+								return m7();
 							},
 							get children() {
 								return j(M, {
@@ -49464,7 +49480,7 @@ function v7() {
 												return a.isError;
 											},
 											get fallback() {
-												return d7();
+												return m7();
 											},
 											get children() {
 												return j(Hj, { message: "Key rejected — reconnect" });
@@ -49472,7 +49488,7 @@ function v7() {
 										});
 									},
 									get children() {
-										var e = R5(), t = e.firstChild.nextSibling, n = t.nextSibling.nextSibling;
+										var e = V5(), t = e.firstChild.nextSibling, n = t.nextSibling.nextSibling;
 										return P(t, () => a.data.name), P(n, () => a.data.email), e;
 									}
 								});
@@ -49513,7 +49529,7 @@ function v7() {
 											return o.isLoading;
 										},
 										get children() {
-											return [B5(), j(M, {
+											return [U5(), j(M, {
 												get when() {
 													return o.data;
 												},
@@ -49523,7 +49539,7 @@ function v7() {
 															return o.data;
 														},
 														children: (e) => (() => {
-															var t = f7(), r = t.firstChild, i = r.nextSibling;
+															var t = h7(), r = t.firstChild, i = r.nextSibling;
 															return i.nextSibling, P(t, () => e.name, r), P(t, () => e.key, i), D(() => t.selected = e.id === n().defaultTeamId), D(() => t.value = e.id), t;
 														})()
 													});
@@ -49547,14 +49563,14 @@ function v7() {
 										},
 										get children() {
 											return [(() => {
-												var e = V5();
+												var e = W5();
 												return D(() => e.selected = !n().defaultProjectId), e;
 											})(), j(We, {
 												get each() {
 													return s.data ?? [];
 												},
 												children: (e) => (() => {
-													var t = p7();
+													var t = g7();
 													return P(t, () => e.name), D(() => t.selected = e.id === n().defaultProjectId), D(() => t.value = e.id), t;
 												})()
 											})];
@@ -49566,7 +49582,7 @@ function v7() {
 								label: "Default labels",
 								hint: "Applied to every issue created from the panel.",
 								get children() {
-									var e = H5();
+									var e = G5();
 									return P(e, j(We, {
 										get each() {
 											return p.data ?? [];
@@ -49574,7 +49590,7 @@ function v7() {
 										children: (e) => {
 											let t = () => (n().defaultLabelIds ?? []).includes(e.id);
 											return (() => {
-												var i = m7(), a = i.firstChild;
+												var i = _7(), a = i.firstChild;
 												return i.$$click = () => {
 													let i = n().defaultLabelIds ?? [];
 													r({ defaultLabelIds: t() ? i.filter((t) => t !== e.id) : [...i, e.id] });
@@ -49591,7 +49607,7 @@ function v7() {
 								}
 							}),
 							(() => {
-								var e = U5(), t = e.firstChild;
+								var e = K5(), t = e.firstChild;
 								return t.addEventListener("change", (e) => void r({ shareLinearKey: e.currentTarget.checked })), D(() => t.checked = !!n().shareLinearKey), e;
 							})(),
 							j(Lj, {
@@ -49641,7 +49657,7 @@ function v7() {
 													return m.isLoading;
 												},
 												get children() {
-													return [h7(), j(M, {
+													return [v7(), j(M, {
 														get when() {
 															return m.data;
 														},
@@ -49651,7 +49667,7 @@ function v7() {
 																	return m.data;
 																},
 																children: (e) => (() => {
-																	var t = p7();
+																	var t = g7();
 																	return P(t, () => e.displayName), D(() => t.selected = e.id === n().cursorAgentId), D(() => t.value = e.id), t;
 																})()
 															});
@@ -49661,7 +49677,7 @@ function v7() {
 											});
 										},
 										get children() {
-											return W5();
+											return q5();
 										}
 									});
 								}
@@ -49709,7 +49725,7 @@ function v7() {
 										onBlur: (e) => {
 											r({ issueTemplate: e.currentTarget.value.trim() || void 0 });
 										}
-									}), G5()];
+									}), J5()];
 								}
 							}),
 							j(Lj, {
@@ -49766,7 +49782,7 @@ function v7() {
 								label: "Test account",
 								hint: "The cloud agent logs into the app with this while testing and recording its demo. Added to every issue's Agent instructions. Use a throwaway account — it's visible to everyone who can read the issue.",
 								get children() {
-									var e = K5();
+									var e = Y5();
 									return P(e, j(jj, {
 										placeholder: "Username or email (e.g. demo@yourapp.com)",
 										get value() {
@@ -49798,7 +49814,7 @@ function v7() {
 					title: "Panel",
 					get children() {
 						return [(() => {
-							var e = q5(), t = e.firstChild.nextSibling;
+							var e = X5(), t = e.firstChild.nextSibling;
 							return P(t, j(We, {
 								each: [{
 									id: "overlay",
@@ -49808,7 +49824,7 @@ function v7() {
 									label: "Beside page"
 								}],
 								children: (e) => (() => {
-									var t = o7();
+									var t = l7();
 									return t.$$click = () => void r({
 										panelMode: e.id,
 										panelPos: void 0
@@ -49816,11 +49832,11 @@ function v7() {
 								})()
 							})), e;
 						})(), (() => {
-							var e = J5(), t = e.firstChild.nextSibling;
+							var e = Z5(), t = e.firstChild.nextSibling;
 							return P(t, j(We, {
 								each: ["left", "right"],
 								children: (e) => (() => {
-									var t = o7();
+									var t = l7();
 									return t.$$click = () => void r({ panelSide: e }), P(t, e === "left" ? "Left" : "Right"), D(() => st(t, `flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors ${(n().panelSide ?? "right") === e ? "bg-surface-3 text-text" : "text-text-dim hover:text-text cursor-pointer"}`)), t;
 								})()
 							})), e;
@@ -49850,8 +49866,8 @@ function v7() {
 		}), null), P(e, j(Rj, {
 			title: "Project config (.lineargrab.json)",
 			get children() {
-				return [Y5(), (() => {
-					var e = Z5();
+				return [Q5(), (() => {
+					var e = e7();
 					return P(e, j(M, {
 						get when() {
 							return c.data?.projectConfig;
@@ -49882,7 +49898,7 @@ function v7() {
 						},
 						onClick: () => void d(),
 						get children() {
-							var e = X5();
+							var e = $5();
 							return P(e, () => l() ? "Copied ✓" : "Copy config"), e;
 						}
 					}), null), e;
@@ -49973,12 +49989,12 @@ function v7() {
 													});
 												},
 												get children() {
-													return [Q5(), j(We, {
+													return [t7(), j(We, {
 														get each() {
 															return ae.data ?? [];
 														},
 														children: (e) => (() => {
-															var t = g7();
+															var t = y7();
 															return t.firstChild, P(t, () => e.name, null), D(() => t.selected = e.id === n().slackChannelId), D(() => t.value = e.id), t;
 														})()
 													})];
@@ -50029,10 +50045,10 @@ function v7() {
 						}
 					}),
 					(() => {
-						var e = $5(), t = e.firstChild;
+						var e = n7(), t = e.firstChild;
 						return t.addEventListener("change", (e) => void r({ notifyOnCreate: e.currentTarget.checked ? void 0 : !1 })), D(() => t.checked = n().notifyOnCreate !== !1), e;
 					})(),
-					e7()
+					r7()
 				];
 			}
 		}), null), P(e, j(Rj, {
@@ -50070,7 +50086,7 @@ function v7() {
 						}
 					}),
 					(() => {
-						var e = t7(), t = e.firstChild.nextSibling.firstChild, i = t.nextSibling, a = i.nextSibling;
+						var e = i7(), t = e.firstChild.nextSibling.firstChild, i = t.nextSibling, a = i.nextSibling;
 						return t.$$click = () => void r({ preferredProvider: void 0 }), i.$$click = () => void r({ preferredProvider: "openai" }), a.$$click = () => void r({ preferredProvider: "anthropic" }), D((e) => {
 							var r = `flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors ${n().preferredProvider === void 0 ? "bg-surface-3 text-text" : "text-text-dim hover:text-text cursor-pointer"}`, o = `flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors disabled:cursor-not-allowed ${n().preferredProvider === "openai" ? "bg-surface-3 text-text" : "text-text-dim hover:text-text cursor-pointer disabled:text-text-faint"}`, s = !n().openaiKey, c = `flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors disabled:cursor-not-allowed ${n().preferredProvider === "anthropic" ? "bg-surface-3 text-text" : "text-text-dim hover:text-text cursor-pointer disabled:text-text-faint"}`, l = !n().anthropicKey;
 							return r !== e.e && st(t, e.e = r), o !== e.t && st(i, e.t = o), s !== e.a && (i.disabled = e.a = s), c !== e.o && st(a, e.o = c), l !== e.i && (a.disabled = e.i = l), e;
@@ -50083,16 +50099,16 @@ function v7() {
 						}), e;
 					})(),
 					(() => {
-						var e = r7();
+						var e = o7();
 						return P(e, j(M, {
 							get when() {
 								return se();
 							},
 							get fallback() {
-								return _7();
+								return b7();
 							},
 							get children() {
-								var e = n7();
+								var e = a7();
 								return P(e, se), e;
 							}
 						})), e;
@@ -50102,7 +50118,7 @@ function v7() {
 		}), null), P(e, j(Rj, {
 			title: "How it works",
 			get children() {
-				return i7();
+				return s7();
 			}
 		}), null), e;
 	})();
@@ -50110,38 +50126,38 @@ function v7() {
 rt(["click"]);
 //#endregion
 //#region src/lib/idbCache.ts
-var y7 = "linear-grab", b7 = "queries", x7 = [
+var S7 = "linear-grab", C7 = "queries", w7 = [
 	"my-issues",
 	"issue",
 	"sessions",
 	"teams",
 	"agents"
 ];
-function S7() {
+function T7() {
 	return new Promise((e) => {
 		try {
-			let t = indexedDB.open(y7, 1);
-			t.onupgradeneeded = () => t.result.createObjectStore(b7), t.onsuccess = () => e(t.result), t.onerror = () => e(null);
+			let t = indexedDB.open(S7, 1);
+			t.onupgradeneeded = () => t.result.createObjectStore(C7), t.onsuccess = () => e(t.result), t.onerror = () => e(null);
 		} catch {
 			e(null);
 		}
 	});
 }
-function C7(e) {
-	return typeof e[0] == "string" && x7.includes(e[0]);
+function E7(e) {
+	return typeof e[0] == "string" && w7.includes(e[0]);
 }
-async function w7(e) {
-	let t = await S7();
+async function D7(e) {
+	let t = await T7();
 	if (!t) return () => {};
 	await new Promise((n) => {
 		try {
-			let r = t.transaction(b7, "readonly").objectStore(b7).openCursor();
+			let r = t.transaction(C7, "readonly").objectStore(C7).openCursor();
 			r.onsuccess = () => {
 				let t = r.result;
 				if (!t) return n();
 				try {
 					let { queryKey: n, data: r } = t.value;
-					C7(n) && e.getQueryData(n) === void 0 && e.setQueryData(n, r, { updatedAt: 0 });
+					E7(n) && e.getQueryData(n) === void 0 && e.setQueryData(n, r, { updatedAt: 0 });
 				} catch {}
 				t.continue();
 			}, r.onerror = () => n();
@@ -50152,14 +50168,14 @@ async function w7(e) {
 	let n = /* @__PURE__ */ new Map(), r = e.getQueryCache().subscribe((r) => {
 		if (r.type !== "updated" || r.action.type !== "success") return;
 		let { queryKey: i, queryHash: a } = r.query;
-		if (!C7(i)) return;
+		if (!E7(i)) return;
 		let o = n.get(a);
 		o && clearTimeout(o), n.set(a, setTimeout(() => {
 			n.delete(a);
 			try {
 				let n = e.getQueryData(i);
 				if (n === void 0) return;
-				t.transaction(b7, "readwrite").objectStore(b7).put({
+				t.transaction(C7, "readwrite").objectStore(C7).put({
 					queryKey: i,
 					data: n
 				}, a);
@@ -50175,7 +50191,7 @@ async function w7(e) {
 //#endregion
 //#region src/panel/App.tsx
 Br();
-var T7 = /*#__PURE__*/ N("<svg viewBox=\"0 0 100 100\"fill=currentColor aria-hidden><path d=\"M1.22541 61.5228c-.2225-.9485.90748-1.5459 1.59638-.857L39.3342 97.1782c.6889.6889.0915 1.8189-.857 1.5964C20.0515 94.4522 5.54779 79.9485 1.22541 61.5228ZM.00189135 46.8891c-.01764375.2833.08887215.5599.28957165.7606L52.3503 99.7085c.2007.2007.4773.3075.7606.2896 2.3692-.1476 4.6938-.46 6.9624-.9259.7645-.157 1.0301-1.0963.4782-1.6481L2.57595 39.4485c-.55186-.5519-1.49117-.2863-1.648174.4782-.465915 2.2686-.77832 4.5932-.92588465 6.9624ZM4.21093 29.7054c-.16649.3738-.08169.8106.20765 1.1l64.77602 64.776c.2894.2894.7262.3742 1.1.2077 1.7861-.7956 3.5171-1.6927 5.1855-2.684.5521-.328.6373-1.0867.1832-1.5407L8.43566 24.3367c-.45409-.4541-1.21271-.3689-1.54074.1832-.99132 1.6684-1.88843 3.3994-2.68399 5.1855ZM12.6587 18.074c-.3701-.3701-.393-.9637-.0443-1.3541C21.7795 6.45931 35.1114 0 49.9519 0 77.5927 0 100 22.4073 100 50.0481c0 14.8405-6.4593 28.1724-16.7199 37.3375-.3903.3487-.984.3258-1.3541-.0443L12.6587 18.074Z\">"), E7 = /*#__PURE__*/ N("<button><svg width=12 height=12 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 aria-hidden><rect x=1.5 y=2.5 width=13 height=11 rx=1.5></rect><path d=\"M10 2.5v11\">"), D7 = /*#__PURE__*/ N("<button aria-label=\"Minimize to launcher\"title=\"Minimize to launcher\"class=\"text-text-dim hover:text-text hover:bg-surface-3 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[15px] leading-none transition-colors\">–"), O7 = /*#__PURE__*/ N("<div class=\"bg-bg text-text flex h-full flex-col\"><header><span class=\"text-accent mr-0.5 inline-flex shrink-0\"title=\"Linear Grab\"></span><div class=\"no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto\"></div></header><main class=\"min-h-0 flex-1\"><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full>"), k7 = /*#__PURE__*/ N("<button>"), A7 = [
+var O7 = /*#__PURE__*/ N("<svg viewBox=\"0 0 100 100\"fill=currentColor aria-hidden><path d=\"M1.22541 61.5228c-.2225-.9485.90748-1.5459 1.59638-.857L39.3342 97.1782c.6889.6889.0915 1.8189-.857 1.5964C20.0515 94.4522 5.54779 79.9485 1.22541 61.5228ZM.00189135 46.8891c-.01764375.2833.08887215.5599.28957165.7606L52.3503 99.7085c.2007.2007.4773.3075.7606.2896 2.3692-.1476 4.6938-.46 6.9624-.9259.7645-.157 1.0301-1.0963.4782-1.6481L2.57595 39.4485c-.55186-.5519-1.49117-.2863-1.648174.4782-.465915 2.2686-.77832 4.5932-.92588465 6.9624ZM4.21093 29.7054c-.16649.3738-.08169.8106.20765 1.1l64.77602 64.776c.2894.2894.7262.3742 1.1.2077 1.7861-.7956 3.5171-1.6927 5.1855-2.684.5521-.328.6373-1.0867.1832-1.5407L8.43566 24.3367c-.45409-.4541-1.21271-.3689-1.54074.1832-.99132 1.6684-1.88843 3.3994-2.68399 5.1855ZM12.6587 18.074c-.3701-.3701-.393-.9637-.0443-1.3541C21.7795 6.45931 35.1114 0 49.9519 0 77.5927 0 100 22.4073 100 50.0481c0 14.8405-6.4593 28.1724-16.7199 37.3375-.3903.3487-.984.3258-1.3541-.0443L12.6587 18.074Z\">"), k7 = /*#__PURE__*/ N("<button><svg width=12 height=12 viewBox=\"0 0 16 16\"fill=none stroke=currentColor stroke-width=1.5 aria-hidden><rect x=1.5 y=2.5 width=13 height=11 rx=1.5></rect><path d=\"M10 2.5v11\">"), A7 = /*#__PURE__*/ N("<button aria-label=\"Minimize to launcher\"title=\"Minimize to launcher\"class=\"text-text-dim hover:text-text hover:bg-surface-3 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-[15px] leading-none transition-colors\">–"), j7 = /*#__PURE__*/ N("<div class=\"bg-bg text-text flex h-full flex-col\"><header><span class=\"text-accent mr-0.5 inline-flex shrink-0\"title=\"Linear Grab\"></span><div class=\"no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto\"></div></header><main class=\"min-h-0 flex-1\"><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full></div><div class=h-full>"), M7 = /*#__PURE__*/ N("<button>"), N7 = [
 	{
 		id: "draft",
 		label: "Draft"
@@ -50216,35 +50232,35 @@ var T7 = /*#__PURE__*/ N("<svg viewBox=\"0 0 100 100\"fill=currentColor aria-hid
 		id: "settings",
 		label: "Settings"
 	}
-], j7 = /* @__PURE__ */ new Set();
-function M7(e, t, n) {
-	if (j7.has(e) || typeof Notification > "u") return;
-	j7.add(e);
+], P7 = /* @__PURE__ */ new Set();
+function F7(e, t, n) {
+	if (P7.has(e) || typeof Notification > "u") return;
+	P7.add(e);
 	let r = () => new Notification(t, { body: n });
 	Notification.permission === "granted" ? r() : Notification.permission === "default" && Notification.requestPermission().then((e) => e === "granted" && r());
 }
-function N7() {
+function I7() {
 	setInterval(() => {
 		PO().then((e) => {
 			for (let t of e) {
 				if (t.status !== "running") continue;
 				let e = t.lastEventAt ?? t.startedAt;
-				Date.now() - e > 10 * 6e4 && M7(`local-stuck:${t.id}:${e}`, "Local agent may be stuck", `${t.title.slice(0, 80)} — no output for ${Math.round((Date.now() - e) / 6e4)}m. Nudge or interrupt it in the Local tab.`);
+				Date.now() - e > 10 * 6e4 && F7(`local-stuck:${t.id}:${e}`, "Local agent may be stuck", `${t.title.slice(0, 80)} — no output for ${Math.round((Date.now() - e) / 6e4)}m. Nudge or interrupt it in the Local tab.`);
 			}
 		}).catch(() => {}), _O().then((e) => {
-			for (let t of e) /awaitingInput|elicit/i.test(t.status) && M7(`cloud-input:${t.id}`, "Cloud agent needs input", `${t.issue?.identifier ?? "Session"} — ${t.issue?.title?.slice(0, 80) ?? "a Cursor agent"} is waiting for you.`);
+			for (let t of e) /awaitingInput|elicit/i.test(t.status) && F7(`cloud-input:${t.id}`, "Cloud agent needs input", `${t.issue?.identifier ?? "Session"} — ${t.issue?.title?.slice(0, 80) ?? "a Cursor agent"} is waiting for you.`);
 		}).catch(() => {});
 	}, 6e4);
 }
-N7();
-var P7 = new gr({ defaultOptions: { queries: {
+I7();
+var L7 = new gr({ defaultOptions: { queries: {
 	retry: 1,
 	refetchOnWindowFocus: !1,
 	staleTime: 5e3
 } } });
-function F7(e) {
+function R7(e) {
 	return (() => {
-		var t = T7();
+		var t = O7();
 		return D((n) => {
 			var r = e.size ?? 14, i = e.size ?? 14;
 			return r !== n.e && it(t, "width", n.e = r), i !== n.t && it(t, "height", n.t = i), n;
@@ -50254,36 +50270,36 @@ function F7(e) {
 		}), t;
 	})();
 }
-function I7(e) {
+function z7(e) {
 	let [t, n] = T("draft"), r = () => {
-		P7.invalidateQueries({ queryKey: ["grab"] }), lj() === "capture" && n("capture"), e.onGrab?.();
+		L7.invalidateQueries({ queryKey: ["grab"] }), lj() === "capture" && n("capture"), e.onGrab?.();
 	};
 	return O(() => {
 		let e = rj();
 		e && n(e);
 	}), ie(() => {
-		let e = w7(P7), t = XZ(r), n = () => {
+		let e = D7(L7), t = XZ(r), n = () => {
 			YO().then(y$), HO(), NO().then(async (e) => {
 				if (!e.projectConfig) return;
-				let t = A5(await Tr(), e.projectConfig);
+				let t = N5(await Tr(), e.projectConfig);
 				t && await Er(t);
 			}).catch(() => {});
 		};
 		n();
 		let i = Mr((e) => {
-			e === "settings" && (P7.invalidateQueries({ queryKey: ["settings"] }), n()), e === "grab" && r();
+			e === "settings" && (L7.invalidateQueries({ queryKey: ["settings"] }), n()), e === "grab" && r();
 		});
 		ae(() => {
 			t(), i(), e.then((e) => e());
 		});
 	}), j(cr, {
-		client: P7,
+		client: L7,
 		get children() {
-			var r = O7(), i = r.firstChild, a = i.firstChild, o = a.nextSibling, s = i.nextSibling.firstChild, c = s.nextSibling, l = c.nextSibling, u = l.nextSibling, d = u.nextSibling, f = d.nextSibling, p = f.nextSibling, m = p.nextSibling, h = m.nextSibling, g = h.nextSibling;
-			return i.$$pointerdown = (t) => e.onHeaderPointerDown?.(t), P(a, j(F7, { size: 14 })), P(o, j(We, {
-				each: A7,
+			var r = j7(), i = r.firstChild, a = i.firstChild, o = a.nextSibling, s = i.nextSibling.firstChild, c = s.nextSibling, l = c.nextSibling, u = l.nextSibling, d = u.nextSibling, f = d.nextSibling, p = f.nextSibling, m = p.nextSibling, h = m.nextSibling, g = h.nextSibling;
+			return i.$$pointerdown = (t) => e.onHeaderPointerDown?.(t), P(a, j(R7, { size: 14 })), P(o, j(We, {
+				each: N7,
 				children: (e) => (() => {
-					var r = k7();
+					var r = M7();
 					return r.$$click = () => n(e.id), P(r, () => e.label), D(() => st(r, `h-6 shrink-0 rounded-md px-2 text-[12px] font-medium whitespace-nowrap transition-colors ${t() === e.id ? "bg-surface-3 text-text" : "text-text-dim hover:text-text cursor-pointer"}`)), r;
 				})()
 			})), P(i, j(M, {
@@ -50291,7 +50307,7 @@ function I7(e) {
 					return e.onTogglePin;
 				},
 				get children() {
-					var t = E7();
+					var t = k7();
 					return t.$$click = () => e.onTogglePin?.(), D((n) => {
 						var r = e.pinned ? "Switch to overlay" : "Dock beside page", i = e.pinned ? "Overlay the page" : "Dock beside page (squeezes the app, DevTools-style)", a = `hover:bg-surface-3 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md transition-colors ${e.pinned ? "text-accent" : "text-text-dim hover:text-text"}`;
 						return r !== n.e && it(t, "aria-label", n.e = r), i !== n.t && it(t, "title", n.t = i), a !== n.a && st(t, n.a = a), n;
@@ -50306,10 +50322,10 @@ function I7(e) {
 					return e.onClose;
 				},
 				get children() {
-					var t = D7();
+					var t = A7();
 					return t.$$click = () => e.onClose?.(), t;
 				}
-			}), null), P(s, j(wM, { onCreated: () => n("activity") })), P(c, j(TQ, {})), P(l, j(_1, {})), P(u, j(B1, {})), P(d, j(P1, {})), P(f, j(T0, {})), P(p, j(B0, { onOpenIssue: () => n("activity") })), P(m, j(H3, {})), P(h, j(D5, {})), P(g, j(v7, {})), D((n) => {
+			}), null), P(s, j(wM, { onCreated: () => n("activity") })), P(c, j(TQ, {})), P(l, j(_1, {})), P(u, j(B1, {})), P(d, j(P1, {})), P(f, j(T0, {})), P(p, j(B0, { onOpenIssue: () => n("activity") })), P(m, j(G3, {})), P(h, j(A5, {})), P(g, j(x7, {})), D((n) => {
 				var r = `border-border bg-surface flex shrink-0 items-center gap-1 border-b px-2 py-1.5 select-none ${e.onHeaderPointerDown ? "cursor-grab active:cursor-grabbing" : ""}`, a = t() !== "draft", o = t() !== "capture", _ = t() !== "activity", v = t() !== "running", y = t() !== "cloud", b = t() !== "local", x = t() !== "prs", S = t() !== "design", C = t() !== "renders", w = t() !== "settings";
 				return r !== n.e && st(i, n.e = r), a !== n.t && s.classList.toggle("hidden", n.t = a), o !== n.a && c.classList.toggle("hidden", n.a = o), _ !== n.o && l.classList.toggle("hidden", n.o = _), v !== n.i && u.classList.toggle("hidden", n.i = v), y !== n.n && d.classList.toggle("hidden", n.n = y), b !== n.s && f.classList.toggle("hidden", n.s = b), x !== n.h && p.classList.toggle("hidden", n.h = x), S !== n.r && m.classList.toggle("hidden", n.r = S), C !== n.d && h.classList.toggle("hidden", n.d = C), w !== n.l && g.classList.toggle("hidden", n.l = w), n;
 			}, {
@@ -50331,16 +50347,16 @@ function I7(e) {
 rt(["pointerdown", "click"]);
 //#endregion
 //#region src/styles/app.css?inline
-var L7 = "/*! tailwindcss v4.3.2 | MIT License | https://tailwindcss.com */\n@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-leading:initial;--tw-font-weight:initial;--tw-tracking:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial;--tw-backdrop-blur:initial;--tw-backdrop-brightness:initial;--tw-backdrop-contrast:initial;--tw-backdrop-grayscale:initial;--tw-backdrop-hue-rotate:initial;--tw-backdrop-invert:initial;--tw-backdrop-opacity:initial;--tw-backdrop-saturate:initial;--tw-backdrop-sepia:initial;--tw-duration:initial;--tw-ease:initial;--tw-contain-size:initial;--tw-contain-layout:initial;--tw-contain-paint:initial;--tw-contain-style:initial}}}@layer theme{:root,:host{--font-sans:\"Inter\", ui-sans-serif, system-ui, -apple-system, sans-serif;--font-serif:ui-serif, Georgia, Cambria, \"Times New Roman\", Times, serif;--font-mono:ui-monospace, \"SF Mono\", Menlo, monospace;--color-red-500:oklch(63.7% .237 25.331);--color-white:#fff;--spacing:.25rem;--font-weight-thin:100;--font-weight-extralight:200;--font-weight-light:300;--font-weight-normal:400;--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;--font-weight-extrabold:800;--font-weight-black:900;--tracking-wide:.025em;--leading-snug:1.375;--leading-relaxed:1.625;--radius-sm:4px;--radius-md:6px;--radius-lg:10px;--radius-xl:.75rem;--ease-in:cubic-bezier(.4, 0, 1, 1);--ease-out:cubic-bezier(0, 0, .2, 1);--ease-in-out:cubic-bezier(.4, 0, .2, 1);--animate-spin:spin 1s linear infinite;--animate-pulse:pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--font-sans);--default-mono-font-family:var(--font-mono);--color-bg:#0b0c0e;--color-surface:#141517;--color-surface-2:#1c1d21;--color-surface-3:#24262b;--color-border:#26282d;--color-border-strong:#34363d;--color-text:#e8e9eb;--color-text-dim:#8b8e98;--color-text-faint:#5c5f6a;--color-accent:#5e6ad2;--color-accent-hover:#6e79e0;--color-accent-soft:#5e6ad226;--color-success:#4cb782;--color-warn:#f2c94c;--color-danger:#eb5757;--color-danger-soft:#eb575726}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring{outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}}@layer components;@layer utilities{.pointer-events-auto{pointer-events:auto}.pointer-events-none{pointer-events:none}.collapse{visibility:collapse}.invisible{visibility:hidden}.visible{visibility:visible}.visible\\!{visibility:visible!important}.sr-only{clip-path:inset(50%);white-space:nowrap;border-width:0;width:1px;height:1px;margin:-1px;padding:0;position:absolute;overflow:hidden}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.sticky{position:sticky}.inset-0{inset:0}.inset-y-0{inset-block:0}.-top-0{top:0}.-top-0\\.5{top:calc(var(--spacing) * -.5)}.top-0{top:0}.top-0\\.5{top:calc(var(--spacing) * .5)}.top-1{top:var(--spacing)}.top-1\\/2{top:50%}.top-3{top:calc(var(--spacing) * 3)}.top-\\[2px\\]{top:2px}.top-full{top:100%}.-right-0{right:0}.-right-0\\.5{right:calc(var(--spacing) * -.5)}.right-0{right:0}.right-0\\.5{right:calc(var(--spacing) * .5)}.right-4{right:calc(var(--spacing) * 4)}.right-full{right:100%}.bottom-0{bottom:0}.bottom-1{bottom:var(--spacing)}.bottom-4{bottom:calc(var(--spacing) * 4)}.bottom-\\[2px\\]{bottom:2px}.bottom-full{bottom:100%}.-left-\\[13\\.5px\\]{left:-13.5px}.left-0{left:0}.left-1{left:var(--spacing)}.left-1\\/2{left:50%}.left-\\[5px\\]{left:5px}.left-full{left:100%}.z-1{z-index:1}.z-10{z-index:10}.z-\\[2147483645\\]{z-index:2147483645}.z-\\[2147483646\\]{z-index:2147483646}.container{width:100%}@media (width>=40rem){.container{max-width:40rem}}@media (width>=48rem){.container{max-width:48rem}}@media (width>=64rem){.container{max-width:64rem}}@media (width>=80rem){.container{max-width:80rem}}@media (width>=96rem){.container{max-width:96rem}}.container\\!{width:100%!important}@media (width>=40rem){.container\\!{max-width:40rem!important}}@media (width>=48rem){.container\\!{max-width:48rem!important}}@media (width>=64rem){.container\\!{max-width:64rem!important}}@media (width>=80rem){.container\\!{max-width:80rem!important}}@media (width>=96rem){.container\\!{max-width:96rem!important}}.-m-0{margin:0}.-m-0\\.5{margin:calc(var(--spacing) * -.5)}.-m-4{margin:calc(var(--spacing) * -4)}.m-0{margin:0}.-mx-2{margin-inline:calc(var(--spacing) * -2)}.-my-1{margin-block:calc(var(--spacing) * -1)}.-my-1\\.5{margin-block:calc(var(--spacing) * -1.5)}.mt-0{margin-top:0}.mt-0\\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-2\\.5{margin-top:calc(var(--spacing) * 2.5)}.mt-px{margin-top:1px}.mr-0{margin-right:0}.mr-0\\.5{margin-right:calc(var(--spacing) * .5)}.mr-1{margin-right:var(--spacing)}.mr-1\\.5{margin-right:calc(var(--spacing) * 1.5)}.mr-2{margin-right:calc(var(--spacing) * 2)}.mr-2\\.5{margin-right:calc(var(--spacing) * 2.5)}.-mb-4{margin-bottom:calc(var(--spacing) * -4)}.mb-0{margin-bottom:0}.mb-0\\.5{margin-bottom:calc(var(--spacing) * .5)}.mb-1{margin-bottom:var(--spacing)}.mb-1\\.5{margin-bottom:calc(var(--spacing) * 1.5)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-2\\.5{margin-bottom:calc(var(--spacing) * 2.5)}.ml-1{margin-left:var(--spacing)}.ml-2{margin-left:calc(var(--spacing) * 2)}.ml-2\\.5{margin-left:calc(var(--spacing) * 2.5)}.ml-4{margin-left:calc(var(--spacing) * 4)}.ml-auto{margin-left:auto}.ml-px{margin-left:1px}.line-clamp-2{-webkit-line-clamp:2;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden}.line-clamp-5{-webkit-line-clamp:5;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden}.block{display:block}.contents{display:contents}.flex{display:flex}.grid{display:grid}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.list-item{display:list-item}.table{display:table}.size-0{width:0;height:0}.size-1{width:var(--spacing);height:var(--spacing)}.size-1\\.5{width:calc(var(--spacing) * 1.5);height:calc(var(--spacing) * 1.5)}.size-2{width:calc(var(--spacing) * 2);height:calc(var(--spacing) * 2)}.size-2\\.5{width:calc(var(--spacing) * 2.5);height:calc(var(--spacing) * 2.5)}.size-3{width:calc(var(--spacing) * 3);height:calc(var(--spacing) * 3)}.size-4{width:calc(var(--spacing) * 4);height:calc(var(--spacing) * 4)}.size-6{width:calc(var(--spacing) * 6);height:calc(var(--spacing) * 6)}.size-7{width:calc(var(--spacing) * 7);height:calc(var(--spacing) * 7)}.size-10{width:calc(var(--spacing) * 10);height:calc(var(--spacing) * 10)}.size-\\[9px\\]{width:9px;height:9px}.size-\\[12px\\]{width:12px;height:12px}.size-\\[16px\\]{width:16px;height:16px}.h-4{height:calc(var(--spacing) * 4)}.h-5{height:calc(var(--spacing) * 5)}.h-6{height:calc(var(--spacing) * 6)}.h-7{height:calc(var(--spacing) * 7)}.h-8{height:calc(var(--spacing) * 8)}.h-9{height:calc(var(--spacing) * 9)}.h-16{height:calc(var(--spacing) * 16)}.h-\\[8px\\]{height:8px}.h-\\[17px\\]{height:17px}.h-\\[18px\\]{height:18px}.h-\\[20px\\]{height:20px}.h-\\[24px\\]{height:24px}.h-fit{height:fit-content}.h-full{height:100%}.h-screen{height:100vh}.max-h-32{max-height:calc(var(--spacing) * 32)}.max-h-40{max-height:calc(var(--spacing) * 40)}.max-h-44{max-height:calc(var(--spacing) * 44)}.max-h-56{max-height:calc(var(--spacing) * 56)}.max-h-64{max-height:calc(var(--spacing) * 64)}.max-h-72{max-height:calc(var(--spacing) * 72)}.max-h-80{max-height:calc(var(--spacing) * 80)}.max-h-\\[28rem\\]{max-height:28rem}.max-h-\\[var\\(--rg-edit-list-max-h\\)\\]{max-height:var(--rg-edit-list-max-h)}.min-h-0{min-height:0}.min-h-4{min-height:calc(var(--spacing) * 4)}.min-h-\\[2lh\\]{min-height:2lh}.min-h-\\[28px\\]{min-height:28px}.w-1{width:var(--spacing)}.w-3{width:calc(var(--spacing) * 3)}.w-4{width:calc(var(--spacing) * 4)}.w-5{width:calc(var(--spacing) * 5)}.w-16{width:calc(var(--spacing) * 16)}.w-28{width:calc(var(--spacing) * 28)}.w-72{width:calc(var(--spacing) * 72)}.w-\\[2px\\]{width:2px}.w-\\[Npx\\]{width:Npx}.w-\\[calc\\(100\\%\\+16px\\)\\]{width:calc(100% + 16px)}.w-auto{width:auto}.w-fit{width:fit-content}.w-full{width:100%}.w-px{width:1px}.max-w-\\[55\\%\\]{max-width:55%}.max-w-\\[100vw\\]{max-width:100vw}.max-w-\\[110px\\]{max-width:110px}.max-w-\\[280px\\]{max-width:280px}.max-w-full{max-width:100%}.min-w-0{min-width:0}.min-w-\\[3\\.5ch\\]{min-width:3.5ch}.min-w-\\[3ch\\]{min-width:3ch}.min-w-\\[4ch\\]{min-width:4ch}.min-w-\\[5ch\\]{min-width:5ch}.min-w-\\[6ch\\]{min-width:6ch}.min-w-\\[7ch\\]{min-width:7ch}.min-w-\\[8ch\\]{min-width:8ch}.min-w-\\[10ch\\]{min-width:10ch}.min-w-\\[12ch\\]{min-width:12ch}.min-w-\\[36px\\]{min-width:36px}.min-w-\\[52px\\]{min-width:52px}.min-w-\\[100px\\]{min-width:100px}.min-w-\\[150px\\]{min-width:150px}.flex-1{flex:1}.shrink{flex-shrink:1}.shrink-0{flex-shrink:0}.grow{flex-grow:1}.-rotate-90{rotate:-90deg}.rotate-0{rotate:0deg}.rotate-90{rotate:90deg}.rotate-180{rotate:180deg}.transform{transform:var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,)}.animate-pulse{animation:var(--animate-pulse)}.animate-spin{animation:var(--animate-spin)}.cursor-col-resize{cursor:col-resize}.cursor-default{cursor:default}.cursor-grab{cursor:grab}.cursor-grabbing{cursor:grabbing}.cursor-pointer{cursor:pointer}.cursor-text{cursor:text}.resize{resize:both}.resize-none{resize:none}.resize-y{resize:vertical}.list-decimal{list-style-type:decimal}.grid-cols-\\[0fr\\]{grid-template-columns:0fr}.grid-cols-\\[1fr\\]{grid-template-columns:1fr}.grid-rows-\\[0fr\\]{grid-template-rows:0fr}.grid-rows-\\[1fr\\]{grid-template-rows:1fr}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.place-items-center{place-items:center}.items-center{align-items:center}.items-end{align-items:flex-end}.items-start{align-items:flex-start}.justify-between{justify-content:space-between}.justify-center{justify-content:center}.justify-end{justify-content:flex-end}.gap-0{gap:0}.gap-0\\.5{gap:calc(var(--spacing) * .5)}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-2\\.5{gap:calc(var(--spacing) * 2.5)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-4{gap:calc(var(--spacing) * 4)}.gap-5{gap:calc(var(--spacing) * 5)}.gap-\\[5px\\]{gap:5px}.self-end{align-self:flex-end}.self-start{align-self:flex-start}.self-stretch{align-self:stretch}.truncate{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.overflow-auto{overflow:auto}.overflow-clip{overflow:clip}.overflow-hidden{overflow:hidden}.overflow-visible{overflow:visible}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.rounded{border-radius:.25rem}.rounded-\\[1px\\]{border-radius:1px}.rounded-\\[3px\\]{border-radius:3px}.rounded-\\[4px\\]{border-radius:4px}.rounded-\\[5px\\]{border-radius:5px}.rounded-\\[6px\\]{border-radius:6px}.rounded-\\[13px\\]{border-radius:13px}.rounded-\\[14px\\]{border-radius:14px}.rounded-full{border-radius:3.40282e38px}.rounded-lg{border-radius:var(--radius-lg)}.rounded-md{border-radius:var(--radius-md)}.rounded-sm{border-radius:var(--radius-sm)}.rounded-xl{border-radius:var(--radius-xl)}.rounded-t{border-top-left-radius:.25rem;border-top-right-radius:.25rem}.rounded-t-\\[10px\\]{border-top-left-radius:10px;border-top-right-radius:10px}.rounded-t-none{border-top-left-radius:0;border-top-right-radius:0}.rounded-l{border-top-left-radius:.25rem;border-bottom-left-radius:.25rem}.rounded-l-\\[10px\\]{border-top-left-radius:10px;border-bottom-left-radius:10px}.rounded-l-none{border-top-left-radius:0;border-bottom-left-radius:0}.rounded-tl{border-top-left-radius:.25rem}.rounded-r{border-top-right-radius:.25rem;border-bottom-right-radius:.25rem}.rounded-r-\\[10px\\]{border-top-right-radius:10px;border-bottom-right-radius:10px}.rounded-r-none{border-top-right-radius:0;border-bottom-right-radius:0}.rounded-tr{border-top-right-radius:.25rem}.rounded-b{border-bottom-right-radius:.25rem;border-bottom-left-radius:.25rem}.rounded-b-\\[6px\\]{border-bottom-right-radius:6px;border-bottom-left-radius:6px}.rounded-b-\\[10px\\]{border-bottom-right-radius:10px;border-bottom-left-radius:10px}.rounded-b-none{border-bottom-right-radius:0;border-bottom-left-radius:0}.rounded-br{border-bottom-right-radius:.25rem}.rounded-bl{border-bottom-left-radius:.25rem}.border{border-style:var(--tw-border-style);border-width:1px}.border-2{border-style:var(--tw-border-style);border-width:2px}.\\[border-width\\:0\\.5px\\]{border-width:.5px}.border-x{border-inline-style:var(--tw-border-style);border-inline-width:1px}.border-y{border-block-style:var(--tw-border-style);border-block-width:1px}.border-s{border-inline-start-style:var(--tw-border-style);border-inline-start-width:1px}.border-e{border-inline-end-style:var(--tw-border-style);border-inline-end-width:1px}.border-t{border-top-style:var(--tw-border-style);border-top-width:1px}.border-t-4{border-top-style:var(--tw-border-style);border-top-width:4px}.\\[border-top-width\\:0\\.5px\\]{border-top-width:.5px}.border-r{border-right-style:var(--tw-border-style);border-right-width:1px}.border-b{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}.border-l{border-left-style:var(--tw-border-style);border-left-width:1px}.border-dashed{--tw-border-style:dashed;border-style:dashed}.border-dotted{--tw-border-style:dotted;border-style:dotted}.border-none{--tw-border-style:none;border-style:none}.border-solid{--tw-border-style:solid;border-style:solid}.border-\\[var\\(--rg-border-button\\)\\]{border-color:var(--rg-border-button)}.border-accent{border-color:var(--color-accent)}.border-accent\\/40{border-color:#5e6ad266}@supports (color:color-mix(in lab, red, red)){.border-accent\\/40{border-color:color-mix(in oklab, var(--color-accent) 40%, transparent)}}.border-border{border-color:var(--color-border)}.border-danger{border-color:var(--color-danger)}.border-danger\\/40{border-color:#eb575766}@supports (color:color-mix(in lab, red, red)){.border-danger\\/40{border-color:color-mix(in oklab, var(--color-danger) 40%, transparent)}}.border-success{border-color:var(--color-success)}.border-success\\/40{border-color:#4cb78266}@supports (color:color-mix(in lab, red, red)){.border-success\\/40{border-color:color-mix(in oklab, var(--color-success) 40%, transparent)}}.border-text-dim{border-color:var(--color-text-dim)}.border-transparent{border-color:#0000}.border-warn{border-color:var(--color-warn)}.border-warn\\/40{border-color:#f2c94c66}@supports (color:color-mix(in lab, red, red)){.border-warn\\/40{border-color:color-mix(in oklab, var(--color-warn) 40%, transparent)}}.border-t-\\[var\\(--rg-border-subtle\\)\\]{border-top-color:var(--rg-border-subtle)}.border-t-transparent{border-top-color:#0000}.bg-\\[var\\(--rg-error-bg\\)\\]{background-color:var(--rg-error-bg)}.bg-\\[var\\(--rg-panel-bg\\)\\]{background-color:var(--rg-panel-bg)}.bg-\\[var\\(--rg-submit-bg\\)\\]{background-color:var(--rg-submit-bg)}.bg-\\[var\\(--rg-surface-active\\)\\]{background-color:var(--rg-surface-active)}.bg-\\[var\\(--rg-surface-hover\\)\\]{background-color:var(--rg-surface-hover)}.bg-\\[var\\(--rg-text-primary\\)\\]{background-color:var(--rg-text-primary)}.bg-\\[var\\(--rg-text-secondary\\)\\]{background-color:var(--rg-text-secondary)}.bg-accent{background-color:var(--color-accent)}.bg-accent-soft{background-color:var(--color-accent-soft)}.bg-bg{background-color:var(--color-bg)}.bg-bg\\/80{background-color:#0b0c0ecc}@supports (color:color-mix(in lab, red, red)){.bg-bg\\/80{background-color:color-mix(in oklab, var(--color-bg) 80%, transparent)}}.bg-border{background-color:var(--color-border)}.bg-current{background-color:currentColor}.bg-danger{background-color:var(--color-danger)}.bg-danger-soft{background-color:var(--color-danger-soft)}.bg-danger\\/10{background-color:#eb57571a}@supports (color:color-mix(in lab, red, red)){.bg-danger\\/10{background-color:color-mix(in oklab, var(--color-danger) 10%, transparent)}}.bg-red-500{background-color:var(--color-red-500)}.bg-success{background-color:var(--color-success)}.bg-surface{background-color:var(--color-surface)}.bg-surface-2{background-color:var(--color-surface-2)}.bg-surface-3{background-color:var(--color-surface-3)}.bg-text-faint{background-color:var(--color-text-faint)}.bg-transparent{background-color:#0000}.bg-warn{background-color:var(--color-warn)}.bg-warn\\/10{background-color:#f2c94c1a}@supports (color:color-mix(in lab, red, red)){.bg-warn\\/10{background-color:color-mix(in oklab, var(--color-warn) 10%, transparent)}}.object-contain{object-fit:contain}.object-cover{object-fit:cover}.p-0{padding:0}.p-0\\.5{padding:calc(var(--spacing) * .5)}.p-1{padding:var(--spacing)}.p-1\\.5{padding:calc(var(--spacing) * 1.5)}.p-2{padding:calc(var(--spacing) * 2)}.p-2\\.5{padding:calc(var(--spacing) * 2.5)}.p-6{padding:calc(var(--spacing) * 6)}.px-0{padding-inline:0}.px-0\\.25{padding-inline:calc(var(--spacing) * .25)}.px-1{padding-inline:var(--spacing)}.px-1\\.5{padding-inline:calc(var(--spacing) * 1.5)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-2\\.5{padding-inline:calc(var(--spacing) * 2.5)}.px-3{padding-inline:calc(var(--spacing) * 3)}.px-4{padding-inline:calc(var(--spacing) * 4)}.px-\\[3px\\]{padding-inline:3px}.py-0{padding-block:0}.py-0\\.5{padding-block:calc(var(--spacing) * .5)}.py-0\\.25{padding-block:calc(var(--spacing) * .25)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-10{padding-block:calc(var(--spacing) * 10)}.py-px{padding-block:1px}.pt-0{padding-top:0}.pt-0\\.5{padding-top:calc(var(--spacing) * .5)}.pt-1{padding-top:var(--spacing)}.pt-1\\.5{padding-top:calc(var(--spacing) * 1.5)}.pt-2{padding-top:calc(var(--spacing) * 2)}.pt-2\\.5{padding-top:calc(var(--spacing) * 2.5)}.pt-3{padding-top:calc(var(--spacing) * 3)}.pt-4{padding-top:calc(var(--spacing) * 4)}.pr-1{padding-right:var(--spacing)}.pr-1\\.5{padding-right:calc(var(--spacing) * 1.5)}.pr-2{padding-right:calc(var(--spacing) * 2)}.pr-3{padding-right:calc(var(--spacing) * 3)}.pr-4{padding-right:calc(var(--spacing) * 4)}.pb-1{padding-bottom:var(--spacing)}.pb-1\\.5{padding-bottom:calc(var(--spacing) * 1.5)}.pb-3{padding-bottom:calc(var(--spacing) * 3)}.pb-4{padding-bottom:calc(var(--spacing) * 4)}.pb-6{padding-bottom:calc(var(--spacing) * 6)}.pl-0{padding-left:0}.pl-0\\.5{padding-left:calc(var(--spacing) * .5)}.pl-2{padding-left:calc(var(--spacing) * 2)}.pl-2\\.5{padding-left:calc(var(--spacing) * 2.5)}.pl-3{padding-left:calc(var(--spacing) * 3)}.pl-4{padding-left:calc(var(--spacing) * 4)}.pl-5{padding-left:calc(var(--spacing) * 5)}.text-center{text-align:center}.text-end{text-align:end}.text-justify{text-align:justify}.text-left{text-align:left}.text-right{text-align:right}.text-start{text-align:start}.align-middle{vertical-align:middle}.font-mono{font-family:var(--font-mono)}.font-sans{font-family:var(--font-sans)}.font-serif{font-family:var(--font-serif)}.text-\\[9\\.5px\\]{font-size:9.5px}.text-\\[9px\\]{font-size:9px}.text-\\[10\\.5px\\]{font-size:10.5px}.text-\\[10px\\]{font-size:10px}.text-\\[11\\.5px\\]{font-size:11.5px}.text-\\[11px\\]{font-size:11px}.text-\\[12\\.5px\\]{font-size:12.5px}.text-\\[12px\\]{font-size:12px}.text-\\[13px\\]{font-size:13px}.text-\\[15px\\]{font-size:15px}.leading-3{--tw-leading:calc(var(--spacing) * 3);line-height:calc(var(--spacing) * 3)}.leading-3\\.5{--tw-leading:calc(var(--spacing) * 3.5);line-height:calc(var(--spacing) * 3.5)}.leading-4{--tw-leading:calc(var(--spacing) * 4);line-height:calc(var(--spacing) * 4)}.leading-none{--tw-leading:1;line-height:1}.leading-relaxed{--tw-leading:var(--leading-relaxed);line-height:var(--leading-relaxed)}.leading-snug{--tw-leading:var(--leading-snug);line-height:var(--leading-snug)}.font-black{--tw-font-weight:var(--font-weight-black);font-weight:var(--font-weight-black)}.font-bold{--tw-font-weight:var(--font-weight-bold);font-weight:var(--font-weight-bold)}.font-extrabold{--tw-font-weight:var(--font-weight-extrabold);font-weight:var(--font-weight-extrabold)}.font-extralight{--tw-font-weight:var(--font-weight-extralight);font-weight:var(--font-weight-extralight)}.font-light{--tw-font-weight:var(--font-weight-light);font-weight:var(--font-weight-light)}.font-medium{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.font-normal{--tw-font-weight:var(--font-weight-normal);font-weight:var(--font-weight-normal)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.font-thin{--tw-font-weight:var(--font-weight-thin);font-weight:var(--font-weight-thin)}.tracking-wide{--tw-tracking:var(--tracking-wide);letter-spacing:var(--tracking-wide)}.break-normal{overflow-wrap:normal;word-break:normal}.break-words,.wrap-break-word{overflow-wrap:break-word}.break-all{word-break:break-all}.break-keep{word-break:keep-all}.text-ellipsis{text-overflow:ellipsis}.whitespace-break-spaces{white-space:break-spaces}.whitespace-normal{white-space:normal}.whitespace-nowrap{white-space:nowrap}.whitespace-pre{white-space:pre}.whitespace-pre-line{white-space:pre-line}.whitespace-pre-wrap{white-space:pre-wrap}.text-\\[var\\(--rg-error-text\\)\\]{color:var(--rg-error-text)}.text-\\[var\\(--rg-submit-fg\\)\\]{color:var(--rg-submit-fg)}.text-\\[var\\(--rg-text-primary\\)\\]{color:var(--rg-text-primary)}.text-\\[var\\(--rg-text-primary-85\\)\\]{color:var(--rg-text-primary-85)}.text-\\[var\\(--rg-text-secondary\\)\\]{color:var(--rg-text-secondary)}.text-accent{color:var(--color-accent)}.text-danger{color:var(--color-danger)}.text-success{color:var(--color-success)}.text-text{color:var(--color-text)}.text-text-dim{color:var(--color-text-dim)}.text-text-faint{color:var(--color-text-faint)}.text-warn{color:var(--color-warn)}.text-white{color:var(--color-white)}.capitalize{text-transform:capitalize}.lowercase{text-transform:lowercase}.normal-case{text-transform:none}.uppercase{text-transform:uppercase}.italic{font-style:italic}.not-italic{font-style:normal}.lining-nums{--tw-numeric-figure:lining-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.oldstyle-nums{--tw-numeric-figure:oldstyle-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.proportional-nums{--tw-numeric-spacing:proportional-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.slashed-zero{--tw-slashed-zero:slashed-zero;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.tabular-nums{--tw-numeric-spacing:tabular-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.line-through{text-decoration-line:line-through}.no-underline{text-decoration-line:none}.underline{text-decoration-line:underline}.underline-offset-2{text-underline-offset:2px}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.accent-accent{accent-color:var(--color-accent)}.opacity-0{opacity:0}.opacity-50{opacity:.5}.opacity-60{opacity:.6}.opacity-100{opacity:1}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-2xl{--tw-shadow:0 25px 50px -12px var(--tw-shadow-color,#00000040);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-lg{--tw-shadow:0 10px 15px -3px var(--tw-shadow-color,#0000001a), 0 4px 6px -4px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.\\[box-shadow\\:var\\(--rg-shadow\\)\\]{box-shadow:var(--rg-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.blur{--tw-blur:blur(8px);filter:var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)}.\\[filter\\:var\\(--rg-drop-shadow\\)\\]{filter:var(--rg-drop-shadow)}.filter{filter:var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)}.backdrop-filter{-webkit-backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)}.transition{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to,opacity,box-shadow,transform,translate,scale,rotate,filter,-webkit-backdrop-filter,backdrop-filter,display,content-visibility,overlay,pointer-events;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[grid-template-columns\\]{transition-property:grid-template-columns;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[grid-template-rows\\]{transition-property:grid-template-rows;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[opacity\\,transform\\]{transition-property:opacity,transform;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[padding\\,border-radius\\,transform\\]{transition-property:padding,border-radius,transform;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[top\\,left\\,width\\,height\\,opacity\\,border-radius\\]{transition-property:top,left,width,height,opacity,border-radius;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[transform\\,color\\]{transition-property:transform,color;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[transform\\,opacity\\]{transition-property:transform,opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-all{transition-property:all;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-opacity{transition-property:opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-transform{transition-property:transform,translate,scale,rotate;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.delay-\\[80ms\\]{transition-delay:80ms}.duration-60{--tw-duration:60ms;transition-duration:60ms}.duration-75{--tw-duration:75ms;transition-duration:75ms}.duration-100{--tw-duration:.1s;transition-duration:.1s}.duration-120{--tw-duration:.12s;transition-duration:.12s}.duration-140{--tw-duration:.14s;transition-duration:.14s}.duration-150{--tw-duration:.15s;transition-duration:.15s}.duration-180{--tw-duration:.18s;transition-duration:.18s}.duration-220{--tw-duration:.22s;transition-duration:.22s}.duration-300{--tw-duration:.3s;transition-duration:.3s}.duration-400{--tw-duration:.4s;transition-duration:.4s}.ease-\\[cubic-bezier\\(0\\,0\\,0\\.2\\,1\\)\\]{--tw-ease:cubic-bezier(0,0,.2,1);transition-timing-function:cubic-bezier(0,0,.2,1)}.ease-in{--tw-ease:var(--ease-in);transition-timing-function:var(--ease-in)}.ease-in-out{--tw-ease:var(--ease-in-out);transition-timing-function:var(--ease-in-out)}.ease-out{--tw-ease:var(--ease-out);transition-timing-function:var(--ease-out)}.will-change-\\[opacity\\,transform\\]{will-change:opacity,transform}.will-change-transform{will-change:transform}.contain-layout{--tw-contain-layout:layout;contain:var(--tw-contain-size,) var(--tw-contain-layout,) var(--tw-contain-paint,) var(--tw-contain-style,)}.outline-none{--tw-outline-style:none;outline-style:none}.select-all{-webkit-user-select:all;user-select:all}.select-none{-webkit-user-select:none;user-select:none}.\\[corner-shape\\:superellipse\\(1\\.25\\)\\]{corner-shape:superellipse(1.25)}.\\[font-synthesis\\:none\\]{font-synthesis:none}.group-open\\:rotate-90:is(:where(.group):is([open],:popover-open,:open) *){rotate:90deg}@media (hover:hover){.group-hover\\:text-\\[var\\(--rg-text-primary\\)\\]:is(:where(.group):hover *){color:var(--rg-text-primary)}.group-hover\\:opacity-100:is(:where(.group):hover *){opacity:1}}.placeholder\\:text-text-faint::placeholder{color:var(--color-text-faint)}@media (hover:hover){.hover\\:bg-\\[var\\(--rg-error-bg-hover\\)\\]:hover{background-color:var(--rg-error-bg-hover)}.hover\\:bg-\\[var\\(--rg-surface-active\\)\\]:hover{background-color:var(--rg-surface-active)}.hover\\:bg-\\[var\\(--rg-surface-hover\\)\\]:hover{background-color:var(--rg-surface-hover)}.hover\\:bg-accent-hover:hover{background-color:var(--color-accent-hover)}.hover\\:bg-accent\\/50:hover{background-color:#5e6ad280}@supports (color:color-mix(in lab, red, red)){.hover\\:bg-accent\\/50:hover{background-color:color-mix(in oklab, var(--color-accent) 50%, transparent)}}.hover\\:bg-danger\\/30:hover{background-color:#eb57574d}@supports (color:color-mix(in lab, red, red)){.hover\\:bg-danger\\/30:hover{background-color:color-mix(in oklab, var(--color-danger) 30%, transparent)}}.hover\\:bg-surface-2:hover{background-color:var(--color-surface-2)}.hover\\:bg-surface-3:hover{background-color:var(--color-surface-3)}.hover\\:text-\\[var\\(--rg-text-primary\\)\\]:hover{color:var(--rg-text-primary)}.hover\\:text-accent:hover{color:var(--color-accent)}.hover\\:text-danger:hover{color:var(--color-danger)}.hover\\:text-text:hover{color:var(--color-text)}.hover\\:underline:hover{text-decoration-line:underline}.hover\\:opacity-80:hover{opacity:.8}}.focus\\:border-accent:focus{border-color:var(--color-accent)}.active\\:cursor-grabbing:active{cursor:grabbing}.active\\:bg-accent:active{background-color:var(--color-accent)}.active\\:transition-none:active{transition-property:none}.disabled\\:cursor-default:disabled{cursor:default}.disabled\\:cursor-not-allowed:disabled{cursor:not-allowed}.disabled\\:bg-surface-3:disabled{background-color:var(--color-surface-3)}.disabled\\:text-text-faint:disabled{color:var(--color-text-faint)}.disabled\\:opacity-40:disabled{opacity:.4}@media (hover:hover){.disabled\\:hover\\:bg-surface-2:disabled:hover{background-color:var(--color-surface-2)}}.data-\\[state\\=on\\]\\:transition-none[data-state=on],.data-\\[state\\=open\\]\\:transition-none[data-state=open],.data-\\[state\\=…\\]\\:transition-none[data-state=…]{transition-property:none}}:root{--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}[data-theme=light],:host([data-theme=light]){--color-bg:#fbfbfc;--color-surface:#fff;--color-surface-2:#f4f4f6;--color-surface-3:#e9e9ee;--color-border:#e2e2e8;--color-border-strong:#cfcfd8;--color-text:#1b1c20;--color-text-dim:#5c5f6a;--color-text-faint:#9a9da8;--color-accent-soft:#5e6ad21f;--color-danger-soft:#eb57571a;--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light}@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--color-bg:#fbfbfc;--color-surface:#fff;--color-surface-2:#f4f4f6;--color-surface-3:#e9e9ee;--color-border:#e2e2e8;--color-border-strong:#cfcfd8;--color-text:#1b1c20;--color-text-dim:#5c5f6a;--color-text-faint:#9a9da8;--color-accent-soft:#5e6ad21f;--color-danger-soft:#eb57571a;--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light}}body{background-color:var(--color-bg);font-family:var(--font-sans);color:var(--color-text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;min-width:320px;margin:0;font-size:13px}@keyframes geist-spinner-fade{0%{opacity:1}to{opacity:.15}}[data-tip]{position:relative}[data-tip]:hover:after{content:attr(data-tip);color:#fff;white-space:nowrap;text-overflow:ellipsis;pointer-events:none;z-index:60;background:#1b1c20;border-radius:6px;max-width:260px;padding:3px 8px;font-size:10.5px;font-weight:500;line-height:1.35;position:absolute;bottom:calc(100% + 6px);left:50%;overflow:hidden;transform:translate(-50%);box-shadow:0 4px 12px #0000004d}[data-tip][data-tip-pos~=right]:hover:after{left:0;transform:none}[data-tip][data-tip-pos~=left]:hover:after{left:auto;right:0;transform:none}[data-tip][data-tip-pos~=bottom]:hover:after{top:calc(100% + 6px);bottom:auto}.no-scrollbar{scrollbar-width:none}.no-scrollbar::-webkit-scrollbar{display:none}.lg-md p{margin:0 0 6px}.lg-md p:last-child{margin-bottom:0}.lg-md a{color:var(--color-accent);word-break:break-all;text-decoration:none}.lg-md a:hover{text-decoration:underline}.lg-md code{background:var(--color-surface-2);border:1px solid var(--color-border);font-family:var(--font-mono);border-radius:4px;padding:0 4px;font-size:11px}.lg-md pre{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:6px;margin:6px 0;padding:8px;overflow-x:auto}.lg-md pre code{white-space:pre;background:0 0;border:none;padding:0;font-size:11px}.lg-md ul,.lg-md ol{flex-direction:column;gap:2px;margin:4px 0 6px;padding-left:18px;display:flex}.lg-md ul{list-style:outside}.lg-md ol{list-style:decimal}.lg-md h4{margin:8px 0 4px;font-size:12px;font-weight:600}.lg-md lg-media{display:block}.lg-md lg-media img,.lg-md lg-media video{border:1px solid var(--color-border);border-radius:6px;max-width:100%;margin:4px 0}.lg-md video{border:1px solid var(--color-border);background:#000;border-radius:6px;max-width:100%;margin:4px 0}.lg-md img{border:1px solid var(--color-border);border-radius:6px;max-width:100%;margin:4px 0}.lg-md strong{font-weight:600}*{scrollbar-width:thin;scrollbar-color:var(--color-border-strong) transparent}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--color-border-strong);border-radius:4px}::-webkit-scrollbar-track{background:0 0}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-leading{syntax:\"*\";inherits:false}@property --tw-font-weight{syntax:\"*\";inherits:false}@property --tw-tracking{syntax:\"*\";inherits:false}@property --tw-ordinal{syntax:\"*\";inherits:false}@property --tw-slashed-zero{syntax:\"*\";inherits:false}@property --tw-numeric-figure{syntax:\"*\";inherits:false}@property --tw-numeric-spacing{syntax:\"*\";inherits:false}@property --tw-numeric-fraction{syntax:\"*\";inherits:false}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}@property --tw-backdrop-blur{syntax:\"*\";inherits:false}@property --tw-backdrop-brightness{syntax:\"*\";inherits:false}@property --tw-backdrop-contrast{syntax:\"*\";inherits:false}@property --tw-backdrop-grayscale{syntax:\"*\";inherits:false}@property --tw-backdrop-hue-rotate{syntax:\"*\";inherits:false}@property --tw-backdrop-invert{syntax:\"*\";inherits:false}@property --tw-backdrop-opacity{syntax:\"*\";inherits:false}@property --tw-backdrop-saturate{syntax:\"*\";inherits:false}@property --tw-backdrop-sepia{syntax:\"*\";inherits:false}@property --tw-duration{syntax:\"*\";inherits:false}@property --tw-ease{syntax:\"*\";inherits:false}@property --tw-contain-size{syntax:\"*\";inherits:false}@property --tw-contain-layout{syntax:\"*\";inherits:false}@property --tw-contain-paint{syntax:\"*\";inherits:false}@property --tw-contain-style{syntax:\"*\";inherits:false}@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{opacity:.5}}";
+var B7 = "/*! tailwindcss v4.3.2 | MIT License | https://tailwindcss.com */\n@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-leading:initial;--tw-font-weight:initial;--tw-tracking:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial;--tw-backdrop-blur:initial;--tw-backdrop-brightness:initial;--tw-backdrop-contrast:initial;--tw-backdrop-grayscale:initial;--tw-backdrop-hue-rotate:initial;--tw-backdrop-invert:initial;--tw-backdrop-opacity:initial;--tw-backdrop-saturate:initial;--tw-backdrop-sepia:initial;--tw-duration:initial;--tw-ease:initial;--tw-contain-size:initial;--tw-contain-layout:initial;--tw-contain-paint:initial;--tw-contain-style:initial}}}@layer theme{:root,:host{--font-sans:\"Inter\", ui-sans-serif, system-ui, -apple-system, sans-serif;--font-serif:ui-serif, Georgia, Cambria, \"Times New Roman\", Times, serif;--font-mono:ui-monospace, \"SF Mono\", Menlo, monospace;--color-red-500:oklch(63.7% .237 25.331);--color-white:#fff;--spacing:.25rem;--font-weight-thin:100;--font-weight-extralight:200;--font-weight-light:300;--font-weight-normal:400;--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;--font-weight-extrabold:800;--font-weight-black:900;--tracking-wide:.025em;--leading-snug:1.375;--leading-relaxed:1.625;--radius-sm:4px;--radius-md:6px;--radius-lg:10px;--radius-xl:.75rem;--ease-in:cubic-bezier(.4, 0, 1, 1);--ease-out:cubic-bezier(0, 0, .2, 1);--ease-in-out:cubic-bezier(.4, 0, .2, 1);--animate-spin:spin 1s linear infinite;--animate-pulse:pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--font-sans);--default-mono-font-family:var(--font-mono);--color-bg:#0b0c0e;--color-surface:#141517;--color-surface-2:#1c1d21;--color-surface-3:#24262b;--color-border:#26282d;--color-border-strong:#34363d;--color-text:#e8e9eb;--color-text-dim:#8b8e98;--color-text-faint:#5c5f6a;--color-accent:#5e6ad2;--color-accent-hover:#6e79e0;--color-accent-soft:#5e6ad226;--color-success:#4cb782;--color-warn:#f2c94c;--color-danger:#eb5757;--color-danger-soft:#eb575726}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring{outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}}@layer components;@layer utilities{.pointer-events-auto{pointer-events:auto}.pointer-events-none{pointer-events:none}.collapse{visibility:collapse}.invisible{visibility:hidden}.visible{visibility:visible}.visible\\!{visibility:visible!important}.sr-only{clip-path:inset(50%);white-space:nowrap;border-width:0;width:1px;height:1px;margin:-1px;padding:0;position:absolute;overflow:hidden}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.sticky{position:sticky}.inset-0{inset:0}.inset-y-0{inset-block:0}.-top-0{top:0}.-top-0\\.5{top:calc(var(--spacing) * -.5)}.top-0{top:0}.top-0\\.5{top:calc(var(--spacing) * .5)}.top-1{top:var(--spacing)}.top-1\\/2{top:50%}.top-3{top:calc(var(--spacing) * 3)}.top-\\[2px\\]{top:2px}.top-full{top:100%}.-right-0{right:0}.-right-0\\.5{right:calc(var(--spacing) * -.5)}.right-0{right:0}.right-0\\.5{right:calc(var(--spacing) * .5)}.right-4{right:calc(var(--spacing) * 4)}.right-full{right:100%}.bottom-0{bottom:0}.bottom-1{bottom:var(--spacing)}.bottom-4{bottom:calc(var(--spacing) * 4)}.bottom-\\[2px\\]{bottom:2px}.bottom-full{bottom:100%}.-left-\\[13\\.5px\\]{left:-13.5px}.left-0{left:0}.left-1{left:var(--spacing)}.left-1\\/2{left:50%}.left-\\[5px\\]{left:5px}.left-full{left:100%}.z-1{z-index:1}.z-10{z-index:10}.z-\\[2147483645\\]{z-index:2147483645}.z-\\[2147483646\\]{z-index:2147483646}.container{width:100%}@media (width>=40rem){.container{max-width:40rem}}@media (width>=48rem){.container{max-width:48rem}}@media (width>=64rem){.container{max-width:64rem}}@media (width>=80rem){.container{max-width:80rem}}@media (width>=96rem){.container{max-width:96rem}}.container\\!{width:100%!important}@media (width>=40rem){.container\\!{max-width:40rem!important}}@media (width>=48rem){.container\\!{max-width:48rem!important}}@media (width>=64rem){.container\\!{max-width:64rem!important}}@media (width>=80rem){.container\\!{max-width:80rem!important}}@media (width>=96rem){.container\\!{max-width:96rem!important}}.-m-0{margin:0}.-m-0\\.5{margin:calc(var(--spacing) * -.5)}.-m-4{margin:calc(var(--spacing) * -4)}.m-0{margin:0}.-mx-2{margin-inline:calc(var(--spacing) * -2)}.-my-1{margin-block:calc(var(--spacing) * -1)}.-my-1\\.5{margin-block:calc(var(--spacing) * -1.5)}.mt-0{margin-top:0}.mt-0\\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-2\\.5{margin-top:calc(var(--spacing) * 2.5)}.mt-px{margin-top:1px}.mr-0{margin-right:0}.mr-0\\.5{margin-right:calc(var(--spacing) * .5)}.mr-1{margin-right:var(--spacing)}.mr-1\\.5{margin-right:calc(var(--spacing) * 1.5)}.mr-2{margin-right:calc(var(--spacing) * 2)}.mr-2\\.5{margin-right:calc(var(--spacing) * 2.5)}.-mb-4{margin-bottom:calc(var(--spacing) * -4)}.mb-0{margin-bottom:0}.mb-0\\.5{margin-bottom:calc(var(--spacing) * .5)}.mb-1{margin-bottom:var(--spacing)}.mb-1\\.5{margin-bottom:calc(var(--spacing) * 1.5)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-2\\.5{margin-bottom:calc(var(--spacing) * 2.5)}.ml-1{margin-left:var(--spacing)}.ml-2{margin-left:calc(var(--spacing) * 2)}.ml-2\\.5{margin-left:calc(var(--spacing) * 2.5)}.ml-4{margin-left:calc(var(--spacing) * 4)}.ml-auto{margin-left:auto}.ml-px{margin-left:1px}.line-clamp-2{-webkit-line-clamp:2;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden}.line-clamp-5{-webkit-line-clamp:5;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden}.block{display:block}.contents{display:contents}.flex{display:flex}.grid{display:grid}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.list-item{display:list-item}.table{display:table}.size-0{width:0;height:0}.size-1{width:var(--spacing);height:var(--spacing)}.size-1\\.5{width:calc(var(--spacing) * 1.5);height:calc(var(--spacing) * 1.5)}.size-2{width:calc(var(--spacing) * 2);height:calc(var(--spacing) * 2)}.size-2\\.5{width:calc(var(--spacing) * 2.5);height:calc(var(--spacing) * 2.5)}.size-3{width:calc(var(--spacing) * 3);height:calc(var(--spacing) * 3)}.size-4{width:calc(var(--spacing) * 4);height:calc(var(--spacing) * 4)}.size-6{width:calc(var(--spacing) * 6);height:calc(var(--spacing) * 6)}.size-7{width:calc(var(--spacing) * 7);height:calc(var(--spacing) * 7)}.size-10{width:calc(var(--spacing) * 10);height:calc(var(--spacing) * 10)}.size-\\[9px\\]{width:9px;height:9px}.size-\\[12px\\]{width:12px;height:12px}.size-\\[16px\\]{width:16px;height:16px}.h-4{height:calc(var(--spacing) * 4)}.h-5{height:calc(var(--spacing) * 5)}.h-6{height:calc(var(--spacing) * 6)}.h-7{height:calc(var(--spacing) * 7)}.h-8{height:calc(var(--spacing) * 8)}.h-9{height:calc(var(--spacing) * 9)}.h-16{height:calc(var(--spacing) * 16)}.h-\\[8px\\]{height:8px}.h-\\[17px\\]{height:17px}.h-\\[18px\\]{height:18px}.h-\\[20px\\]{height:20px}.h-\\[24px\\]{height:24px}.h-fit{height:fit-content}.h-full{height:100%}.h-screen{height:100vh}.max-h-32{max-height:calc(var(--spacing) * 32)}.max-h-40{max-height:calc(var(--spacing) * 40)}.max-h-44{max-height:calc(var(--spacing) * 44)}.max-h-56{max-height:calc(var(--spacing) * 56)}.max-h-64{max-height:calc(var(--spacing) * 64)}.max-h-72{max-height:calc(var(--spacing) * 72)}.max-h-80{max-height:calc(var(--spacing) * 80)}.max-h-\\[28rem\\]{max-height:28rem}.max-h-\\[var\\(--rg-edit-list-max-h\\)\\]{max-height:var(--rg-edit-list-max-h)}.min-h-0{min-height:0}.min-h-4{min-height:calc(var(--spacing) * 4)}.min-h-\\[2lh\\]{min-height:2lh}.min-h-\\[28px\\]{min-height:28px}.w-1{width:var(--spacing)}.w-3{width:calc(var(--spacing) * 3)}.w-4{width:calc(var(--spacing) * 4)}.w-5{width:calc(var(--spacing) * 5)}.w-16{width:calc(var(--spacing) * 16)}.w-28{width:calc(var(--spacing) * 28)}.w-72{width:calc(var(--spacing) * 72)}.w-\\[2px\\]{width:2px}.w-\\[Npx\\]{width:Npx}.w-\\[calc\\(100\\%\\+16px\\)\\]{width:calc(100% + 16px)}.w-auto{width:auto}.w-fit{width:fit-content}.w-full{width:100%}.w-px{width:1px}.max-w-\\[55\\%\\]{max-width:55%}.max-w-\\[100vw\\]{max-width:100vw}.max-w-\\[110px\\]{max-width:110px}.max-w-\\[280px\\]{max-width:280px}.max-w-full{max-width:100%}.min-w-0{min-width:0}.min-w-\\[3\\.5ch\\]{min-width:3.5ch}.min-w-\\[3ch\\]{min-width:3ch}.min-w-\\[4ch\\]{min-width:4ch}.min-w-\\[5ch\\]{min-width:5ch}.min-w-\\[6ch\\]{min-width:6ch}.min-w-\\[7ch\\]{min-width:7ch}.min-w-\\[8ch\\]{min-width:8ch}.min-w-\\[10ch\\]{min-width:10ch}.min-w-\\[12ch\\]{min-width:12ch}.min-w-\\[36px\\]{min-width:36px}.min-w-\\[52px\\]{min-width:52px}.min-w-\\[100px\\]{min-width:100px}.min-w-\\[150px\\]{min-width:150px}.flex-1{flex:1}.shrink{flex-shrink:1}.shrink-0{flex-shrink:0}.grow{flex-grow:1}.-rotate-90{rotate:-90deg}.rotate-0{rotate:0deg}.rotate-90{rotate:90deg}.rotate-180{rotate:180deg}.transform{transform:var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,)}.animate-pulse{animation:var(--animate-pulse)}.animate-spin{animation:var(--animate-spin)}.cursor-col-resize{cursor:col-resize}.cursor-default{cursor:default}.cursor-grab{cursor:grab}.cursor-grabbing{cursor:grabbing}.cursor-pointer{cursor:pointer}.cursor-text{cursor:text}.resize{resize:both}.resize-none{resize:none}.resize-y{resize:vertical}.list-decimal{list-style-type:decimal}.grid-cols-\\[0fr\\]{grid-template-columns:0fr}.grid-cols-\\[1fr\\]{grid-template-columns:1fr}.grid-rows-\\[0fr\\]{grid-template-rows:0fr}.grid-rows-\\[1fr\\]{grid-template-rows:1fr}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.place-items-center{place-items:center}.items-center{align-items:center}.items-end{align-items:flex-end}.items-start{align-items:flex-start}.justify-between{justify-content:space-between}.justify-center{justify-content:center}.justify-end{justify-content:flex-end}.gap-0{gap:0}.gap-0\\.5{gap:calc(var(--spacing) * .5)}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-2\\.5{gap:calc(var(--spacing) * 2.5)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-4{gap:calc(var(--spacing) * 4)}.gap-5{gap:calc(var(--spacing) * 5)}.gap-\\[5px\\]{gap:5px}.self-end{align-self:flex-end}.self-start{align-self:flex-start}.self-stretch{align-self:stretch}.truncate{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.overflow-auto{overflow:auto}.overflow-clip{overflow:clip}.overflow-hidden{overflow:hidden}.overflow-visible{overflow:visible}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.rounded{border-radius:.25rem}.rounded-\\[1px\\]{border-radius:1px}.rounded-\\[3px\\]{border-radius:3px}.rounded-\\[4px\\]{border-radius:4px}.rounded-\\[5px\\]{border-radius:5px}.rounded-\\[6px\\]{border-radius:6px}.rounded-\\[13px\\]{border-radius:13px}.rounded-\\[14px\\]{border-radius:14px}.rounded-full{border-radius:3.40282e38px}.rounded-lg{border-radius:var(--radius-lg)}.rounded-md{border-radius:var(--radius-md)}.rounded-sm{border-radius:var(--radius-sm)}.rounded-xl{border-radius:var(--radius-xl)}.rounded-t{border-top-left-radius:.25rem;border-top-right-radius:.25rem}.rounded-t-\\[10px\\]{border-top-left-radius:10px;border-top-right-radius:10px}.rounded-t-none{border-top-left-radius:0;border-top-right-radius:0}.rounded-l{border-top-left-radius:.25rem;border-bottom-left-radius:.25rem}.rounded-l-\\[10px\\]{border-top-left-radius:10px;border-bottom-left-radius:10px}.rounded-l-none{border-top-left-radius:0;border-bottom-left-radius:0}.rounded-tl{border-top-left-radius:.25rem}.rounded-r{border-top-right-radius:.25rem;border-bottom-right-radius:.25rem}.rounded-r-\\[10px\\]{border-top-right-radius:10px;border-bottom-right-radius:10px}.rounded-r-none{border-top-right-radius:0;border-bottom-right-radius:0}.rounded-tr{border-top-right-radius:.25rem}.rounded-b{border-bottom-right-radius:.25rem;border-bottom-left-radius:.25rem}.rounded-b-\\[6px\\]{border-bottom-right-radius:6px;border-bottom-left-radius:6px}.rounded-b-\\[10px\\]{border-bottom-right-radius:10px;border-bottom-left-radius:10px}.rounded-b-none{border-bottom-right-radius:0;border-bottom-left-radius:0}.rounded-br{border-bottom-right-radius:.25rem}.rounded-bl{border-bottom-left-radius:.25rem}.border{border-style:var(--tw-border-style);border-width:1px}.border-2{border-style:var(--tw-border-style);border-width:2px}.\\[border-width\\:0\\.5px\\]{border-width:.5px}.border-x{border-inline-style:var(--tw-border-style);border-inline-width:1px}.border-y{border-block-style:var(--tw-border-style);border-block-width:1px}.border-s{border-inline-start-style:var(--tw-border-style);border-inline-start-width:1px}.border-e{border-inline-end-style:var(--tw-border-style);border-inline-end-width:1px}.border-t{border-top-style:var(--tw-border-style);border-top-width:1px}.border-t-4{border-top-style:var(--tw-border-style);border-top-width:4px}.\\[border-top-width\\:0\\.5px\\]{border-top-width:.5px}.border-r{border-right-style:var(--tw-border-style);border-right-width:1px}.border-b{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}.border-l{border-left-style:var(--tw-border-style);border-left-width:1px}.border-dashed{--tw-border-style:dashed;border-style:dashed}.border-dotted{--tw-border-style:dotted;border-style:dotted}.border-none{--tw-border-style:none;border-style:none}.border-solid{--tw-border-style:solid;border-style:solid}.border-\\[var\\(--rg-border-button\\)\\]{border-color:var(--rg-border-button)}.border-accent{border-color:var(--color-accent)}.border-accent\\/40{border-color:#5e6ad266}@supports (color:color-mix(in lab, red, red)){.border-accent\\/40{border-color:color-mix(in oklab, var(--color-accent) 40%, transparent)}}.border-border{border-color:var(--color-border)}.border-danger{border-color:var(--color-danger)}.border-danger\\/40{border-color:#eb575766}@supports (color:color-mix(in lab, red, red)){.border-danger\\/40{border-color:color-mix(in oklab, var(--color-danger) 40%, transparent)}}.border-success{border-color:var(--color-success)}.border-success\\/40{border-color:#4cb78266}@supports (color:color-mix(in lab, red, red)){.border-success\\/40{border-color:color-mix(in oklab, var(--color-success) 40%, transparent)}}.border-text-dim{border-color:var(--color-text-dim)}.border-transparent{border-color:#0000}.border-warn{border-color:var(--color-warn)}.border-warn\\/40{border-color:#f2c94c66}@supports (color:color-mix(in lab, red, red)){.border-warn\\/40{border-color:color-mix(in oklab, var(--color-warn) 40%, transparent)}}.border-t-\\[var\\(--rg-border-subtle\\)\\]{border-top-color:var(--rg-border-subtle)}.border-t-transparent{border-top-color:#0000}.bg-\\[var\\(--rg-error-bg\\)\\]{background-color:var(--rg-error-bg)}.bg-\\[var\\(--rg-panel-bg\\)\\]{background-color:var(--rg-panel-bg)}.bg-\\[var\\(--rg-submit-bg\\)\\]{background-color:var(--rg-submit-bg)}.bg-\\[var\\(--rg-surface-active\\)\\]{background-color:var(--rg-surface-active)}.bg-\\[var\\(--rg-surface-hover\\)\\]{background-color:var(--rg-surface-hover)}.bg-\\[var\\(--rg-text-primary\\)\\]{background-color:var(--rg-text-primary)}.bg-\\[var\\(--rg-text-secondary\\)\\]{background-color:var(--rg-text-secondary)}.bg-accent{background-color:var(--color-accent)}.bg-accent-soft{background-color:var(--color-accent-soft)}.bg-bg{background-color:var(--color-bg)}.bg-bg\\/80{background-color:#0b0c0ecc}@supports (color:color-mix(in lab, red, red)){.bg-bg\\/80{background-color:color-mix(in oklab, var(--color-bg) 80%, transparent)}}.bg-border{background-color:var(--color-border)}.bg-current{background-color:currentColor}.bg-danger{background-color:var(--color-danger)}.bg-danger-soft{background-color:var(--color-danger-soft)}.bg-danger\\/10{background-color:#eb57571a}@supports (color:color-mix(in lab, red, red)){.bg-danger\\/10{background-color:color-mix(in oklab, var(--color-danger) 10%, transparent)}}.bg-red-500{background-color:var(--color-red-500)}.bg-success{background-color:var(--color-success)}.bg-surface{background-color:var(--color-surface)}.bg-surface-2{background-color:var(--color-surface-2)}.bg-surface-3{background-color:var(--color-surface-3)}.bg-text-faint{background-color:var(--color-text-faint)}.bg-transparent{background-color:#0000}.bg-warn{background-color:var(--color-warn)}.bg-warn\\/10{background-color:#f2c94c1a}@supports (color:color-mix(in lab, red, red)){.bg-warn\\/10{background-color:color-mix(in oklab, var(--color-warn) 10%, transparent)}}.object-contain{object-fit:contain}.object-cover{object-fit:cover}.p-0{padding:0}.p-0\\.5{padding:calc(var(--spacing) * .5)}.p-1{padding:var(--spacing)}.p-1\\.5{padding:calc(var(--spacing) * 1.5)}.p-2{padding:calc(var(--spacing) * 2)}.p-2\\.5{padding:calc(var(--spacing) * 2.5)}.p-6{padding:calc(var(--spacing) * 6)}.px-0{padding-inline:0}.px-0\\.25{padding-inline:calc(var(--spacing) * .25)}.px-1{padding-inline:var(--spacing)}.px-1\\.5{padding-inline:calc(var(--spacing) * 1.5)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-2\\.5{padding-inline:calc(var(--spacing) * 2.5)}.px-3{padding-inline:calc(var(--spacing) * 3)}.px-4{padding-inline:calc(var(--spacing) * 4)}.px-\\[3px\\]{padding-inline:3px}.py-0{padding-block:0}.py-0\\.5{padding-block:calc(var(--spacing) * .5)}.py-0\\.25{padding-block:calc(var(--spacing) * .25)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-10{padding-block:calc(var(--spacing) * 10)}.py-px{padding-block:1px}.pt-0{padding-top:0}.pt-0\\.5{padding-top:calc(var(--spacing) * .5)}.pt-1{padding-top:var(--spacing)}.pt-1\\.5{padding-top:calc(var(--spacing) * 1.5)}.pt-2{padding-top:calc(var(--spacing) * 2)}.pt-2\\.5{padding-top:calc(var(--spacing) * 2.5)}.pt-3{padding-top:calc(var(--spacing) * 3)}.pt-4{padding-top:calc(var(--spacing) * 4)}.pr-1{padding-right:var(--spacing)}.pr-1\\.5{padding-right:calc(var(--spacing) * 1.5)}.pr-2{padding-right:calc(var(--spacing) * 2)}.pr-3{padding-right:calc(var(--spacing) * 3)}.pr-4{padding-right:calc(var(--spacing) * 4)}.pb-1{padding-bottom:var(--spacing)}.pb-1\\.5{padding-bottom:calc(var(--spacing) * 1.5)}.pb-3{padding-bottom:calc(var(--spacing) * 3)}.pb-4{padding-bottom:calc(var(--spacing) * 4)}.pb-6{padding-bottom:calc(var(--spacing) * 6)}.pl-0{padding-left:0}.pl-0\\.5{padding-left:calc(var(--spacing) * .5)}.pl-2{padding-left:calc(var(--spacing) * 2)}.pl-2\\.5{padding-left:calc(var(--spacing) * 2.5)}.pl-3{padding-left:calc(var(--spacing) * 3)}.pl-4{padding-left:calc(var(--spacing) * 4)}.pl-5{padding-left:calc(var(--spacing) * 5)}.text-center{text-align:center}.text-end{text-align:end}.text-justify{text-align:justify}.text-left{text-align:left}.text-right{text-align:right}.text-start{text-align:start}.align-middle{vertical-align:middle}.font-mono{font-family:var(--font-mono)}.font-sans{font-family:var(--font-sans)}.font-serif{font-family:var(--font-serif)}.text-\\[9\\.5px\\]{font-size:9.5px}.text-\\[9px\\]{font-size:9px}.text-\\[10\\.5px\\]{font-size:10.5px}.text-\\[10px\\]{font-size:10px}.text-\\[11\\.5px\\]{font-size:11.5px}.text-\\[11px\\]{font-size:11px}.text-\\[12\\.5px\\]{font-size:12.5px}.text-\\[12px\\]{font-size:12px}.text-\\[13px\\]{font-size:13px}.text-\\[15px\\]{font-size:15px}.leading-3{--tw-leading:calc(var(--spacing) * 3);line-height:calc(var(--spacing) * 3)}.leading-3\\.5{--tw-leading:calc(var(--spacing) * 3.5);line-height:calc(var(--spacing) * 3.5)}.leading-4{--tw-leading:calc(var(--spacing) * 4);line-height:calc(var(--spacing) * 4)}.leading-none{--tw-leading:1;line-height:1}.leading-relaxed{--tw-leading:var(--leading-relaxed);line-height:var(--leading-relaxed)}.leading-snug{--tw-leading:var(--leading-snug);line-height:var(--leading-snug)}.font-black{--tw-font-weight:var(--font-weight-black);font-weight:var(--font-weight-black)}.font-bold{--tw-font-weight:var(--font-weight-bold);font-weight:var(--font-weight-bold)}.font-extrabold{--tw-font-weight:var(--font-weight-extrabold);font-weight:var(--font-weight-extrabold)}.font-extralight{--tw-font-weight:var(--font-weight-extralight);font-weight:var(--font-weight-extralight)}.font-light{--tw-font-weight:var(--font-weight-light);font-weight:var(--font-weight-light)}.font-medium{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.font-normal{--tw-font-weight:var(--font-weight-normal);font-weight:var(--font-weight-normal)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.font-thin{--tw-font-weight:var(--font-weight-thin);font-weight:var(--font-weight-thin)}.tracking-wide{--tw-tracking:var(--tracking-wide);letter-spacing:var(--tracking-wide)}.break-normal{overflow-wrap:normal;word-break:normal}.break-words,.wrap-break-word{overflow-wrap:break-word}.break-all{word-break:break-all}.break-keep{word-break:keep-all}.text-ellipsis{text-overflow:ellipsis}.whitespace-break-spaces{white-space:break-spaces}.whitespace-normal{white-space:normal}.whitespace-nowrap{white-space:nowrap}.whitespace-pre{white-space:pre}.whitespace-pre-line{white-space:pre-line}.whitespace-pre-wrap{white-space:pre-wrap}.text-\\[var\\(--rg-error-text\\)\\]{color:var(--rg-error-text)}.text-\\[var\\(--rg-submit-fg\\)\\]{color:var(--rg-submit-fg)}.text-\\[var\\(--rg-text-primary\\)\\]{color:var(--rg-text-primary)}.text-\\[var\\(--rg-text-primary-85\\)\\]{color:var(--rg-text-primary-85)}.text-\\[var\\(--rg-text-secondary\\)\\]{color:var(--rg-text-secondary)}.text-accent{color:var(--color-accent)}.text-danger{color:var(--color-danger)}.text-success{color:var(--color-success)}.text-text{color:var(--color-text)}.text-text-dim{color:var(--color-text-dim)}.text-text-faint{color:var(--color-text-faint)}.text-warn{color:var(--color-warn)}.text-white{color:var(--color-white)}.capitalize{text-transform:capitalize}.lowercase{text-transform:lowercase}.normal-case{text-transform:none}.uppercase{text-transform:uppercase}.italic{font-style:italic}.not-italic{font-style:normal}.lining-nums{--tw-numeric-figure:lining-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.oldstyle-nums{--tw-numeric-figure:oldstyle-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.proportional-nums{--tw-numeric-spacing:proportional-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.slashed-zero{--tw-slashed-zero:slashed-zero;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.tabular-nums{--tw-numeric-spacing:tabular-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.line-through{text-decoration-line:line-through}.no-underline{text-decoration-line:none}.underline{text-decoration-line:underline}.underline-offset-2{text-underline-offset:2px}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.accent-accent{accent-color:var(--color-accent)}.opacity-0{opacity:0}.opacity-50{opacity:.5}.opacity-60{opacity:.6}.opacity-100{opacity:1}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-2xl{--tw-shadow:0 25px 50px -12px var(--tw-shadow-color,#00000040);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-lg{--tw-shadow:0 10px 15px -3px var(--tw-shadow-color,#0000001a), 0 4px 6px -4px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.\\[box-shadow\\:var\\(--rg-shadow\\)\\]{box-shadow:var(--rg-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.blur{--tw-blur:blur(8px);filter:var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)}.\\[filter\\:var\\(--rg-drop-shadow\\)\\]{filter:var(--rg-drop-shadow)}.filter{filter:var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)}.backdrop-filter{-webkit-backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)}.transition{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to,opacity,box-shadow,transform,translate,scale,rotate,filter,-webkit-backdrop-filter,backdrop-filter,display,content-visibility,overlay,pointer-events;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[grid-template-columns\\]{transition-property:grid-template-columns;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[grid-template-rows\\]{transition-property:grid-template-rows;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[opacity\\,transform\\]{transition-property:opacity,transform;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[padding\\,border-radius\\,transform\\]{transition-property:padding,border-radius,transform;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[top\\,left\\,width\\,height\\,opacity\\,border-radius\\]{transition-property:top,left,width,height,opacity,border-radius;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[transform\\,color\\]{transition-property:transform,color;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-\\[transform\\,opacity\\]{transition-property:transform,opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-all{transition-property:all;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-opacity{transition-property:opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-transform{transition-property:transform,translate,scale,rotate;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.delay-\\[80ms\\]{transition-delay:80ms}.duration-60{--tw-duration:60ms;transition-duration:60ms}.duration-75{--tw-duration:75ms;transition-duration:75ms}.duration-100{--tw-duration:.1s;transition-duration:.1s}.duration-120{--tw-duration:.12s;transition-duration:.12s}.duration-140{--tw-duration:.14s;transition-duration:.14s}.duration-150{--tw-duration:.15s;transition-duration:.15s}.duration-180{--tw-duration:.18s;transition-duration:.18s}.duration-220{--tw-duration:.22s;transition-duration:.22s}.duration-300{--tw-duration:.3s;transition-duration:.3s}.duration-400{--tw-duration:.4s;transition-duration:.4s}.ease-\\[cubic-bezier\\(0\\,0\\,0\\.2\\,1\\)\\]{--tw-ease:cubic-bezier(0,0,.2,1);transition-timing-function:cubic-bezier(0,0,.2,1)}.ease-in{--tw-ease:var(--ease-in);transition-timing-function:var(--ease-in)}.ease-in-out{--tw-ease:var(--ease-in-out);transition-timing-function:var(--ease-in-out)}.ease-out{--tw-ease:var(--ease-out);transition-timing-function:var(--ease-out)}.will-change-\\[opacity\\,transform\\]{will-change:opacity,transform}.will-change-transform{will-change:transform}.contain-layout{--tw-contain-layout:layout;contain:var(--tw-contain-size,) var(--tw-contain-layout,) var(--tw-contain-paint,) var(--tw-contain-style,)}.outline-none{--tw-outline-style:none;outline-style:none}.select-all{-webkit-user-select:all;user-select:all}.select-none{-webkit-user-select:none;user-select:none}.\\[corner-shape\\:superellipse\\(1\\.25\\)\\]{corner-shape:superellipse(1.25)}.\\[font-synthesis\\:none\\]{font-synthesis:none}.group-open\\:rotate-90:is(:where(.group):is([open],:popover-open,:open) *){rotate:90deg}@media (hover:hover){.group-hover\\:text-\\[var\\(--rg-text-primary\\)\\]:is(:where(.group):hover *){color:var(--rg-text-primary)}.group-hover\\:opacity-100:is(:where(.group):hover *){opacity:1}}.placeholder\\:text-text-faint::placeholder{color:var(--color-text-faint)}@media (hover:hover){.hover\\:bg-\\[var\\(--rg-error-bg-hover\\)\\]:hover{background-color:var(--rg-error-bg-hover)}.hover\\:bg-\\[var\\(--rg-surface-active\\)\\]:hover{background-color:var(--rg-surface-active)}.hover\\:bg-\\[var\\(--rg-surface-hover\\)\\]:hover{background-color:var(--rg-surface-hover)}.hover\\:bg-accent-hover:hover{background-color:var(--color-accent-hover)}.hover\\:bg-accent\\/50:hover{background-color:#5e6ad280}@supports (color:color-mix(in lab, red, red)){.hover\\:bg-accent\\/50:hover{background-color:color-mix(in oklab, var(--color-accent) 50%, transparent)}}.hover\\:bg-danger\\/30:hover{background-color:#eb57574d}@supports (color:color-mix(in lab, red, red)){.hover\\:bg-danger\\/30:hover{background-color:color-mix(in oklab, var(--color-danger) 30%, transparent)}}.hover\\:bg-surface-2:hover{background-color:var(--color-surface-2)}.hover\\:bg-surface-3:hover{background-color:var(--color-surface-3)}.hover\\:text-\\[var\\(--rg-text-primary\\)\\]:hover{color:var(--rg-text-primary)}.hover\\:text-accent:hover{color:var(--color-accent)}.hover\\:text-danger:hover{color:var(--color-danger)}.hover\\:text-text:hover{color:var(--color-text)}.hover\\:underline:hover{text-decoration-line:underline}.hover\\:opacity-80:hover{opacity:.8}}.focus\\:border-accent:focus{border-color:var(--color-accent)}.active\\:cursor-grabbing:active{cursor:grabbing}.active\\:bg-accent:active{background-color:var(--color-accent)}.active\\:transition-none:active{transition-property:none}.disabled\\:cursor-default:disabled{cursor:default}.disabled\\:cursor-not-allowed:disabled{cursor:not-allowed}.disabled\\:bg-surface-3:disabled{background-color:var(--color-surface-3)}.disabled\\:text-text-faint:disabled{color:var(--color-text-faint)}.disabled\\:opacity-40:disabled{opacity:.4}@media (hover:hover){.disabled\\:hover\\:bg-surface-2:disabled:hover{background-color:var(--color-surface-2)}}.data-\\[state\\=on\\]\\:transition-none[data-state=on],.data-\\[state\\=open\\]\\:transition-none[data-state=open],.data-\\[state\\=…\\]\\:transition-none[data-state=…]{transition-property:none}}:root{--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}[data-theme=light],:host([data-theme=light]){--color-bg:#fbfbfc;--color-surface:#fff;--color-surface-2:#f4f4f6;--color-surface-3:#e9e9ee;--color-border:#e2e2e8;--color-border-strong:#cfcfd8;--color-text:#1b1c20;--color-text-dim:#5c5f6a;--color-text-faint:#9a9da8;--color-accent-soft:#5e6ad21f;--color-danger-soft:#eb57571a;--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light}@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--color-bg:#fbfbfc;--color-surface:#fff;--color-surface-2:#f4f4f6;--color-surface-3:#e9e9ee;--color-border:#e2e2e8;--color-border-strong:#cfcfd8;--color-text:#1b1c20;--color-text-dim:#5c5f6a;--color-text-faint:#9a9da8;--color-accent-soft:#5e6ad21f;--color-danger-soft:#eb57571a;--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light}}body{background-color:var(--color-bg);font-family:var(--font-sans);color:var(--color-text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;min-width:320px;margin:0;font-size:13px}@keyframes geist-spinner-fade{0%{opacity:1}to{opacity:.15}}[data-tip]{position:relative}[data-tip]:hover:after{content:attr(data-tip);color:#fff;white-space:nowrap;text-overflow:ellipsis;pointer-events:none;z-index:60;background:#1b1c20;border-radius:6px;max-width:260px;padding:3px 8px;font-size:10.5px;font-weight:500;line-height:1.35;position:absolute;bottom:calc(100% + 6px);left:50%;overflow:hidden;transform:translate(-50%);box-shadow:0 4px 12px #0000004d}[data-tip][data-tip-pos~=right]:hover:after{left:0;transform:none}[data-tip][data-tip-pos~=left]:hover:after{left:auto;right:0;transform:none}[data-tip][data-tip-pos~=bottom]:hover:after{top:calc(100% + 6px);bottom:auto}.no-scrollbar{scrollbar-width:none}.no-scrollbar::-webkit-scrollbar{display:none}.lg-md p{margin:0 0 6px}.lg-md p:last-child{margin-bottom:0}.lg-md a{color:var(--color-accent);word-break:break-all;text-decoration:none}.lg-md a:hover{text-decoration:underline}.lg-md code{background:var(--color-surface-2);border:1px solid var(--color-border);font-family:var(--font-mono);border-radius:4px;padding:0 4px;font-size:11px}.lg-md pre{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:6px;margin:6px 0;padding:8px;overflow-x:auto}.lg-md pre code{white-space:pre;background:0 0;border:none;padding:0;font-size:11px}.lg-md ul,.lg-md ol{flex-direction:column;gap:2px;margin:4px 0 6px;padding-left:18px;display:flex}.lg-md ul{list-style:outside}.lg-md ol{list-style:decimal}.lg-md h4{margin:8px 0 4px;font-size:12px;font-weight:600}.lg-md lg-media{display:block}.lg-md lg-media img,.lg-md lg-media video{border:1px solid var(--color-border);border-radius:6px;max-width:100%;margin:4px 0}.lg-md video{border:1px solid var(--color-border);background:#000;border-radius:6px;max-width:100%;margin:4px 0}.lg-md img{border:1px solid var(--color-border);border-radius:6px;max-width:100%;margin:4px 0}.lg-md strong{font-weight:600}*{scrollbar-width:thin;scrollbar-color:var(--color-border-strong) transparent}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--color-border-strong);border-radius:4px}::-webkit-scrollbar-track{background:0 0}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-leading{syntax:\"*\";inherits:false}@property --tw-font-weight{syntax:\"*\";inherits:false}@property --tw-tracking{syntax:\"*\";inherits:false}@property --tw-ordinal{syntax:\"*\";inherits:false}@property --tw-slashed-zero{syntax:\"*\";inherits:false}@property --tw-numeric-figure{syntax:\"*\";inherits:false}@property --tw-numeric-spacing{syntax:\"*\";inherits:false}@property --tw-numeric-fraction{syntax:\"*\";inherits:false}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}@property --tw-backdrop-blur{syntax:\"*\";inherits:false}@property --tw-backdrop-brightness{syntax:\"*\";inherits:false}@property --tw-backdrop-contrast{syntax:\"*\";inherits:false}@property --tw-backdrop-grayscale{syntax:\"*\";inherits:false}@property --tw-backdrop-hue-rotate{syntax:\"*\";inherits:false}@property --tw-backdrop-invert{syntax:\"*\";inherits:false}@property --tw-backdrop-opacity{syntax:\"*\";inherits:false}@property --tw-backdrop-saturate{syntax:\"*\";inherits:false}@property --tw-backdrop-sepia{syntax:\"*\";inherits:false}@property --tw-duration{syntax:\"*\";inherits:false}@property --tw-ease{syntax:\"*\";inherits:false}@property --tw-contain-size{syntax:\"*\";inherits:false}@property --tw-contain-layout{syntax:\"*\";inherits:false}@property --tw-contain-paint{syntax:\"*\";inherits:false}@property --tw-contain-style{syntax:\"*\";inherits:false}@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{opacity:.5}}";
 //#endregion
 //#region src/page/index.tsx
 Br();
-var R7 = /*#__PURE__*/ N("<span aria-hidden class=\"bg-danger size-2 shrink-0 animate-pulse rounded-full\">"), z7 = /*#__PURE__*/ N("<span class=\"text-text min-w-[5ch] text-[11px] font-medium tabular-nums\">"), B7 = /*#__PURE__*/ N("<button class=\"bg-accent hover:bg-accent-hover h-7 cursor-pointer rounded-full px-2.5 text-[11px] font-medium text-white transition-colors\"><span class=\"inline-block min-w-[4ch] text-center\">Stop"), V7 = /*#__PURE__*/ N("<p class=\"text-warn px-1.5 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-wide uppercase\">Needs review"), H7 = /*#__PURE__*/ N("<div><p class=\"text-text-dim px-1.5 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-wide uppercase\">Running agents"), U7 = /*#__PURE__*/ N("<div class=\"fixed z-[2147483646] select-none\"><div class=\"bg-surface border-border text-text flex h-9 cursor-grab items-center gap-1 rounded-full border py-1 pr-1 pl-2.5 font-sans shadow-lg active:cursor-grabbing\">"), W7 = /*#__PURE__*/ N("<div><div title=\"Drag to resize\">"), G7 = /*#__PURE__*/ N("<button title=\"Open Linear Grab\"aria-label=\"Open Linear Grab\"class=\"text-accent hover:opacity-80 inline-flex cursor-pointer items-center gap-1.5\">"), K7 = /*#__PURE__*/ N("<span class=\"bg-border h-4 w-px\"aria-hidden>"), q7 = /*#__PURE__*/ N("<span aria-hidden class=\"bg-warn size-2 rounded-full\">"), J7 = /*#__PURE__*/ N("<span class=\"text-warn min-w-[3.5ch] text-left text-[11px] font-medium tabular-nums\"> rev"), Y7 = /*#__PURE__*/ N("<button title=\"Running agents\"aria-label=\"Running agents\"class=\"hover:bg-surface-2 flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-2 transition-colors\"><span aria-hidden></span><span>"), X7 = /*#__PURE__*/ N("<span aria-hidden class=\"bg-accent size-2 shrink-0 animate-pulse rounded-full\">"), Z7 = /*#__PURE__*/ N("<span class=\"text-text min-w-[3ch] text-[11px] font-medium tabular-nums\">s"), Q7 = /*#__PURE__*/ N("<span class=\"text-text-dim min-w-[7ch] text-[11px] tabular-nums\"> states"), $7 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1.5 pb-1.5 text-[11.5px]\">No agents running right now."), e9 = /*#__PURE__*/ N("<button class=\"hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left transition-colors\"><span class=\"flex min-w-0 items-center gap-1.5\"><span aria-hidden class=\"size-1.5 shrink-0 rounded-full\"></span><span class=\"font-mono text-text-dim shrink-0 text-[10.5px]\"></span><span class=\"text-text truncate text-[11.5px]\"></span></span><span class=\"text-text-faint pl-3 text-[10.5px] tabular-nums\"> · <!> · ");
-function t9(e = {}) {
+var V7 = /*#__PURE__*/ N("<span aria-hidden class=\"bg-danger size-2 shrink-0 animate-pulse rounded-full\">"), H7 = /*#__PURE__*/ N("<span class=\"text-text min-w-[5ch] text-[11px] font-medium tabular-nums\">"), U7 = /*#__PURE__*/ N("<button class=\"bg-accent hover:bg-accent-hover h-7 cursor-pointer rounded-full px-2.5 text-[11px] font-medium text-white transition-colors\"><span class=\"inline-block min-w-[4ch] text-center\">Stop"), W7 = /*#__PURE__*/ N("<p class=\"text-warn px-1.5 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-wide uppercase\">Needs review"), G7 = /*#__PURE__*/ N("<div><p class=\"text-text-dim px-1.5 pt-1 pb-1.5 text-[10.5px] font-semibold tracking-wide uppercase\">Running agents"), K7 = /*#__PURE__*/ N("<div class=\"fixed z-[2147483646] select-none\"><div class=\"bg-surface border-border text-text flex h-9 cursor-grab items-center gap-1 rounded-full border py-1 pr-1 pl-2.5 font-sans shadow-lg active:cursor-grabbing\">"), q7 = /*#__PURE__*/ N("<div><div title=\"Drag to resize\">"), J7 = /*#__PURE__*/ N("<button title=\"Open Linear Grab\"aria-label=\"Open Linear Grab\"class=\"text-accent hover:opacity-80 inline-flex cursor-pointer items-center gap-1.5\">"), Y7 = /*#__PURE__*/ N("<span class=\"bg-border h-4 w-px\"aria-hidden>"), X7 = /*#__PURE__*/ N("<span aria-hidden class=\"bg-warn size-2 rounded-full\">"), Z7 = /*#__PURE__*/ N("<span class=\"text-warn min-w-[3.5ch] text-left text-[11px] font-medium tabular-nums\"> rev"), Q7 = /*#__PURE__*/ N("<button title=\"Running agents\"aria-label=\"Running agents\"class=\"hover:bg-surface-2 flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-2 transition-colors\"><span aria-hidden></span><span>"), $7 = /*#__PURE__*/ N("<span aria-hidden class=\"bg-accent size-2 shrink-0 animate-pulse rounded-full\">"), e9 = /*#__PURE__*/ N("<span class=\"text-text min-w-[3ch] text-[11px] font-medium tabular-nums\">s"), t9 = /*#__PURE__*/ N("<span class=\"text-text-dim min-w-[7ch] text-[11px] tabular-nums\"> states"), n9 = /*#__PURE__*/ N("<p class=\"text-text-faint px-1.5 pb-1.5 text-[11.5px]\">No agents running right now."), r9 = /*#__PURE__*/ N("<button class=\"hover:bg-surface-2 flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left transition-colors\"><span class=\"flex min-w-0 items-center gap-1.5\"><span aria-hidden class=\"size-1.5 shrink-0 rounded-full\"></span><span class=\"font-mono text-text-dim shrink-0 text-[10.5px]\"></span><span class=\"text-text truncate text-[11.5px]\"></span></span><span class=\"text-text-faint pl-3 text-[10.5px] tabular-nums\"> · <!> · ");
+function i9(e = {}) {
 	if (typeof window > "u" || window.__LINEAR_GRAB_PAGE__) return;
 	window.__LINEAR_GRAB_PAGE__ = !0;
 	let t = () => {
-		uk(), z2(), Y4(), V8(), JZ();
+		uk(), z2(), Q4(), W8(), JZ();
 		let t = document.createElement("div");
 		t.id = "linear-grab-root", document.body.appendChild(t);
 		let n = (e) => {
@@ -50368,17 +50384,17 @@ function t9(e = {}) {
 			"keypress"
 		]) window.addEventListener(e, n, { capture: !0 });
 		let r = t.attachShadow({ mode: "open" }), i = document.createElement("style");
-		i.textContent = L7, r.appendChild(i);
+		i.textContent = B7, r.appendChild(i);
 		let a = document.createElement("div");
 		r.appendChild(a);
-		let o = () => a.setAttribute("data-theme", n9());
-		o(), matchMedia("(prefers-color-scheme: light)").addEventListener("change", o), nt(() => j(c9, { get defaultOpen() {
+		let o = () => a.setAttribute("data-theme", a9());
+		o(), matchMedia("(prefers-color-scheme: light)").addEventListener("change", o), nt(() => j(d9, { get defaultOpen() {
 			return e.defaultOpen ?? !1;
 		} }), a);
 	};
 	document.body ? t() : document.addEventListener("DOMContentLoaded", t, { once: !0 });
 }
-function n9() {
+function a9() {
 	try {
 		let e = [document.body, document.documentElement];
 		for (let t of e) {
@@ -50388,11 +50404,11 @@ function n9() {
 	} catch {}
 	return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
-var r9 = 130, i9 = 36, a9 = 380, o9 = 280, s9 = 720;
-function c9(e) {
+var o9 = 130, s9 = 36, c9 = 380, l9 = 280, u9 = 720;
+function d9(e) {
 	let [t, n] = T(e.defaultOpen), [r, i] = T("right"), [a, o] = T({
-		x: Math.max(8, window.innerWidth - r9 - 24),
-		y: Math.max(8, window.innerHeight - i9 - 20)
+		x: Math.max(8, window.innerWidth - o9 - 24),
+		y: Math.max(8, window.innerHeight - s9 - 20)
 	}), [s, c] = T({
 		running: [],
 		review: []
@@ -50412,12 +50428,12 @@ function c9(e) {
 		let t = Math.floor(e / 1e3);
 		return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 	}, [b, x] = T(null), S = (e) => ({
-		x: Math.min(Math.max(8, e.x), window.innerWidth - r9 - 8),
-		y: Math.min(Math.max(8, e.y), window.innerHeight - i9 - 8)
+		x: Math.min(Math.max(8, e.x), window.innerWidth - o9 - 8),
+		y: Math.min(Math.max(8, e.y), window.innerHeight - s9 - 8)
 	}), C = (e) => ({
 		x: Math.min(Math.max(8 - (ne() - 80), e.x), window.innerWidth - 80),
 		y: Math.min(Math.max(0, e.y), window.innerHeight - 80)
-	}), [w, E] = T(!1), [k, ee] = T("cloud"), [te, A] = T(!1), [ne, re] = T(a9), oe = (e) => Math.min(s9, Math.max(o9, Math.min(e, window.innerWidth - 60)));
+	}), [w, E] = T(!1), [k, ee] = T("cloud"), [te, A] = T(!1), [ne, re] = T(c9), oe = (e) => Math.min(u9, Math.max(l9, Math.min(e, window.innerWidth - 60)));
 	O(() => {
 		let e = document.documentElement, n = t() && w();
 		e.style.marginRight = n && r() === "right" ? `${ne()}px` : "", e.style.marginLeft = n && r() === "left" ? `${ne()}px` : "";
@@ -50531,7 +50547,7 @@ function c9(e) {
 			return !t();
 		},
 		get children() {
-			var e = U7(), t = e.firstChild;
+			var e = K7(), t = e.firstChild;
 			return t.$$click = () => {
 				ce || p() === "recording" || h().active || (f(!1), n(!0));
 			}, t.$$pointerdown = le, P(t, j(M, {
@@ -50541,14 +50557,14 @@ function c9(e) {
 				get fallback() {
 					return [
 						(() => {
-							var e = G7();
+							var e = J7();
 							return e.$$click = () => {
 								ce || (f(!1), n(!0));
-							}, P(e, j(F7, { size: 13 })), e;
+							}, P(e, j(R7, { size: 13 })), e;
 						})(),
-						K7(),
+						Y7(),
 						(() => {
-							var e = Y7(), t = e.firstChild, n = t.nextSibling;
+							var e = Q7(), t = e.firstChild, n = t.nextSibling;
 							return e.$$click = (e) => {
 								e.stopPropagation(), !ce && f((e) => !e);
 							}, P(n, (() => {
@@ -50559,8 +50575,8 @@ function c9(e) {
 									return $e(() => !te())() && u().length > 0;
 								},
 								get children() {
-									return [q7(), (() => {
-										var e = J7(), t = e.firstChild;
+									return [X7(), (() => {
+										var e = Z7(), t = e.firstChild;
 										return P(e, () => u().length, t), e;
 									})()];
 								}
@@ -50581,17 +50597,17 @@ function c9(e) {
 						},
 						get fallback() {
 							return [
-								X7(),
+								$7(),
 								(() => {
-									var e = Z7(), t = e.firstChild;
+									var e = e9(), t = e.firstChild;
 									return P(e, () => Math.ceil(h().msLeft / 1e3), t), e;
 								})(),
 								(() => {
-									var e = Q7(), t = e.firstChild;
+									var e = t9(), t = e.firstChild;
 									return P(e, () => h().total, t), D(() => it(e, "title", Object.entries(h().byTrigger).map(([e, t]) => `${t} ${e}`).join(" · ") || "hover / open the component to record its states")), e;
 								})(),
 								(() => {
-									var e = B7();
+									var e = U7();
 									return e.$$click = (e) => {
 										e.stopPropagation(), !ce && o2();
 									}, e;
@@ -50600,13 +50616,13 @@ function c9(e) {
 						},
 						get children() {
 							return [
-								R7(),
+								V7(),
 								(() => {
-									var e = z7();
+									var e = H7();
 									return P(e, () => y(_())), e;
 								})(),
 								(() => {
-									var e = B7();
+									var e = U7();
 									return e.$$click = () => {
 										ce || tO();
 									}, e;
@@ -50620,17 +50636,17 @@ function c9(e) {
 					return d();
 				},
 				get children() {
-					var e = H7(), t = e.firstChild;
+					var e = G7(), t = e.firstChild;
 					return P(e, j(M, {
 						get when() {
 							return u().length > 0;
 						},
 						get children() {
-							return [V7(), j(We, {
+							return [W7(), j(We, {
 								get each() {
 									return u();
 								},
-								children: (e) => j(l9, {
+								children: (e) => j(f9, {
 									agent: e,
 									review: !0,
 									onOpen: de
@@ -50642,14 +50658,14 @@ function c9(e) {
 							return l().length > 0;
 						},
 						get fallback() {
-							return $7();
+							return n9();
 						},
 						get children() {
 							return j(We, {
 								get each() {
 									return l();
 								},
-								children: (e) => j(l9, {
+								children: (e) => j(f9, {
 									agent: e,
 									onOpen: de
 								})
@@ -50670,8 +50686,8 @@ function c9(e) {
 			return t();
 		},
 		get children() {
-			var e = W7(), t = e.firstChild;
-			return t.$$pointerdown = fe, P(e, j(I7, {
+			var e = q7(), t = e.firstChild;
+			return t.$$pointerdown = fe, P(e, j(z7, {
 				onGrab: () => n(!0),
 				onClose: () => n(!1),
 				get onHeaderPointerDown() {
@@ -50699,19 +50715,19 @@ function c9(e) {
 		}
 	})];
 }
-function l9(e) {
+function f9(e) {
 	return (() => {
-		var t = e9(), n = t.firstChild, r = n.firstChild, i = r.nextSibling, a = i.nextSibling, o = n.nextSibling, s = o.firstChild, c = s.nextSibling;
+		var t = r9(), n = t.firstChild, r = n.firstChild, i = r.nextSibling, a = i.nextSibling, o = n.nextSibling, s = o.firstChild, c = s.nextSibling;
 		return c.nextSibling, t.$$click = () => e.onOpen(e.agent.id), P(i, () => e.agent.identifier), P(a, () => e.agent.title), P(o, (() => {
 			var t = $e(() => !!e.review);
 			return () => t() ? "PR ready · needs review" : e.agent.stateName;
-		})(), s), P(o, () => e.agent.delegateName, c), P(o, () => u9(e.agent.updatedAt), null), D((t) => dt(r, "background", e.review ? "var(--color-warn)" : e.agent.stateColor)), t;
+		})(), s), P(o, () => e.agent.delegateName, c), P(o, () => p9(e.agent.updatedAt), null), D((t) => dt(r, "background", e.review ? "var(--color-warn)" : e.agent.stateColor)), t;
 	})();
 }
-function u9(e) {
+function p9(e) {
 	let t = Math.max(0, Math.floor((Date.now() - Date.parse(e)) / 1e3));
 	return t < 60 ? "now" : t < 3600 ? `${Math.floor(t / 60)}m` : t < 86400 ? `${Math.floor(t / 3600)}h` : `${Math.floor(t / 86400)}d`;
 }
 rt(["pointerdown", "click"]);
 //#endregion
-export { t9 as init };
+export { i9 as init };

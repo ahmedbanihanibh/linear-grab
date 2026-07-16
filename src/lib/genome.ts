@@ -93,6 +93,7 @@ function normalizeColor(value: string): string | null {
   try {
     if (!probe) {
       probe = document.createElement('span');
+      probe.setAttribute('data-linear-grab', 'true');
       probe.style.display = 'none';
       document.body.appendChild(probe);
     }
@@ -462,6 +463,7 @@ export function genomeToSpec(g: Genome): string {
 export function pickElementForExtraction(): Promise<Element | null> {
   return new Promise((resolve) => {
     const outline = document.createElement('div');
+    outline.setAttribute('data-linear-grab', 'true'); // slop scan skips tooling DOM by this marker
     outline.style.cssText =
       'position:fixed;z-index:2147483647;pointer-events:none;border:1.5px solid #5e6ad2;' +
       'border-radius:4px;background:rgba(94,106,210,0.08);display:none;';

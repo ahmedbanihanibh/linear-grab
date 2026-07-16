@@ -18,7 +18,8 @@
  *    part on 1000s-node pages.
  *  - Every rule runs in try/catch: a single throwing rule is skipped, the rest
  *    still report. A broken rule must never kill the scan.
- *  - Our own panel subtree (#linear-grab-root) is ALWAYS skipped.
+ *  - Tooling DOM is ALWAYS skipped: our panel host (#linear-grab-root), any
+ *    light-DOM element tagged data-linear-grab, react-grab's host, react-scan.
  */
 
 import {
@@ -594,6 +595,7 @@ const hardcodedStatusHex: SlopRule = {
         // Token values are hex/oklch — normalize through a probe element so
         // they compare against computed rgb() colors (the genome trick).
         const probe = doc.createElement('span');
+        probe.setAttribute('data-linear-grab', 'true');
         probe.style.display = 'none';
         doc.body.appendChild(probe);
         // Chrome enumerates custom properties in computed style iteration.
@@ -656,6 +658,7 @@ const editorShadow: SlopRule = {
       if (!el.closest('[data-editor-surface]') && !/\/editor\//.test(typeof location !== 'undefined' ? location.pathname : '')) continue;
       const sh = ctx.css(el).boxShadow;
       if (!sh || sh === 'none') continue;
+      if (isInvisibleShadow(sh)) continue; // flattened Tailwind ring vars — computed but paints nothing
       if (isHairlineRing(sh)) continue;
       out.push(finding(this, el, `box-shadow: ${sh}`));
     }
@@ -1046,6 +1049,38 @@ function isSaturated(r: number, g: number, b: number): boolean {
   return max - min > 60; // wide channel spread = a real color, not a gray
 }
 
+/** Split a computed box-shadow into layers — commas inside color functions
+    (rgba(), oklch()) don't separate layers. */
+function splitShadowLayers(shadow: string): string[] {
+  const layers: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < shadow.length; i++) {
+    const ch = shadow[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0) {
+      layers.push(shadow.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  layers.push(shadow.slice(start).trim());
+  return layers.filter(Boolean);
+}
+
+/** A shadow stack that paints nothing: every layer is either fully
+    transparent (alpha 0 — Tailwind's flattened ring/shadow vars compute to
+    "rgba(0,0,0,0) 0px 0px 0px 0px" stacks) or has all-zero geometry (no
+    offset, blur, or spread casts no pixels regardless of color). */
+function isInvisibleShadow(shadow: string): boolean {
+  return splitShadowLayers(shadow).every((layer) => {
+    if (/\btransparent\b/.test(layer)) return true;
+    if (/(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([^)]*[/,]\s*0(?:\.0+)?\s*\)/.test(layer)) return true;
+    const lengths = layer.match(/-?\d*\.?\d+(?:px|em|rem)/g) ?? [];
+    return lengths.length > 0 && lengths.every((v) => parseFloat(v) === 0);
+  });
+}
+
 /** A 0.5px hairline ring or a 0-blur inset ring — the approved "flat" shadows. */
 function isHairlineRing(shadow: string): boolean {
   // "0 0 0 0.5px ..." or spreads ≤ 0.5px with 0 blur, incl. token-resolved.
@@ -1057,6 +1092,15 @@ function isHairlineRing(shadow: string): boolean {
 // ---------------------------------------------------------------------------
 // runSlopScan — one walk, cached css, every rule isolated
 // ---------------------------------------------------------------------------
+
+/** DOM owned by dev tooling, never by the app under audit. Covers our own
+    panel host, every light-DOM element we tag with data-linear-grab (picker
+    outline, capture overlay), react-grab's fixed host ([data-react-grab]),
+    react-scan's toolbar/canvas, and the agent glow border. Their pixels are
+    not the app's design contract — and react-grab attribution walks them to
+    the nearest host fiber, blaming an innocent app component. */
+const DEVTOOLS_SELECTOR =
+  '#linear-grab-root, [data-linear-grab], [data-react-grab], #claude-agent-glow-border, [id^="react-scan"]';
 
 export function runSlopScan(root: ParentNode = typeof document !== 'undefined' ? document : ({} as ParentNode)): SlopFinding[] {
   const cache = new Map<Element, CSSStyleDeclaration>();
@@ -1083,7 +1127,7 @@ export function runSlopScan(root: ParentNode = typeof document !== 'undefined' ?
     // panel's own DevTools-dock margin transition (the cssSlowdown v0.23.1
     // self-report lesson), and browser-agent overlays are not the app either.
     if (el === docEl || el === bodyEl) continue;
-    if (el.closest('#linear-grab-root, #claude-agent-glow-border, [id^="react-scan"]')) continue; // never scan devtools
+    if (el.closest(DEVTOOLS_SELECTOR)) continue; // never scan devtools
     const r = rectOf(el);
     if (hasLayout) {
       // Invisible UI is ungradable AND misleading: hidden KeepAlive tab

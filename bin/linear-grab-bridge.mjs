@@ -37,7 +37,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.27.0';
+const VERSION = '0.27.1';
 
 // ---- audit subcommand dispatch ---------------------------------------------
 // `npx linear-grab-bridge audit` is a headless design gate — it sweeps a
