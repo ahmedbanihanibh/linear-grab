@@ -117,6 +117,9 @@ export interface Settings {
   panelPos?: { x: number; y: number };
   /** Page mode: persisted panel width (drag-resizable, DevTools-style). */
   panelWidth?: number;
+  /** Render-scan budget overrides (shareable via .lineargrab.json). Overlaid
+      onto the parsed rulebook budgets: config > doc > fallback. */
+  renderBudgets?: { selfMs?: number; commitMs?: number };
 }
 
 // ---- Linear API shapes (thin, only what the UI needs) ----

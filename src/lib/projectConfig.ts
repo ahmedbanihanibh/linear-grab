@@ -18,6 +18,7 @@ export const SHAREABLE_KEYS = [
   'logLines',
   'issueTemplate',
   'testUsername',
+  'renderBudgets',
 ] as const satisfies readonly (keyof Settings)[];
 
 export type ShareableKey = (typeof SHAREABLE_KEYS)[number];

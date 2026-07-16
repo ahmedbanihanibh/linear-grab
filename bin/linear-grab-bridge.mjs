@@ -27,7 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, platform, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 const argv = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -37,7 +37,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.25.2';
+const VERSION = '0.26.0';
 
 // ---- audit subcommand dispatch ---------------------------------------------
 // `npx linear-grab-bridge audit` is a headless design gate — it sweeps a
@@ -782,6 +782,44 @@ const server = createServer(async (req, res) => {
         components,
         interactions: interactions.slice(-20),
       });
+    }
+    // Serve the repo's render-rulebook markdown to the panel — lets the panel
+    // surface the relevant R-rule section alongside a render-scan finding.
+    // ?doc=render (default) is the only supported value; others get ok:false.
+    if (req.method === 'GET' && url.pathname === '/scan/rulebook') {
+      const doc = url.searchParams.get('doc') ?? 'render';
+      if (doc !== 'render') return json(res, 200, { ok: false, error: 'unknown doc' });
+
+      // Resolve the rulebook path: .lineargrab.json key "renderRulebook" wins,
+      // else fall back to the canonical filename in the repo root.
+      let relPath = 'React-rerender-primitives.md';
+      try {
+        const cfg = JSON.parse(readFileSync(join(DIR, '.lineargrab.json'), 'utf8'));
+        if (typeof cfg.renderRulebook === 'string' && cfg.renderRulebook.trim()) {
+          relPath = cfg.renderRulebook.trim();
+        }
+      } catch {
+        /* missing or invalid config — use the default */
+      }
+
+      // Reject absolute paths supplied in the config value.
+      if (relPath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(relPath)) {
+        return json(res, 400, { ok: false, error: 'path outside repo' });
+      }
+
+      // Reject resolved paths that escape the repo root (traversal guard).
+      const resolved = join(DIR, relPath);
+      if (!resolved.startsWith(DIR + sep) && resolved !== DIR) {
+        return json(res, 400, { ok: false, error: 'path outside repo' });
+      }
+
+      let text;
+      try {
+        text = readFileSync(resolved, 'utf8');
+      } catch {
+        return json(res, 200, { ok: false, error: 'not found' });
+      }
+      return json(res, 200, { ok: true, text, path: resolved });
     }
     // Reset the staging branch: delete + recreate from the default branch.
     if (req.method === 'POST' && url.pathname === '/branch/reset') {

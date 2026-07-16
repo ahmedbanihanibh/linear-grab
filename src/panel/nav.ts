@@ -14,6 +14,7 @@ export type PanelTab =
   | 'local'
   | 'prs'
   | 'design'
+  | 'renders'
   | 'settings';
 
 const [requestedTab, setRequestedTab] = createSignal<PanelTab | null>(null);

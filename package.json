@@ -1,6 +1,6 @@
 {
   "name": "linear-grab",
-  "version": "0.25.2",
+  "version": "0.26.0",
   "type": "module",
   "description": "Point at any React element in your dev app, draft a Linear issue with AI, delegate it to the Cursor agent, and track it live — in any browser.",
   "exports": {
@@ -32,6 +32,7 @@
     "@tanstack/solid-query": "^5.0.0",
     "@tanstack/solid-virtual": "^3.0.0",
     "ai": "latest",
+    "bippy": "^0.5.43",
     "gifenc": "^1.0.3",
     "html-to-image": "^1.11.13",
     "react-grab": "latest",
