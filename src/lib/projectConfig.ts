@@ -11,6 +11,8 @@ export const SHAREABLE_KEYS = [
   'defaultRepo',
   'workflowMode',
   'cursorModel',
+  'openaiModel',
+  'anthropicModel',
   'stagingBranch',
   'githubAssetsRepo',
   'skillPaths',

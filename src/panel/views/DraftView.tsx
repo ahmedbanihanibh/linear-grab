@@ -32,7 +32,7 @@ import { fetchDevLogTail } from '@/lib/logs';
 import { formatConsoleTail, getConsoleTail } from '@/lib/consoleCapture';
 import { searchIssues } from '@/lib/linear/api';
 import { dataUrlToBlob } from '@/lib/elementShot';
-import { resolveProvider, MODELS } from '@/lib/ai/providers';
+import { resolveProvider, modelIdFor } from '@/lib/ai/providers';
 import { composeIssueBody, buildAgentInstructions } from '@/lib/ai/prompt';
 import { openPanelTo } from '../nav';
 import {
@@ -518,7 +518,7 @@ export default function DraftView(props: { onCreated: () => void }) {
   const resolvedModelId = createMemo(() => {
     const p = provider();
     if (!p) return null;
-    return MODELS[p][tier()];
+    return modelIdFor(settings(), p, tier());
   });
 
   // ---- Repro step helpers ---------------------------------------------------

@@ -6,9 +6,15 @@ import { getSettings } from '../storage';
 import type { AiProvider, AiTier, Settings } from '../types';
 
 export const MODELS: Record<AiProvider, Record<AiTier, string>> = {
-  openai: { fast: 'gpt-5.4-nano', best: 'gpt-5.2' },
+  openai: { fast: 'gpt-5.6-luna', best: 'gpt-5.2' },
   anthropic: { fast: 'claude-haiku-4-5', best: 'claude-opus-4-8' },
 };
+
+/** A user-set model id overrides the tier table for BOTH tiers of its provider. */
+export function modelIdFor(settings: Settings, provider: AiProvider, tier: AiTier): string {
+  const override = provider === 'openai' ? settings.openaiModel : settings.anthropicModel;
+  return override?.trim() || MODELS[provider][tier];
+}
 
 export class NoProviderError extends Error {
   constructor() {
@@ -27,8 +33,7 @@ function keyFor(settings: Settings, provider: AiProvider): string | undefined {
   return provider === 'openai' ? settings.openaiKey : settings.anthropicKey;
 }
 
-function buildModel(provider: AiProvider, apiKey: string, tier: AiTier): ResolvedModel {
-  const modelId = MODELS[provider][tier];
+function buildModel(provider: AiProvider, apiKey: string, modelId: string): ResolvedModel {
   const model =
     provider === 'openai'
       ? createOpenAI({ apiKey })(modelId)
@@ -57,7 +62,7 @@ export async function resolveModel(tier: AiTier): Promise<ResolvedModel> {
   const settings = await getSettings();
   const provider = resolveProvider(settings);
   if (!provider) throw new NoProviderError();
-  return buildModel(provider, keyFor(settings, provider)!, tier);
+  return buildModel(provider, keyFor(settings, provider)!, modelIdFor(settings, provider, tier));
 }
 
 /** The cross-provider fallback when the primary fails at runtime (dead key, 429, outage). */
@@ -68,5 +73,5 @@ export async function resolveFallbackModel(
   const settings = await getSettings();
   const other: AiProvider = failed === 'openai' ? 'anthropic' : 'openai';
   const key = keyFor(settings, other);
-  return key ? buildModel(other, key, tier) : null;
+  return key ? buildModel(other, key, modelIdFor(settings, other, tier)) : null;
 }

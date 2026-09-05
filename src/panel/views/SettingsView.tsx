@@ -6,7 +6,7 @@ import { fetchViewer, fetchTeams, fetchAgents, fetchProjects, fetchLabels } from
 import { fetchBridgeHealth } from '@/lib/bridge';
 import { pickShareable, SHAREABLE_KEYS } from '@/lib/projectConfig';
 import { oauthLogin, disconnectLinear } from '@/lib/linear/auth';
-import { MODELS, resolveProvider } from '@/lib/ai/providers';
+import { MODELS, modelIdFor, resolveProvider } from '@/lib/ai/providers';
 import { listSlackChannels } from '@/lib/notify';
 import {
   Button,
@@ -188,7 +188,7 @@ export default function SettingsView() {
   const providerSummary = createMemo(() => {
     const p = activeProvider();
     if (!p) return null;
-    return `Drafting with ${p} — ${MODELS[p].fast} (fast) / ${MODELS[p].best} (best)`;
+    return `Drafting with ${p} — ${modelIdFor(s(), p, 'fast')} (fast) / ${modelIdFor(s(), p, 'best')} (best)`;
   });
 
   return (
@@ -880,6 +880,20 @@ export default function SettingsView() {
           />
         </Field>
 
+        <Field
+          label="OpenAI model"
+          hint={`Model id used for drafting (both tiers). Empty = defaults: ${MODELS.openai.fast} (fast) / ${MODELS.openai.best} (best).`}
+        >
+          <Input
+            placeholder={MODELS.openai.fast}
+            value={s().openaiModel ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ openaiModel: v || undefined });
+            }}
+          />
+        </Field>
+
         {/* Anthropic key */}
         <Field label="Anthropic API key">
           <Input
@@ -889,6 +903,20 @@ export default function SettingsView() {
             onBlur={(e) => {
               const v = e.currentTarget.value.trim();
               void update({ anthropicKey: v || undefined });
+            }}
+          />
+        </Field>
+
+        <Field
+          label="Anthropic model"
+          hint={`Model id used for drafting (both tiers). Empty = defaults: ${MODELS.anthropic.fast} (fast) / ${MODELS.anthropic.best} (best).`}
+        >
+          <Input
+            placeholder={MODELS.anthropic.fast}
+            value={s().anthropicModel ?? ''}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              void update({ anthropicModel: v || undefined });
             }}
           />
         </Field>

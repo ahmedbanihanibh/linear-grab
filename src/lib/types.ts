@@ -55,6 +55,9 @@ export interface Settings {
   anthropicKey?: string;
   /** Explicit provider choice. Absent = auto (OpenAI first, then Anthropic). */
   preferredProvider?: AiProvider;
+  /** Custom model id used for BOTH tiers of its provider. Absent = tier defaults. */
+  openaiModel?: string;
+  anthropicModel?: string;
   defaultTeamId?: string;
   /** Auto-assigned on every created issue. */
   defaultProjectId?: string;
