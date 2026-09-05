@@ -20,6 +20,7 @@ export const SHAREABLE_KEYS = [
   'logLines',
   'issueTemplate',
   'testUsername',
+  'defaultEvidence',
   'renderBudgets',
   'renderIgnore',
 ] as const satisfies readonly (keyof Settings)[];

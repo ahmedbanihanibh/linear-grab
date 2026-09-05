@@ -41,6 +41,14 @@ export interface IssueDraft {
 export type AiProvider = 'openai' | 'anthropic';
 export type AiTier = 'fast' | 'best';
 
+/**
+ * What proof of the fix a delegated agent must produce.
+ *  - video: record a demo video/GIF (the classic flow)
+ *  - spec:  1:1 computed-style evidence via the repo's spec-crawler MCP, no video
+ *  - none:  hands-on testing only, no recorded evidence required
+ */
+export type EvidenceMode = 'video' | 'spec' | 'none';
+
 export interface Settings {
   /** Personal API key (primary auth path — works instantly). */
   linearApiKey?: string;
@@ -78,6 +86,8 @@ export interface Settings {
   /** Test account the cloud agent uses to log into the app while testing. */
   testUsername?: string;
   testPassword?: string;
+  /** Default evidence mode for new issues (Draft can override per issue). */
+  defaultEvidence?: EvidenceMode;
   /** Newline-separated skill/memory paths (repo-relative for cloud agents,
       absolute also fine for local agents) injected into every issue. */
   skillPaths?: string;

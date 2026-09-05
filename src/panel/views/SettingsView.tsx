@@ -538,6 +538,42 @@ export default function SettingsView() {
             />
           </Field>
 
+          {/* Default evidence the delegated agent must produce */}
+          <div class="flex flex-col gap-1">
+            <span class="text-text-dim text-[11px] font-medium">Default evidence</span>
+            <div class="bg-surface-2 border-border flex rounded-md border p-0.5">
+              <For
+                each={[
+                  { id: 'video', label: 'Video demo' },
+                  { id: 'spec', label: 'Spec-crawler 1:1' },
+                  { id: 'none', label: 'None' },
+                ] as const}
+              >
+                {(mode) => (
+                  <button
+                    type="button"
+                    class={`flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                      (s().defaultEvidence ?? 'video') === mode.id
+                        ? 'bg-surface-3 text-text'
+                        : 'text-text-dim hover:text-text cursor-pointer'
+                    }`}
+                    onClick={() =>
+                      void update({ defaultEvidence: mode.id === 'video' ? undefined : mode.id })
+                    }
+                  >
+                    {mode.label}
+                  </button>
+                )}
+              </For>
+            </div>
+            <span class="text-text-faint text-[10.5px] leading-snug">
+              What proof delegated agents must produce, baked into every issue's Agent
+              instructions. Video demo = record a GIF/video with the test account.
+              Spec-crawler 1:1 = computed-style evidence via the repo's spec-crawler MCP,
+              no video. None = hands-on testing only. Draft can override it per issue.
+            </span>
+          </div>
+
           {/* Standing agent instructions */}
           <Field
             label="Agent instructions"

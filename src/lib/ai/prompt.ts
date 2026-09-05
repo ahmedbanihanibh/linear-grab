@@ -1,4 +1,5 @@
-import type { DraftInput, GrabbedElement } from '../types';
+import type { DraftInput, EvidenceMode, GrabbedElement } from '../types';
+export type { EvidenceMode };
 
 export const DRAFT_SYSTEM = `You are an expert engineer drafting a Linear issue for a development team.
 You are given a rough note from the reporter and, when available, the exact React source
@@ -17,11 +18,23 @@ Suggested Next Steps (suggestedNextSteps, markdown bullets with concrete fixes).
 The Summary is a short plain-prose paragraph — no headings inside it, no repetition
 of the other sections.`;
 
-/**
- * Default standing directives for the delegated cloud agent — appended to every
- * issue as "### Agent instructions" unless the user sets their own template.
- */
-export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo checkout (skip any path that doesn't exist):
+
+const EVIDENCE_GATE_STEP: Record<Exclude<EvidenceMode, 'none'>, string> = {
+  video:
+    'RECORD a demo video or GIF showing the fix working (before → after where possible). If your environment genuinely cannot record media, capture before/after screenshots instead AND state explicitly in your closeout comment why video was not possible — never just omit the demo.',
+  spec: 'PRODUCE 1:1 EVIDENCE with the spec-crawler MCP instead of a demo video: capture the reference and your fixed build with `capture_component` / `capture_css_spec` (plus `force_state` / `crawl_overlays` / `capture_drag` for stateful surfaces), compare computed styles 1:1, and paste the before → after diff — citing the `spec-bundle/frames/<id>.html` file paths — in your closeout comment. No video is required.',
+};
+
+function defaultAgentInstructions(evidence: EvidenceMode): string {
+  const gate = [
+    'RUN the app and TEST your change hands-on (computer use / a real browser against the running app). Code reading alone does not count as verification.',
+    ...(evidence === 'none' ? [] : [EVIDENCE_GATE_STEP[evidence]]),
+    'Open the PR, babysit it for the first set of review comments, and address them. If the repo has preview deployments (e.g. Vercel), wait for the preview to go green and include its URL — deep-linked to the changed page — in the PR body, the Linear closeout, and the announcement.',
+    `CLOSE OUT THE LINEAR ISSUE: post a completion comment (one-line fix summary + PR link), ${
+      evidence === 'none' ? '' : 'attach the evidence to the ISSUE itself (not only the PR), '
+    }and move the issue to its review/done state.`,
+  ];
+  return `- FIRST, self-orient in the repo checkout (skip any path that doesn't exist):
   1. Read \`CLAUDE.md\` and \`AGENTS.md\` at the repo root — the master map of product rules, architecture, and memory/skill pointers.
   2. Skim \`.claude/memory/MEMORY.md\` (the index) to learn what project memory exists; load the specific \`.claude/memory/*.md\` files the map names for the surface you're touching.
   3. Load the matching \`.claude/skills/<name>/SKILL.md\` files before designing, building UI, or animating (if skills are symlinked, follow them into \`.agents/skills/\`).
@@ -29,10 +42,15 @@ export const DEFAULT_AGENT_INSTRUCTIONS = `- FIRST, self-orient in the repo chec
 - Live render telemetry (react-scan → linear-grab bridge): if \`.lineargrab/scan.ndjson\` exists in the repo, it holds the user's REAL interaction slowdowns — component render counts, self-times, change causes (\`prop:x\`/\`state:i\`/\`context:y\`), and interaction latencies, newest last. \`curl -s http://127.0.0.1:4577/scan/report\` returns an aggregated view. For any re-render/performance issue: read it BEFORE fixing (the evidence) and AFTER (the proof), and cite before→after numbers in your closeout.
 - Keep going until the code works and you're happy with the implementation.
 - MANDATORY COMPLETION GATE — the task is NOT complete (and you may not call it complete) until every step below is done, in order. Skipping any step silently is a FAILED task:
-  1. RUN the app and TEST your change hands-on (computer use / a real browser against the running app). Code reading alone does not count as verification.
-  2. RECORD a demo video or GIF showing the fix working (before → after where possible). If your environment genuinely cannot record media, capture before/after screenshots instead AND state explicitly in your closeout comment why video was not possible — never just omit the demo.
-  3. Open the PR, babysit it for the first set of review comments, and address them. If the repo has preview deployments (e.g. Vercel), wait for the preview to go green and include its URL — deep-linked to the changed page — in the PR body, the Linear closeout, and the announcement.
-  4. CLOSE OUT THE LINEAR ISSUE: post a completion comment (one-line fix summary + PR link), attach the demo media to the ISSUE itself (not only the PR), and move the issue to its review/done state.`;
+${gate.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}`;
+}
+
+/**
+ * Default standing directives for the delegated cloud agent — appended to every
+ * issue as "### Agent instructions" unless the user sets their own template.
+ * (The video-evidence variant; Draft's Evidence selector swaps the gate.)
+ */
+export const DEFAULT_AGENT_INSTRUCTIONS = defaultAgentInstructions('video');
 
 /**
  * Final "### Agent instructions" content: the user's template (or the default)
@@ -52,8 +70,17 @@ export function buildAgentInstructions(settings: {
   githubToken?: string;
   linearApiKey?: string;
   shareLinearKey?: boolean;
-}): string {
-  const parts: string[] = [settings.issueTemplate?.trim() || DEFAULT_AGENT_INSTRUCTIONS];
+}, opts?: { evidence?: EvidenceMode }): string {
+  const evidence = opts?.evidence ?? 'video';
+  const parts: string[] = [settings.issueTemplate?.trim() || defaultAgentInstructions(evidence)];
+  // A custom template can't be rewritten per-mode — append an explicit override.
+  if (settings.issueTemplate?.trim() && evidence !== 'video') {
+    parts.push(
+      evidence === 'spec'
+        ? '**Evidence override for THIS issue: no demo video.** Skip any video/GIF-recording steps in the instructions above. Instead produce 1:1 evidence with the spec-crawler MCP: capture the reference and your fixed build (`capture_component` / `capture_css_spec`, plus `force_state` / `crawl_overlays` / `capture_drag` for stateful surfaces), compare computed styles 1:1, and paste the before → after diff — citing the `spec-bundle/frames/<id>.html` paths — in your closeout comment.'
+        : '**Evidence override for THIS issue: no demo video or recorded evidence required.** Skip any video/GIF-recording steps in the instructions above; hands-on testing in the running app is still mandatory.',
+    );
+  }
 
   // Skills & memory: the cloud agent works in a full repo checkout, so
   // committed skill/memory files just need authoritative POINTERS — the same
@@ -71,7 +98,7 @@ export function buildAgentInstructions(settings: {
     );
   }
 
-  if (settings.githubAssetsRepo?.trim()) {
+  if (evidence === 'video' && settings.githubAssetsRepo?.trim()) {
     const repo = settings.githubAssetsRepo.trim();
     const tokenLine = settings.githubToken?.trim()
       ? ` Your environment's git identity may lack push access to this repo — use this fine-grained token (scoped to the assets repo only): \`${settings.githubToken.trim()}\`. Push via \`https://x-access-token:<token>@github.com/${repo}.git\` or \`gh api\` with it.`
@@ -96,10 +123,10 @@ export function buildAgentInstructions(settings: {
   }
 
   const creds: string[] = [];
-  if (settings.testUsername?.trim()) {
+  if (evidence !== 'none' && settings.testUsername?.trim()) {
     creds.push(`- Username / email: \`${settings.testUsername.trim()}\``);
   }
-  if (settings.testPassword?.trim()) {
+  if (evidence !== 'none' && settings.testPassword?.trim()) {
     creds.push(`- Password: \`${settings.testPassword.trim()}\``);
   }
   if (creds.length) {
@@ -121,7 +148,13 @@ export function buildAgentInstructions(settings: {
   }
   if (notify.length) {
     parts.push(
-      `**When the fix is complete and the PR is open, announce it yourself:**\n${notify.join('\n')}\n\nMessage format — keep it short: what was broken → what you changed (one-line fix summary) → links to the Linear issue, the PR, and your agent run → attach/upload the demo video → end with the CTA "👉 Review the PR". You may also use these tokens to send yourself intermediate test notifications while verifying the integration works.`,
+      `**When the fix is complete and the PR is open, announce it yourself:**\n${notify.join('\n')}\n\nMessage format — keep it short: what was broken → what you changed (one-line fix summary) → links to the Linear issue, the PR, and your agent run${
+        evidence === 'video'
+          ? ' → attach/upload the demo video'
+          : evidence === 'spec'
+            ? ' → include the 1:1 spec-crawler evidence summary'
+            : ''
+      } → end with the CTA "👉 Review the PR". You may also use these tokens to send yourself intermediate test notifications while verifying the integration works.`,
     );
   }
 
@@ -131,15 +164,23 @@ export function buildAgentInstructions(settings: {
   // creation; the checklist is the enforcement layer prose never was.
   const dod: string[] = [
     '- [ ] Tested the change hands-on in the RUNNING app (state what you exercised)',
-    '- [ ] Demo media captured — GIF/video preferred; if recording is impossible in your environment, before/after screenshots + the stated reason',
   ];
-  if (settings.githubAssetsRepo?.trim()) {
+  if (evidence === 'video') {
     dod.push(
-      `- [ ] Demo media committed to \`${settings.githubAssetsRepo.trim()}\` and embedded via raw.githubusercontent.com URL in the Linear comment AND the PR body`,
+      '- [ ] Demo media captured — GIF/video preferred; if recording is impossible in your environment, before/after screenshots + the stated reason',
+    );
+    if (settings.githubAssetsRepo?.trim()) {
+      dod.push(
+        `- [ ] Demo media committed to \`${settings.githubAssetsRepo.trim()}\` and embedded via raw.githubusercontent.com URL in the Linear comment AND the PR body`,
+      );
+    }
+    dod.push('- [ ] Demo media attached to the Linear ISSUE itself (not only the PR)');
+  } else if (evidence === 'spec') {
+    dod.push(
+      '- [ ] 1:1 evidence produced with the spec-crawler MCP — reference vs fixed build computed-style comparison, `spec-bundle/frames/<id>.html` paths cited, before → after diff pasted in the closeout comment',
     );
   }
   dod.push(
-    '- [ ] Demo media attached to the Linear ISSUE itself (not only the PR)',
     '- [ ] PR opened and linked here',
     '- [ ] Deploy-preview URL included, deep-linked to the changed page (if the repo has preview deployments, e.g. Vercel; otherwise state that it does not)',
     '- [ ] Issue moved to its review/done state',

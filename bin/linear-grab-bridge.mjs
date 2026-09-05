@@ -22,10 +22,12 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { connect } from 'node:net';
 import { homedir, platform, tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 
@@ -37,7 +39,7 @@ const flag = (name, fallback) => {
 const PORT = Number(flag('--port', '4577'));
 const DIR = flag('--dir', process.cwd());
 const CLAUDE_BIN = flag('--claude', 'claude');
-const VERSION = '0.27.2';
+const VERSION = '0.28.0';
 
 // ---- audit subcommand dispatch ---------------------------------------------
 // `npx linear-grab-bridge audit` is a headless design gate — it sweeps a
@@ -505,6 +507,74 @@ function resolveRulebookPath() {
   return { ok: true, path: resolved };
 }
 
+// ---- Running interactive Claude Code sessions (cross-session inbox) --------
+// Claude Code registers every live session in ~/.claude/sessions/<pid>.json
+// (cwd, name, and its inbox socket path) and publishes the per-session auth
+// token in a sibling .key file, same-user readable. One JSON line written to
+// the socket delivers a plain-text message into that session's conversation —
+// the documented inbox-socket entry point for scripts. This is how "queue to
+// the running session" delegation reaches an agent you already have open.
+
+const CC_SESSIONS_DIR = join(homedir(), '.claude', 'sessions');
+
+function listRunningClaudeSessions() {
+  let files;
+  try {
+    files = readdirSync(CC_SESSIONS_DIR);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const f of files) {
+    if (!/^\d+\.json$/.test(f)) continue;
+    try {
+      const meta = JSON.parse(readFileSync(join(CC_SESSIONS_DIR, f), 'utf8'));
+      if (meta.kind !== 'interactive' || !meta.messagingSocketPath) continue;
+      if (meta.cwd !== DIR && !DIR.startsWith(meta.cwd + sep)) continue;
+      process.kill(meta.pid, 0); // throws when the registry entry is stale
+      out.push(meta);
+    } catch {
+      /* unreadable entry or dead pid */
+    }
+  }
+  return out.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+}
+
+function claudeSessionToken(pid) {
+  try {
+    const key = readdirSync(CC_SESSIONS_DIR).find(
+      (f) => f.startsWith(`${pid}.`) && f.endsWith('.key'),
+    );
+    return key ? (JSON.parse(readFileSync(join(CC_SESSIONS_DIR, key), 'utf8')).peerToken ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+function postToClaudeSession(meta, text) {
+  return new Promise((resolve, reject) => {
+    const sock = connect(meta.messagingSocketPath);
+    const timer = setTimeout(() => {
+      sock.destroy();
+      reject(new Error('inbox socket timed out'));
+    }, 5000);
+    sock.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    sock.on('connect', () => {
+      const token = claudeSessionToken(meta.pid);
+      if (token) sock.write(JSON.stringify({ type: 'auth', token }) + '\n');
+      sock.write(JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n');
+      sock.end();
+    });
+    sock.on('close', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 // ---- HTTP ------------------------------------------------------------------
 
 const server = createServer(async (req, res) => {
@@ -605,6 +675,38 @@ const server = createServer(async (req, res) => {
       }
       saveHistory();
       return json(res, 200, summary(t));
+    }
+    // Live interactive Claude Code sessions whose cwd covers this repo.
+    if (req.method === 'GET' && url.pathname === '/sessions/running') {
+      return json(res, 200, {
+        sessions: listRunningClaudeSessions().map((s) => ({
+          pid: s.pid,
+          name: s.name,
+          status: s.status,
+          cwd: s.cwd,
+        })),
+      });
+    }
+    // Queue a message into a running session's inbox (newest session wins
+    // unless a pid is given). The receiving Claude adds it to its own board.
+    if (req.method === 'POST' && url.pathname === '/sessions/queue') {
+      const body = await readBody(req);
+      if (!body.text) return json(res, 400, { error: 'text required' });
+      const sessions = listRunningClaudeSessions();
+      const target = body.pid ? sessions.find((s) => s.pid === Number(body.pid)) : sessions[0];
+      if (!target) {
+        return json(res, 404, {
+          error: 'no running interactive Claude Code session found in this repo',
+        });
+      }
+      try {
+        await postToClaudeSession(target, String(body.text));
+        return json(res, 200, { ok: true, pid: target.pid, name: target.name });
+      } catch (err) {
+        return json(res, 502, {
+          error: `inbox delivery failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
     }
     if (req.method === 'POST' && url.pathname === '/tasks') {
       const body = await readBody(req);

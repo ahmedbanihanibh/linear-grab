@@ -359,6 +359,7 @@ export function IssueDetailScreen(props: { issueId: string; onBack: () => void }
   }));
   const LOCAL_MODELS = [
     { id: '', label: 'Default model' },
+    { id: 'claude-fable-5-1', label: 'Fable 5.1' },
     { id: 'fable', label: 'Fable 5' },
     { id: 'opus', label: 'Opus' },
     { id: 'sonnet', label: 'Sonnet' },

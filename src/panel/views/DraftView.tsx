@@ -26,7 +26,7 @@ import {
   updateIssueState,
 } from '@/lib/linear/api';
 import { uploadAsset } from '@/lib/assetUpload';
-import { createBridgeTask } from '@/lib/bridge';
+import { createBridgeTask, listRunningSessions, queueToRunningSession } from '@/lib/bridge';
 import { announceIssue } from '@/lib/notify';
 import { fetchDevLogTail } from '@/lib/logs';
 import { formatConsoleTail, getConsoleTail } from '@/lib/consoleCapture';
@@ -34,6 +34,7 @@ import { searchIssues } from '@/lib/linear/api';
 import { dataUrlToBlob } from '@/lib/elementShot';
 import { resolveProvider, modelIdFor } from '@/lib/ai/providers';
 import { composeIssueBody, buildAgentInstructions } from '@/lib/ai/prompt';
+import type { EvidenceMode } from '@/lib/types';
 import { openPanelTo } from '../nav';
 import {
   Button,
@@ -103,6 +104,21 @@ export default function DraftView(props: { onCreated: () => void }) {
   const [repo, setRepo] = createSignal(settings().defaultRepo ?? '');
   /** Who executes the issue: Cursor cloud agent, local Claude Code, or nobody. */
   const [target, setTarget] = persistentSignal<'cursor' | 'local' | 'none'>('draft:target', 'none');
+  // '' = follow the Settings default; a choice here overrides it for this issue.
+  const [evidenceChoice, setEvidenceChoice] = persistentSignal<'' | EvidenceMode>('draft:evidence', '');
+  const evidence = createMemo<EvidenceMode>(
+    () => evidenceChoice() || settings().defaultEvidence || 'video',
+  );
+  // Local delegation shape: spawn a fresh bridge agent, or hand the issue to
+  // the ALREADY-RUNNING interactive Claude Code session via its inbox socket.
+  const [localMode, setLocalMode] = persistentSignal<'new' | 'queue'>('draft:local-mode', 'new');
+  const runningQ = createQuery(() => ({
+    queryKey: ['bridge-running-sessions'],
+    queryFn: listRunningSessions,
+    enabled: target() === 'local' && localMode() === 'queue',
+    refetchInterval: 10_000,
+    retry: 0,
+  }));
   /** Claude Code model for local delegation ('' = its default). */
   const [localModel, setLocalModel] = persistentSignal('draft:local-model', '');
   /** Per-draft Cursor cloud model override → [model=…] ('' = Settings default). */
@@ -268,7 +284,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         grabbedList: grabQuery.data ?? undefined,
         teamName: selectedTeamName(),
         tier: tier(),
-        template: buildAgentInstructions(settings()),
+        template: buildAgentInstructions(settings(), { evidence: evidence() }),
         logs,
       },
       {
@@ -331,7 +347,7 @@ export default function DraftView(props: { onCreated: () => void }) {
         grabs: grabQuery.data ?? [],
         repo: repo(),
         model: cloudModel().trim() || settings().cursorModel,
-        agentInstructions: buildAgentInstructions(settings()),
+        agentInstructions: buildAgentInstructions(settings(), { evidence: evidence() }),
       });
       // Attach GIF + element screenshot automatically — BOTH best-effort:
       // Linear's storage rejects cross-origin browser uploads in some
@@ -417,6 +433,12 @@ export default function DraftView(props: { onCreated: () => void }) {
       let localTask = false;
       if (target() === 'local') {
         try {
+          const queued = localMode() === 'queue';
+          // Queued sessions get no env injection — point them at the key in
+          // the instructions (shareLinearKey) instead of LINEAR_API_KEY.
+          const authHow = queued
+            ? "using the Linear API key from this issue's Agent instructions (if present; otherwise ask the user for one) as the Authorization header"
+            : 'using the LINEAR_API_KEY env var as the Authorization header';
           const closeout = [
             `You are delegated Linear issue ${issue.identifier} (${issue.url}).`,
             '',
@@ -425,12 +447,28 @@ export default function DraftView(props: { onCreated: () => void }) {
             '## Closeout — do ALL of this autonomously when the fix is verified (permissions are granted):',
             `1. Create a branch (e.g. fix/${issue.identifier.toLowerCase()}-short-slug), commit, push.`,
             `2. Open a PR: \`gh pr create\` — reference ${issue.identifier} and ${issue.url} in the body so Linear links it.`,
-            '3. Update the Linear issue via its GraphQL API (https://api.linear.app/graphql) using the LINEAR_API_KEY env var as the Authorization header:',
+            `3. Update the Linear issue via its GraphQL API (https://api.linear.app/graphql) ${authHow}:`,
             `   - commentCreate on issue ${issue.identifier}: one-line fix summary + root cause + the PR link.`,
             "   - Move it to review: query the team's workflowStates, then issueUpdate with the review/'In Review' stateId.",
-            '4. Announce the finished fix on every channel whose token appears in the instructions above (Slack chat.postMessage + files upload, Telegram sendMessage/sendVideo) — include: what was broken, the one-line fix, the Linear issue link, the PR link, and the demo recording if you made one. End with "👉 Review the PR".',
+            '4. Announce the finished fix on every channel whose token appears in the instructions above (Slack chat.postMessage + files upload, Telegram sendMessage/sendVideo) — include: what was broken, the one-line fix, the Linear issue link, the PR link, and the evidence you produced. End with "👉 Review the PR".',
           ].join('\n');
-          await createBridgeTask(
+          if (queued) {
+            const sent = await queueToRunningSession(
+              [
+                `[linear-grab] New Linear issue delegated to you: ${issue.identifier} — ${title()} (${issue.url}).`,
+                '',
+                'Do NOT drop what you are working on: add this issue to your task board NOW (queue it at the end, /add-todo-list-style) and pick it up when your current work completes. The full issue and closeout protocol follow.',
+                '',
+                closeout,
+              ].join('\n'),
+            );
+            localTask = true;
+            await createComment(
+              issue.id,
+              `🖥️ Queued to the running local Claude Code session${sent.name ? ` **${sent.name}**` : ''} — it adds the issue to its task board and picks it up after its current work. The agent will post its fix summary + PR here and move this issue to review when done.`,
+            ).catch(() => {});
+          } else {
+            await createBridgeTask(
             `${issue.identifier} — ${title()}`,
             useWorktree()
               ? `${closeout}\n\nNote: you are running in an ISOLATED git worktree on a dedicated branch (already checked out) — commit and push THAT branch for the PR; do not switch back to main.`
@@ -443,27 +481,30 @@ export default function DraftView(props: { onCreated: () => void }) {
                 ? { LINEAR_API_KEY: settings().linearApiKey! }
                 : undefined,
             },
-          );
-          localTask = true;
-          // Mirror what Cursor does on delegation: move the issue to the
-          // team's started state so it's In Progress while the agent works.
-          try {
-            const states = await fetchTeamStates(teamId());
-            const started = states
-              .filter((st) => st.type === 'started')
-              .sort((a, b) => a.position - b.position)[0];
-            if (started) await updateIssueState(issue.id, started.id);
-          } catch {
-            /* non-fatal — the agent's closeout still moves it later */
+            );
+            localTask = true;
+            // Mirror what Cursor does on delegation: move the issue to the
+            // team's started state so it's In Progress while the agent works.
+            try {
+              const states = await fetchTeamStates(teamId());
+              const started = states
+                .filter((st) => st.type === 'started')
+                .sort((a, b) => a.position - b.position)[0];
+              if (started) await updateIssueState(issue.id, started.id);
+            } catch {
+              /* non-fatal — the agent's closeout still moves it later */
+            }
+            // Make the delegation visible in Activity immediately.
+            await createComment(
+              issue.id,
+              `🖥️ Delegated to **local Claude Code** on this machine (Linear Grab bridge). Live status, conversation, and steering in the panel's Local tab. The agent will post its fix summary + PR here and move this issue to review when done.`,
+            ).catch(() => {});
           }
-          // Make the delegation visible in Activity immediately.
-          await createComment(
-            issue.id,
-            `🖥️ Delegated to **local Claude Code** on this machine (Linear Grab bridge). Live status, conversation, and steering in the panel's Local tab. The agent will post its fix summary + PR here and move this issue to review when done.`,
-          ).catch(() => {});
-        } catch {
+        } catch (err) {
           setCreateWarning(
-            'Issue created, but the local bridge is unreachable — run `npx linear-grab-bridge` in the repo and re-delegate from the Local tab.',
+            localMode() === 'queue'
+              ? `Issue created, but queueing to the running session failed — ${err instanceof Error ? err.message : 'is the bridge running and a Claude Code session open in the repo?'}`
+              : 'Issue created, but the local bridge is unreachable — run `npx linear-grab-bridge` in the repo and re-delegate from the Local tab.',
           );
         }
       }
@@ -866,6 +907,43 @@ export default function DraftView(props: { onCreated: () => void }) {
           />
         </Field>
 
+        {/* Evidence the agent must produce — per-issue override of the
+            Settings default. Gates the demo-video/test-account/spec-crawler
+            sections of the generated Agent instructions. */}
+        <div class="flex flex-col gap-1">
+          <span class="text-text-dim text-[11px] font-medium">Evidence</span>
+          <div class="bg-surface-2 border-border flex rounded-md border p-0.5">
+            <For
+              each={[
+                { id: 'video', label: 'Video demo' },
+                { id: 'spec', label: 'Spec-crawler 1:1' },
+                { id: 'none', label: 'None' },
+              ] as const}
+            >
+              {(mode) => (
+                <button
+                  type="button"
+                  class={`flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                    evidence() === mode.id
+                      ? 'bg-surface-3 text-text'
+                      : 'text-text-dim hover:text-text cursor-pointer'
+                  }`}
+                  onClick={() => setEvidenceChoice(mode.id)}
+                >
+                  {mode.label}
+                </button>
+              )}
+            </For>
+          </div>
+          <span class="text-text-faint text-[10.5px] leading-snug">
+            {evidence() === 'video'
+              ? 'Agent records a demo video/GIF and tests with the configured test account.'
+              : evidence() === 'spec'
+                ? 'No video — the agent proves the fix with 1:1 computed-style evidence via the spec-crawler MCP (reference vs build, frame files cited).'
+                : 'Hands-on testing only — no recorded evidence, no test-account credentials embedded.'}
+          </span>
+        </div>
+
         {/* Executor — cloud agent, local Claude Code, or nobody */}
         <Field
           label="Delegate to"
@@ -907,31 +985,79 @@ export default function DraftView(props: { onCreated: () => void }) {
           </Field>
         </Show>
 
-        {/* Local model pick — changeable later per-task in the Local tab */}
+        {/* Local delegation shape: fresh bridge agent vs the session you
+            already have open (delivered over its cross-session inbox socket) */}
         <Show when={target() === 'local'}>
-          <Field label="Local model" hint="Switchable while running from the Local tab.">
-            <Select value={localModel()} onChange={(e) => setLocalModel(e.currentTarget.value)}>
-              <option value="" selected={localModel() === ''}>Claude Code default</option>
-              <option value="fable" selected={localModel() === 'fable'}>Fable 5</option>
-              <option value="opus" selected={localModel() === 'opus'}>Opus</option>
-              <option value="sonnet" selected={localModel() === 'sonnet'}>Sonnet</option>
-              <option value="haiku" selected={localModel() === 'haiku'}>Haiku</option>
-            </Select>
-          </Field>
+          <div class="flex flex-col gap-1">
+            <span class="text-text-dim text-[11px] font-medium">Local session</span>
+            <div class="bg-surface-2 border-border flex rounded-md border p-0.5">
+              <For
+                each={[
+                  { id: 'new', label: 'New agent session' },
+                  { id: 'queue', label: 'Queue to running session' },
+                ] as const}
+              >
+                {(mode) => (
+                  <button
+                    type="button"
+                    class={`flex-1 rounded-[5px] px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                      localMode() === mode.id
+                        ? 'bg-surface-3 text-text'
+                        : 'text-text-dim hover:text-text cursor-pointer'
+                    }`}
+                    onClick={() => setLocalMode(mode.id)}
+                  >
+                    {mode.label}
+                  </button>
+                )}
+              </For>
+            </div>
+            <Show when={localMode() === 'queue'}>
+              <span class="text-text-faint text-[10.5px] leading-snug">
+                <Show
+                  when={runningQ.data?.length}
+                  fallback={
+                    runningQ.isError
+                      ? 'Bridge unreachable — run `npx linear-grab-bridge` in the repo.'
+                      : 'No interactive Claude Code session detected in the repo — open one in a terminal there.'
+                  }
+                >
+                  Delivers into{' '}
+                  <span class="text-text-dim font-medium">{runningQ.data![0].name ?? `pid ${runningQ.data![0].pid}`}</span>
+                  {' '}— the agent queues it on its task board (/add-todo-list-style) and picks
+                  it up after its current work, keeping that session's full context.
+                </Show>
+              </span>
+            </Show>
+          </div>
 
-          {/* Opt-in isolation: own git worktree + branch, parallel-safe */}
-          <label class="flex cursor-pointer items-center gap-2 select-none">
-            <input
-              type="checkbox"
-              checked={useWorktree()}
-              onChange={(e) => setUseWorktree(e.currentTarget.checked)}
-              class="accent-accent rounded"
-            />
-            <span class="text-text text-[12px]">
-              Isolated worktree{' '}
-              <span class="text-text-dim">— own branch, run agents in parallel safely</span>
-            </span>
-          </label>
+          {/* Model + worktree only apply when SPAWNING a session */}
+          <Show when={localMode() === 'new'}>
+            <Field label="Local model" hint="Switchable while running from the Local tab.">
+              <Select value={localModel()} onChange={(e) => setLocalModel(e.currentTarget.value)}>
+                <option value="" selected={localModel() === ''}>Claude Code default</option>
+                <option value="claude-fable-5-1" selected={localModel() === 'claude-fable-5-1'}>Fable 5.1</option>
+                <option value="fable" selected={localModel() === 'fable'}>Fable 5</option>
+                <option value="opus" selected={localModel() === 'opus'}>Opus</option>
+                <option value="sonnet" selected={localModel() === 'sonnet'}>Sonnet</option>
+                <option value="haiku" selected={localModel() === 'haiku'}>Haiku</option>
+              </Select>
+            </Field>
+
+            {/* Opt-in isolation: own git worktree + branch, parallel-safe */}
+            <label class="flex cursor-pointer items-center gap-2 select-none">
+              <input
+                type="checkbox"
+                checked={useWorktree()}
+                onChange={(e) => setUseWorktree(e.currentTarget.checked)}
+                class="accent-accent rounded"
+              />
+              <span class="text-text text-[12px]">
+                Isolated worktree{' '}
+                <span class="text-text-dim">— own branch, run agents in parallel safely</span>
+              </span>
+            </label>
+          </Show>
         </Show>
 
         {/* Console errors toggle (only when the buffer caught something) */}

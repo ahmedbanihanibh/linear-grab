@@ -94,6 +94,32 @@ export function createBridgeTask(
   });
 }
 
+// ---- Running interactive Claude Code sessions (cross-session inbox) --------
+
+export interface RunningSession {
+  pid: number;
+  name?: string;
+  status?: string;
+  cwd?: string;
+}
+
+/** Live interactive Claude Code sessions in the bridge's repo. */
+export async function listRunningSessions(): Promise<RunningSession[]> {
+  const r = await call<{ sessions: RunningSession[] }>('/sessions/running');
+  return r.sessions;
+}
+
+/** Post a plain-text message into a running session's inbox socket. */
+export function queueToRunningSession(
+  text: string,
+  pid?: number,
+): Promise<{ ok: boolean; pid: number; name?: string }> {
+  return call<{ ok: boolean; pid: number; name?: string }>('/sessions/queue', {
+    method: 'POST',
+    body: JSON.stringify({ text, pid }),
+  });
+}
+
 /** Send a follow-up — mid-run it queues into the live session; after finish
     it resumes the session (also how a pending model switch takes effect). */
 export function sendBridgeMessage(id: string, text: string): Promise<BridgeTask> {
